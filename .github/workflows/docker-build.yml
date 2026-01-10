@@ -1,0 +1,183 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        if: github.event_name != 'pull_request'
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: github.event_name != 'pull_request'
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          format: 'spdx-json'
+          output-file: 'sbom.spdx.json'
+
+      - name: Upload SBOM
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Run Grype vulnerability scanner
+        uses: anchore/scan-action@v3
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          fail-build: false
+          severity-cutoff: high
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.scan.outputs.sarif }}
+
+  test-image:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull Docker image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Test image startup
+        run: |
+          docker run -d \
+            --name arakis-test \
+            -e DATABASE_URL=postgresql+asyncpg://test:test@localhost:5432/test \
+            -e REDIS_URL=redis://localhost:6379/0 \
+            -e OPENAI_API_KEY=sk-test \
+            -e SECRET_KEY=test-secret-key \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            uvicorn arakis.api.main:app --host 0.0.0.0 --port 8000
+
+          sleep 10
+          docker logs arakis-test
+
+      - name: Verify image runs
+        run: |
+          docker ps | grep arakis-test || exit 1
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop arakis-test || true
+          docker rm arakis-test || true
+
+  report:
+    name: Build Report
+    runs-on: ubuntu-latest
+    needs: [build, test-image]
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          echo "Build: ${{ needs.build.result }}"
+          echo "Test Image: ${{ needs.test-image.result }}"
+
+      - name: Report status
+        run: |
+          if [ "${{ needs.build.result }}" == "success" ] && \
+             [ "${{ needs.test-image.result }}" == "success" ]; then
+            echo "✅ Docker image built and tested successfully!"
+            echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          else
+            echo "❌ Docker build or test failed"
+            exit 1
+          fi

@@ -1,0 +1,269 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy
+
+      - name: Run ruff linter
+        run: |
+          ruff check src/
+        continue-on-error: true
+
+      - name: Run ruff formatter check
+        run: |
+          ruff format --check src/
+
+      - name: Run mypy type checker
+        run: |
+          mypy src/
+        continue-on-error: true
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: arakis
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: arakis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            tesseract-ocr \
+            tesseract-ocr-eng \
+            poppler-utils \
+            pandoc
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
+
+      - name: Set environment variables
+        run: |
+          echo "DATABASE_URL=postgresql+asyncpg://arakis:test_password@localhost:5432/arakis_test" >> $GITHUB_ENV
+          echo "REDIS_URL=redis://localhost:6379/0" >> $GITHUB_ENV
+          echo "OPENAI_API_KEY=sk-test-key-for-ci" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key-for-ci-pipeline-testing" >> $GITHUB_ENV
+          echo "UNPAYWALL_EMAIL=test@example.com" >> $GITHUB_ENV
+          echo "S3_ENDPOINT=http://localhost:9000" >> $GITHUB_ENV
+          echo "S3_ACCESS_KEY=minioadmin" >> $GITHUB_ENV
+          echo "S3_SECRET_KEY=minioadmin" >> $GITHUB_ENV
+          echo "S3_BUCKET_NAME=arakis-test" >> $GITHUB_ENV
+
+      - name: Run database migrations
+        run: |
+          cd src
+          alembic upgrade head
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=arakis \
+            --cov-report=xml \
+            --cov-report=term \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run bandit security linter
+        run: |
+          bandit -r src/ -ll -f json -o bandit-report.json || true
+          bandit -r src/ -ll
+
+      - name: Check dependencies for known vulnerabilities
+        run: |
+          safety check --json || true
+        continue-on-error: true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  build-test:
+    name: Test Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: arakis:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test image structure
+        run: |
+          docker images | grep arakis
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, test, build-test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cp .env.example .env
+          echo "OPENAI_API_KEY=sk-test-key" >> .env
+          echo "SECRET_KEY=test-secret-key-for-integration-testing" >> .env
+          echo "POSTGRES_PASSWORD=test_password" >> .env
+
+      - name: Start services with Docker Compose
+        run: |
+          docker compose up -d
+          sleep 30
+
+      - name: Wait for services to be healthy
+        run: |
+          timeout 120 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 5; done'
+
+      - name: Run database migrations
+        run: |
+          docker compose exec -T api alembic upgrade head
+
+      - name: Test API health endpoint
+        run: |
+          curl -f http://localhost:8000/health || exit 1
+
+      - name: Test API root endpoint
+        run: |
+          response=$(curl -s http://localhost:8000/)
+          echo "$response" | grep -q "Arakis" || exit 1
+
+      - name: Test API docs endpoint
+        run: |
+          curl -f http://localhost:8000/docs || exit 1
+
+      - name: Check container logs
+        if: always()
+        run: |
+          docker compose logs api
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker compose down -v
+
+  report:
+    name: Test Report
+    runs-on: ubuntu-latest
+    needs: [lint, test, security, build-test, integration-test]
+    if: always()
+
+    steps:
+      - name: Check job results
+        run: |
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Security: ${{ needs.security.result }}"
+          echo "Build Test: ${{ needs.build-test.result }}"
+          echo "Integration Test: ${{ needs.integration-test.result }}"
+
+      - name: Report status
+        run: |
+          if [ "${{ needs.lint.result }}" == "failure" ] || \
+             [ "${{ needs.test.result }}" == "failure" ] || \
+             [ "${{ needs.build-test.result }}" == "failure" ] || \
+             [ "${{ needs.integration-test.result }}" == "failure" ]; then
+            echo "❌ CI failed - check logs above"
+            exit 1
+          else
+            echo "✅ All CI checks passed!"
+          fi

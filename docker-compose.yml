@@ -1,0 +1,141 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: arakis-postgres
+    environment:
+      POSTGRES_USER: arakis
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-arakis_dev_password}
+      POSTGRES_DB: arakis
+    ports:
+      - "5433:5432"  # Using 5433 on host to avoid conflict with local PostgreSQL
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arakis"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arakis-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: arakis-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arakis-network
+
+  # MinIO Object Storage (S3-compatible)
+  minio:
+    image: minio/minio:latest
+    container_name: arakis-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "9000:9000"  # API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - arakis-network
+
+  # Create MinIO bucket on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: arakis-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      mc mb myminio/arakis-pdfs --ignore-existing;
+      mc anonymous set download myminio/arakis-pdfs;
+      exit 0;
+      "
+    networks:
+      - arakis-network
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arakis-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://arakis:${POSTGRES_PASSWORD:-arakis_dev_password}@postgres:5432/arakis
+
+      # Cache
+      REDIS_URL: redis://redis:6379/0
+
+      # Object Storage
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      S3_BUCKET_NAME: arakis-pdfs
+      S3_REGION: us-east-1
+
+      # API Keys
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      UNPAYWALL_EMAIL: ${UNPAYWALL_EMAIL}
+      NCBI_API_KEY: ${NCBI_API_KEY:-}
+      ELSEVIER_API_KEY: ${ELSEVIER_API_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+
+      # API Settings
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      SECRET_KEY: ${SECRET_KEY:-development-secret-key-change-in-production}
+      DEBUG: ${DEBUG:-false}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount source for development (comment out in production)
+      - ./src:/app/src:ro
+    networks:
+      - arakis-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+
+networks:
+  arakis-network:
+    driver: bridge

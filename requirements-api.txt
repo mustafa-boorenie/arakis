@@ -1,0 +1,23 @@
+alembic==1.18.0
+asyncpg==0.31.0
+biopython==1.86
+boto3==1.42.25
+fastapi==0.128.0
+httpx==0.28.1
+matplotlib==3.10.7
+minio==7.2.20
+numpy==2.3.4
+openai==2.14.0
+pandas==2.3.3
+psycopg2-binary==2.9.11
+pydantic @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_ac_4dmd4j4/croot/pydantic_1750769074322/work
+pydantic-settings @ file:///Users/builder/cbouss/buildout/croot/pydantic-settings_1735843952737/work
+pydantic_core @ file:///private/var/folders/nz/j6p8yfhx1mv_0grj5xl4650h0000gp/T/abs_9d3ads2bae/croot/pydantic-core_1750754745671/work
+redis==7.1.0
+rich @ file:///private/var/folders/k1/30mswbxs7r1g6zwn8y4fyt500000gp/T/abs_034myiu7pr/croot/rich_1732638981241/work
+scipy==1.16.3
+seaborn==0.13.2
+tenacity==9.1.2
+tiktoken==0.12.0
+typer @ file:///Users/builder/cbouss/perseverance-python-buildout/croot/typer_1728593478163/work
+uvicorn==0.40.0

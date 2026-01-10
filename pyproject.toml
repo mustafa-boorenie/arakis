@@ -1,0 +1,105 @@
+[project]
+name = "arakis"
+version = "0.1.0"
+description = "AI-powered systematic review pipeline for academic research"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    # Core
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.25",
+    "tenacity>=8.2",
+    
+    # LLM
+    "openai>=1.0",
+    
+    # Database clients
+    "biopython>=1.80",           # PubMed E-utilities
+    "scholarly>=1.7",            # Google Scholar (free)
+    
+    # Paper retrieval
+    "unpywall>=0.2",             # Open access lookup
+    
+    # Deduplication
+    "python-Levenshtein>=0.20",
+    "rapidfuzz>=3.0",
+    
+    # Storage
+    "aiosqlite>=0.19",
+
+    # Database (PostgreSQL)
+    "sqlalchemy>=2.0",           # ORM
+    "alembic>=1.13",             # Database migrations
+    "asyncpg>=0.29",             # Async PostgreSQL driver
+    "psycopg2-binary>=2.9",      # Sync PostgreSQL driver (for Alembic)
+
+    # Cache
+    "redis[asyncio]>=5.0",       # Redis cache
+
+    # API
+    "fastapi>=0.109",            # Web framework
+    "uvicorn[standard]>=0.27",   # ASGI server
+    "python-multipart>=0.0.6",   # File uploads
+    "pyjwt>=2.8",                # JWT authentication
+
+    # Object Storage
+    "boto3>=1.34",               # S3 client
+    "minio>=7.2",                # MinIO (S3-compatible)
+
+    # CLI & Output
+    "typer>=0.9",
+    "rich>=13.0",
+    
+    # Utilities
+    "python-dotenv>=1.0",
+
+    # Statistical Analysis
+    "scipy>=1.11",               # Statistical tests
+    "statsmodels>=0.14",         # Advanced statistics
+    "pandas>=2.0",               # Data manipulation
+    "numpy>=1.24",               # Numerical computing
+    "matplotlib>=3.7",           # Plotting
+    "seaborn>=0.12",             # Statistical visualizations
+
+    # RAG System
+    "faiss-cpu>=1.7",            # Vector similarity search
+    "tiktoken>=0.5",             # Token counting for embeddings
+
+    # PDF Text Extraction
+    "pymupdf>=1.23",             # PDF parsing (PyMuPDF/fitz) - best balance of speed/accuracy
+    "pdfplumber>=0.10",          # Fallback for complex tables
+    "pillow>=10.0",              # Image handling for PDFs
+    "pytesseract>=0.3.10",       # OCR for image-based PDFs
+    "pdf2image>=1.16",           # Convert PDF pages to images for OCR
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.5",
+]
+
+[project.scripts]
+arakis = "arakis.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arakis"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

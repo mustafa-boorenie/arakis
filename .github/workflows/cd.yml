@@ -1,0 +1,294 @@
+name: Continuous Deployment
+
+on:
+  workflow_run:
+    workflows: ["Continuous Integration", "Build and Push Docker Image"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  DEPLOY_USER: arakis-deploy
+  DEPLOY_PATH: /opt/arakis
+
+jobs:
+  check-tests:
+    name: Verify Tests Passed
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Check workflow conclusion
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" == "success" ] || \
+             [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "✅ Tests passed, proceeding with deployment"
+          else
+            echo "❌ Tests failed, aborting deployment"
+            exit 1
+          fi
+
+  backup:
+    name: Backup Current State
+    runs-on: ubuntu-latest
+    needs: check-tests
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create backup
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && sudo ./deploy/backup.sh"
+
+      - name: Verify backup created
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "ls -lh /var/backups/arakis/ | head -n 5"
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: backup
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: https://${{ secrets.DEPLOY_DOMAIN }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy deployment script
+        run: |
+          scp scripts/deploy.sh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/
+
+      - name: Run deployment
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "bash /tmp/deploy.sh ${{ github.sha }}"
+
+      - name: Wait for services to stabilize
+        run: |
+          sleep 30
+
+  health-check:
+    name: Post-Deployment Health Check
+    runs-on: ubuntu-latest
+    needs: deploy
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Run health checks
+        id: health
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "cd ${{ env.DEPLOY_PATH }} && sudo ./deploy/health_check.sh --json" > health.json
+          cat health.json
+
+      - name: Parse health check results
+        run: |
+          failed=$(cat health.json | jq -r '.summary.failed')
+          if [ "$failed" -gt 0 ]; then
+            echo "❌ Health checks failed: $failed check(s)"
+            cat health.json | jq '.checks'
+            exit 1
+          else
+            echo "✅ All health checks passed"
+          fi
+
+      - name: Test API endpoint
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.DEPLOY_DOMAIN }}/health)
+          if [ "$response" == "200" ]; then
+            echo "✅ API health check passed (HTTP $response)"
+          else
+            echo "❌ API health check failed (HTTP $response)"
+            exit 1
+          fi
+
+      - name: Test API response content
+        run: |
+          response=$(curl -s https://${{ secrets.DEPLOY_DOMAIN }}/health)
+          echo "$response" | jq .
+          if echo "$response" | jq -e '.status == "healthy"' > /dev/null; then
+            echo "✅ API is healthy"
+          else
+            echo "❌ API is not healthy"
+            exit 1
+          fi
+
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: health-check
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Test API root endpoint
+        run: |
+          response=$(curl -s https://${{ secrets.DEPLOY_DOMAIN }}/)
+          echo "$response" | jq .
+          if echo "$response" | jq -e '.name == "Arakis Systematic Review Platform API"' > /dev/null; then
+            echo "✅ API root endpoint working"
+          else
+            echo "❌ API root endpoint failed"
+            exit 1
+          fi
+
+      - name: Test API docs
+        run: |
+          status=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.DEPLOY_DOMAIN }}/docs)
+          if [ "$status" == "200" ]; then
+            echo "✅ API documentation accessible"
+          else
+            echo "❌ API documentation not accessible (HTTP $status)"
+            exit 1
+          fi
+
+      - name: Test SSL certificate
+        run: |
+          echo | openssl s_client -servername ${{ secrets.DEPLOY_DOMAIN }} \
+            -connect ${{ secrets.DEPLOY_DOMAIN }}:443 2>/dev/null | \
+            openssl x509 -noout -dates
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy, health-check, smoke-test]
+    if: failure()
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy rollback script
+        run: |
+          scp scripts/rollback.sh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/
+
+      - name: Execute rollback
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "bash /tmp/rollback.sh"
+
+      - name: Verify rollback
+        run: |
+          sleep 20
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://${{ secrets.DEPLOY_DOMAIN }}/health)
+          if [ "$response" == "200" ]; then
+            echo "✅ Rollback successful, API responding"
+          else
+            echo "❌ Rollback verification failed"
+            exit 1
+          fi
+
+      - name: Notify rollback
+        run: |
+          echo "⚠️ Deployment failed and was rolled back"
+          echo "Commit: ${{ github.sha }}"
+          echo "Check logs for details"
+
+  notify:
+    name: Deployment Notification
+    runs-on: ubuntu-latest
+    needs: [deploy, health-check, smoke-test]
+    if: always()
+
+    steps:
+      - name: Determine deployment status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ] && \
+             [ "${{ needs.health-check.result }}" == "success" ] && \
+             [ "${{ needs.smoke-test.result }}" == "success" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "emoji=✅" >> $GITHUB_OUTPUT
+            echo "message=Deployment successful!" >> $GITHUB_OUTPUT
+          else
+            echo "status=failure" >> $GITHUB_OUTPUT
+            echo "emoji=❌" >> $GITHUB_OUTPUT
+            echo "message=Deployment failed or rolled back" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Report deployment status
+        run: |
+          echo "${{ steps.status.outputs.emoji }} ${{ steps.status.outputs.message }}"
+          echo "Environment: ${{ github.event.inputs.environment || 'production' }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo ""
+          echo "Job Results:"
+          echo "  - Deploy: ${{ needs.deploy.result }}"
+          echo "  - Health Check: ${{ needs.health-check.result }}"
+          echo "  - Smoke Test: ${{ needs.smoke-test.result }}"
+
+      # Optional: Send notification to Slack, Discord, etc.
+      # - name: Send Slack notification
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #     payload: |
+      #       {
+      #         "text": "${{ steps.status.outputs.emoji }} Deployment ${{ steps.status.outputs.status }}",
+      #         "blocks": [
+      #           {
+      #             "type": "section",
+      #             "text": {
+      #               "type": "mrkdwn",
+      #               "text": "*Arakis Deployment*\n${{ steps.status.outputs.message }}\n*Commit:* ${{ github.sha }}\n*Environment:* ${{ github.event.inputs.environment || 'production' }}"
+      #             }
+      #           }
+      #         ]
+      #       }

@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arakis - AI-Powered Systematic Review</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            color: #2d3748;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 2em;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            margin-bottom: 20px;
+            color: #667eea;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        button {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #48bb78;
+        }
+
+        .btn-secondary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .workflow-list {
+            display: grid;
+            gap: 15px;
+        }
+
+        .workflow-item {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .workflow-item:hover {
+            background: #edf2f7;
+            transform: translateX(5px);
+        }
+
+        .workflow-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-running {
+            background: #fef5e7;
+            color: #d68910;
+        }
+
+        .status-completed {
+            background: #d5f4e6;
+            color: #0f7d44;
+        }
+
+        .status-failed {
+            background: #fadbd8;
+            color: #b83232;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .export-buttons button {
+            flex: 1;
+        }
+
+        .manuscript-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .manuscript-content h3 {
+            color: #2d3748;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .manuscript-content p {
+            margin-bottom: 15px;
+            text-align: justify;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            color: #718096;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .metadata-item {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .metadata-label {
+            font-size: 12px;
+            color: #718096;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .metadata-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #c6f6d5;
+            color: #22543d;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>🔬 Arakis</h1>
+            <p class="subtitle">AI-Powered Systematic Review Automation</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('create')">Create Review</button>
+            <button class="tab" onclick="showTab('list')">My Reviews</button>
+        </div>
+
+        <!-- Create Workflow Tab -->
+        <div id="create-tab" class="tab-content">
+            <div class="card">
+                <h2>Create New Systematic Review</h2>
+                <form id="workflow-form" onsubmit="createWorkflow(event)">
+                    <div class="form-group">
+                        <label for="research-question">Research Question *</label>
+                        <input
+                            type="text"
+                            id="research-question"
+                            required
+                            placeholder="e.g., Effect of aspirin on sepsis mortality in adults"
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inclusion">Inclusion Criteria *</label>
+                        <textarea
+                            id="inclusion"
+                            required
+                            placeholder="e.g., Adult patients, Randomized controlled trials, Aspirin intervention, Mortality outcomes"
+                        ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="exclusion">Exclusion Criteria *</label>
+                        <textarea
+                            id="exclusion"
+                            required
+                            placeholder="e.g., Pediatric patients, Animal studies, In vitro studies"
+                        ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="databases">Databases</label>
+                        <select id="databases" multiple style="height: 100px;">
+                            <option value="pubmed" selected>PubMed</option>
+                            <option value="openalex">OpenAlex</option>
+                            <option value="semantic_scholar">Semantic Scholar</option>
+                        </select>
+                        <small style="color: #718096;">Hold Ctrl/Cmd to select multiple</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="max-results">Max Results per Database</label>
+                        <input type="number" id="max-results" value="20" min="5" max="100">
+                    </div>
+
+                    <button type="submit" id="submit-btn">Start Systematic Review</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Workflow List Tab -->
+        <div id="list-tab" class="tab-content hidden">
+            <div class="card">
+                <h2>My Systematic Reviews</h2>
+                <div id="workflow-list" class="workflow-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading workflows...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Detail View -->
+        <div id="detail-view" class="hidden">
+            <button onclick="backToList()" style="margin-bottom: 20px;">← Back to List</button>
+
+            <div class="card">
+                <h2 id="detail-title">Workflow Details</h2>
+
+                <!-- Metadata -->
+                <div class="metadata" id="detail-metadata"></div>
+
+                <!-- Export Buttons -->
+                <div class="export-buttons">
+                    <button class="btn-secondary" onclick="exportManuscript('json')">
+                        📄 Download JSON
+                    </button>
+                    <button class="btn-secondary" onclick="exportManuscript('markdown')">
+                        📝 Download Markdown
+                    </button>
+                    <button class="btn-secondary" onclick="exportManuscript('pdf')">
+                        📕 Download PDF
+                    </button>
+                    <button class="btn-secondary" onclick="exportManuscript('docx')">
+                        📘 Download Word
+                    </button>
+                </div>
+            </div>
+
+            <!-- Manuscript Content -->
+            <div id="manuscript-content" class="card">
+                <h2>Manuscript Preview</h2>
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading manuscript...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://localhost:8000';  // Change to your API URL
+
+        let currentWorkflowId = null;
+
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+
+            event.target.classList.add('active');
+            document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+
+            if (tabName === 'list') {
+                loadWorkflows();
+            }
+        }
+
+        // Create workflow
+        async function createWorkflow(event) {
+            event.preventDefault();
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating workflow...';
+
+            const databases = Array.from(document.getElementById('databases').selectedOptions)
+                .map(opt => opt.value);
+
+            const data = {
+                research_question: document.getElementById('research-question').value,
+                inclusion_criteria: document.getElementById('inclusion').value,
+                exclusion_criteria: document.getElementById('exclusion').value,
+                databases: databases,
+                max_results_per_query: parseInt(document.getElementById('max-results').value)
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/workflows`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) throw new Error('Failed to create workflow');
+
+                const workflow = await response.json();
+
+                // Show success message
+                showMessage('success', `Workflow created! ID: ${workflow.id}`);
+
+                // Switch to list tab
+                setTimeout(() => {
+                    document.querySelector('.tab:nth-child(2)').click();
+                }, 2000);
+
+                // Reset form
+                document.getElementById('workflow-form').reset();
+            } catch (error) {
+                showMessage('error', `Error: ${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Start Systematic Review';
+            }
+        }
+
+        // Load workflows
+        async function loadWorkflows() {
+            const listContainer = document.getElementById('workflow-list');
+            listContainer.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading workflows...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/workflows`);
+                if (!response.ok) throw new Error('Failed to load workflows');
+
+                const workflows = await response.json();
+
+                if (workflows.length === 0) {
+                    listContainer.innerHTML = '<p style="text-align:center;color:#718096;">No workflows yet. Create your first review!</p>';
+                    return;
+                }
+
+                listContainer.innerHTML = workflows.map(w => `
+                    <div class="workflow-item" onclick="viewWorkflow('${w.id}')">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <h3 style="margin-bottom: 10px;">${w.research_question}</h3>
+                                <p style="color: #718096; font-size: 14px;">
+                                    Created: ${new Date(w.created_at).toLocaleDateString()}
+                                </p>
+                                ${w.papers_found ? `<p style="font-size: 14px; margin-top: 5px;">
+                                    📊 ${w.papers_found} found | ✅ ${w.papers_included || 0} included
+                                </p>` : ''}
+                            </div>
+                            <span class="workflow-status status-${w.status}">${w.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                listContainer.innerHTML = `<div class="error">Error loading workflows: ${error.message}</div>`;
+            }
+        }
+
+        // View workflow details
+        async function viewWorkflow(workflowId) {
+            currentWorkflowId = workflowId;
+
+            // Hide list, show detail
+            document.getElementById('list-tab').classList.add('hidden');
+            document.getElementById('detail-view').classList.remove('hidden');
+
+            // Load workflow data
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/workflows/${workflowId}`);
+                if (!response.ok) throw new Error('Failed to load workflow');
+
+                const workflow = await response.json();
+
+                document.getElementById('detail-title').textContent = workflow.research_question;
+
+                document.getElementById('detail-metadata').innerHTML = `
+                    <div class="metadata-item">
+                        <div class="metadata-label">Status</div>
+                        <div class="metadata-value">
+                            <span class="workflow-status status-${workflow.status}">${workflow.status}</span>
+                        </div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Papers Found</div>
+                        <div class="metadata-value">${workflow.papers_found || 0}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Papers Included</div>
+                        <div class="metadata-value">${workflow.papers_included || 0}</div>
+                    </div>
+                    <div class="metadata-item">
+                        <div class="metadata-label">Total Cost</div>
+                        <div class="metadata-value">$${workflow.total_cost?.toFixed(2) || '0.00'}</div>
+                    </div>
+                `;
+
+                // Load manuscript
+                await loadManuscript(workflowId);
+            } catch (error) {
+                showMessage('error', `Error loading workflow: ${error.message}`);
+            }
+        }
+
+        // Load manuscript
+        async function loadManuscript(workflowId) {
+            const container = document.getElementById('manuscript-content');
+            container.innerHTML = '<h2>Manuscript Preview</h2><div class="loading"><div class="spinner"></div><p>Loading manuscript...</p></div>';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/manuscripts/${workflowId}/json`);
+                if (!response.ok) throw new Error('Manuscript not available yet');
+
+                const data = await response.json();
+
+                container.innerHTML = `
+                    <h2>Manuscript Preview</h2>
+                    <div class="manuscript-content">
+                        <h1>${data.manuscript.title || data.metadata.research_question}</h1>
+
+                        ${data.manuscript.abstract ? `
+                            <h3>Abstract</h3>
+                            <p>${data.manuscript.abstract}</p>
+                        ` : ''}
+
+                        ${data.manuscript.introduction ? `
+                            <h3>Introduction</h3>
+                            <div>${formatMarkdown(data.manuscript.introduction)}</div>
+                        ` : ''}
+
+                        ${data.manuscript.methods ? `
+                            <h3>Methods</h3>
+                            <div>${formatMarkdown(data.manuscript.methods)}</div>
+                        ` : ''}
+
+                        ${data.manuscript.results ? `
+                            <h3>Results</h3>
+                            <div>${formatMarkdown(data.manuscript.results)}</div>
+                        ` : ''}
+
+                        ${data.manuscript.discussion ? `
+                            <h3>Discussion</h3>
+                            <div>${formatMarkdown(data.manuscript.discussion)}</div>
+                        ` : ''}
+
+                        ${data.manuscript.conclusions ? `
+                            <h3>Conclusions</h3>
+                            <div>${formatMarkdown(data.manuscript.conclusions)}</div>
+                        ` : ''}
+                    </div>
+                `;
+            } catch (error) {
+                container.innerHTML = `
+                    <h2>Manuscript Preview</h2>
+                    <div class="error">Manuscript not available yet. Workflow may still be running.</div>
+                `;
+            }
+        }
+
+        // Export manuscript
+        async function exportManuscript(format) {
+            if (!currentWorkflowId) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/manuscripts/${currentWorkflowId}/${format}`);
+                if (!response.ok) throw new Error('Export failed');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `manuscript_${currentWorkflowId}.${format === 'docx' ? 'docx' : format}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+
+                showMessage('success', `Manuscript exported as ${format.toUpperCase()}`);
+            } catch (error) {
+                showMessage('error', `Export failed: ${error.message}`);
+            }
+        }
+
+        // Back to list
+        function backToList() {
+            document.getElementById('detail-view').classList.add('hidden');
+            document.getElementById('list-tab').classList.remove('hidden');
+            currentWorkflowId = null;
+        }
+
+        // Show message
+        function showMessage(type, message) {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = message;
+
+            const container = document.querySelector('.container');
+            container.insertBefore(div, container.firstChild);
+
+            setTimeout(() => div.remove(), 5000);
+        }
+
+        // Simple markdown formatting
+        function formatMarkdown(text) {
+            if (!text) return '';
+
+            // Basic markdown to HTML
+            return text
+                .replace(/^### (.*$)/gim, '<h4>$1</h4>')
+                .replace(/^## (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^# (.*$)/gim, '<h2>$1</h2>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/\n\n/g, '</p><p>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // Auto-refresh workflows when on list tab
+        setInterval(() => {
+            if (!document.getElementById('list-tab').classList.contains('hidden')) {
+                loadWorkflows();
+            }
+        }, 10000);  // Refresh every 10 seconds
+    </script>
+</body>
+</html>

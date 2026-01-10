@@ -1,0 +1,508 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Arakis is an AI-powered systematic review pipeline for academic research that automates literature searches across multiple databases using LLM agents with tool functions.
+
+**Core capabilities:**
+- Multi-database search with AI-optimized queries (PubMed, OpenAlex, Semantic Scholar, Google Scholar, Embase)
+- LLM-powered query generation using GPT with MeSH terms and database-specific syntax
+- Multi-strategy deduplication (DOI, PMID, fuzzy title matching)
+- AI-based paper screening with dual-review support
+- Waterfall paper retrieval from open access sources (Unpaywall, PMC, arXiv)
+- PRISMA flow tracking for systematic review reporting
+
+## Development Commands
+
+### Installation
+```bash
+pip install -e ".[dev]"
+```
+
+### Testing
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=arakis
+
+# Run single test file
+pytest tests/test_specific.py
+
+# Run single test function
+pytest tests/test_specific.py::test_function_name
+```
+
+### Linting and Type Checking
+```bash
+# Lint code
+ruff check src/
+
+# Format code
+ruff format src/
+
+# Type checking
+mypy src/
+```
+
+### Running the CLI
+
+#### Streamlined Workflow (Recommended)
+```bash
+# Run complete systematic review pipeline end-to-end
+arakis workflow \
+  --question "Effect of aspirin on sepsis mortality" \
+  --include "Adult patients,Sepsis,Aspirin intervention,Mortality" \
+  --exclude "Pediatric,Animal studies" \
+  --databases pubmed \
+  --max-results 20 \
+  --output ./my_review
+
+# Fast mode (single-pass screening and extraction)
+arakis workflow \
+  --question "Research question" \
+  --include "Criteria" \
+  --exclude "Exclusions" \
+  --output ./review \
+  --fast
+
+# Skip certain stages
+arakis workflow --question "..." --include "..." --skip-analysis --skip-writing
+```
+
+#### Individual Commands
+```bash
+# Search databases
+arakis search "Research question here"
+
+# With specific databases
+arakis search "Question" --databases pubmed,openalex
+
+# Enable query validation (checks result counts, may use more API calls)
+arakis search "Question" --validate
+
+# Screen papers (dual-review mode by default)
+arakis screen results.json --include "Human RCTs" --exclude "Animal studies"
+
+# Disable dual-review for faster screening (less reliable)
+arakis screen results.json --include "Human RCTs" --no-dual-review
+
+# Human-in-the-loop review (single-pass + human verification)
+arakis screen results.json --include "Human RCTs" --no-dual-review --human-review
+
+# Fetch full texts
+arakis fetch results.json --output ./papers/
+
+# Extract structured data from papers (triple-review mode)
+arakis extract screening_results.json --schema rct --output extractions.json
+
+# Fast extraction (single-pass, lower cost)
+arakis extract screening_results.json --schema rct --mode fast --output extractions.json
+
+# Other extraction schemas: cohort, case_control, diagnostic
+
+# Analyze extracted data (with meta-analysis if feasible)
+arakis analyze extractions.json --output analysis.json --figures ./figures/
+
+# Specify analysis method
+arakis analyze extractions.json --method random_effects --output analysis.json
+
+# Generate PRISMA 2020 flow diagram
+arakis prisma-diagram search_results.json --output prisma.png
+# Or from screening results
+arakis prisma-diagram screening_results.json --output prisma.png
+
+# Write results section for manuscript
+arakis write-results --search search_results.json --screening screening_results.json --output results.md
+# Include meta-analysis results
+arakis write-results --search search.json --screening screening.json --analysis analysis.json --output results.md
+
+# Write introduction section
+arakis write-intro "Effect of antihypertensive therapy on blood pressure" --output intro.md
+# With literature context
+arakis write-intro "Research question" --literature papers.json --output intro.md
+# With RAG for automatic literature retrieval
+arakis write-intro "Research question" --literature papers.json --use-rag --output intro.md
+
+# Write discussion section
+arakis write-discussion analysis.json --outcome "mortality" --output discussion.md
+# With literature for comparison
+arakis write-discussion analysis.json --literature papers.json --use-rag --output discussion.md
+# With user interpretation notes
+arakis write-discussion analysis.json --interpretation "The effect is clinically significant" --implications "This suggests..." --output discussion.md
+
+# Show version
+arakis version
+```
+
+## Architecture
+
+### Core Components
+
+**1. SearchOrchestrator** (`orchestrator.py`)
+- Central coordinator for multi-database searches
+- Orchestrates: query generation → parallel database searches → deduplication → PRISMA tracking
+- Returns `ComprehensiveSearchResult` with unique papers and metadata
+
+**2. QueryGeneratorAgent** (`agents/query_generator.py`)
+- LLM-powered agent using OpenAI GPT with tool functions
+- Generates database-specific queries with controlled vocabulary (MeSH, Emtree)
+- PICO extraction from research questions
+- Query validation and refinement based on result counts
+- Tool functions: `generate_pubmed_query`, `generate_openalex_query`, `generate_semantic_scholar_query`, `generate_google_scholar_query`, `extract_pico`
+
+**3. Deduplicator** (`deduplication.py`)
+- Multi-strategy deduplication with priority order:
+  1. Exact DOI matching
+  2. Exact PMID matching
+  3. Title fuzzy matching (>90% similarity using rapidfuzz)
+  4. Author + Year + Title prefix matching
+- Merges metadata from duplicates into canonical papers
+- Tracks duplicate groups for transparency
+
+**4. ScreeningAgent** (`agents/screener.py`)
+- LLM-powered paper screening using GPT with tool functions
+- Three decision states: INCLUDE, EXCLUDE, MAYBE
+- **Default: Dual-review mode** - runs two passes with different temperatures (0.3 and 0.7), flags conflicts
+- Automatic conflict detection and conservative resolution (defaults to MAYBE on disagreement)
+- Single-review mode available via `dual_review=False` for faster processing
+- **Human-in-the-loop review** - when `dual_review=False`, set `human_review=True` to prompt human verification of AI decisions
+- Returns `ScreeningDecision` with confidence scores, matched criteria, and human review tracking
+
+**5. PaperFetcher** (`retrieval/fetcher.py`)
+- Waterfall retrieval pattern: tries sources in priority order until success
+- Default order: Unpaywall → PMC → arXiv
+- Updates `Paper.pdf_url` and `Paper.open_access` on success
+
+**6. DataExtractionAgent** (`agents/extractor.py`)
+- LLM-powered structured data extraction from papers
+- **Triple-review mode** (default): 3 passes with temps (0.2, 0.5, 0.8), majority voting for conflicts
+- **Single-pass mode**: Fast extraction (use `--mode fast`)
+- Confidence scoring based on reviewer agreement (3/3 = 1.0, 2/3 = 0.67)
+- Pre-built schemas: RCT, cohort, case-control, diagnostic studies
+- Field validation against schema constraints
+- Automatic quality assessment and flagging for human review
+- Cost: ~$0.50-0.70 per paper (triple-review), ~$0.15-0.20 (single-pass)
+
+**7. AnalysisRecommenderAgent** (`analysis/recommender.py`)
+- LLM-powered statistical test recommendation
+- Analyzes extracted data characteristics to recommend appropriate tests
+- Considers: data type, study design, sample size, distribution
+- Recommends primary, secondary, and sensitivity analyses
+- Assesses meta-analysis feasibility
+- Tool function: `recommend_statistical_tests`
+- Cost: ~$0.20 per analysis (single-pass)
+
+**8. StatisticalEngine** (`analysis/engine.py`)
+- Pure Python statistical computations (NO LLM COST)
+- Parametric tests: t-test, paired t-test, one-way ANOVA
+- Non-parametric tests: Mann-Whitney U, Wilcoxon signed-rank, Kruskal-Wallis
+- Categorical tests: chi-square, Fisher's exact test
+- Effect sizes: Cohen's d, odds ratio, risk ratio, mean difference
+- Correlation: Pearson, Spearman
+- All tests return `AnalysisResult` with statistics, p-values, confidence intervals
+
+**9. MetaAnalysisEngine** (`analysis/meta_analysis.py`)
+- Random-effects meta-analysis (DerSimonian-Laird method)
+- Fixed-effects meta-analysis (inverse variance weighting)
+- Heterogeneity assessment: I², tau², Q-statistic
+- Effect measures: mean difference, SMD (Hedges' g), odds ratio, risk ratio, risk difference
+- Publication bias: Egger's test
+- Subgroup analysis and leave-one-out sensitivity analysis
+- All calculations use scipy/statsmodels (NO LLM COST)
+
+**10. VisualizationGenerator** (`analysis/visualizer.py`)
+- Publication-ready plots using matplotlib/seaborn (NO LLM COST)
+- **Forest plots**: Pooled effects with CI, study weights, diamond for pooled estimate
+- **Funnel plots**: Publication bias detection with pseudo-CI limits
+- **Box plots**: Distribution comparisons with individual data points
+- **Bar charts**: Categorical comparisons with error bars
+- **Scatter plots**: With optional regression lines and R²
+- 300 DPI output suitable for journal submission
+
+**11. PRISMADiagramGenerator** (`visualization/prisma.py`)
+- PRISMA 2020-compliant flow diagrams (NO LLM COST)
+- Automatically generates from search/screening results
+- Tracks: identification, screening, eligibility, inclusion stages
+- Color-coded boxes (blue for main flow, red for exclusions)
+- Outputs: PNG (300 DPI) or SVG format
+- Professional formatting suitable for publication
+
+**12. ResultsWriterAgent** (`agents/results_writer.py`)
+- LLM-powered results section writer
+- Generates three subsections:
+  - **Study Selection**: Search results and PRISMA narrative
+  - **Study Characteristics**: Summary of included studies
+  - **Synthesis of Results**: Meta-analysis findings with statistics
+- References figures and tables appropriately
+- Follows PRISMA 2020 guidelines
+- Tool functions: `write_study_selection`, `write_study_characteristics`, `write_synthesis_of_results`
+- Cost: ~$0.50-0.70 per complete results section
+
+**13. Embedder** (`rag/embedder.py`)
+- Generates text embeddings using OpenAI's text-embedding-3-small model
+- Creates chunks from papers: title and abstract
+- Batch processing: 100 texts per API call for efficiency
+- Automatic caching to avoid re-embedding same text
+- Token counting with tiktoken for cost estimation
+- Cost: ~$0.00002 per 1K tokens (~$0.001 per paper)
+
+**14. VectorStore** (`rag/vector_store.py`)
+- FAISS-based vector similarity search (NO LLM COST)
+- Supports exact search (L2 distance) and approximate search (IVF index)
+- Persistent storage: save/load to disk
+- Maps vectors to TextChunk metadata
+- Efficient search: finds top-k similar vectors in milliseconds
+
+**15. Retriever** (`rag/retriever.py`)
+- High-level interface for literature context retrieval
+- Combines embedder and vector store
+- Features:
+  - Index papers for retrieval
+  - Semantic similarity search with configurable top-k
+  - Diversity filtering to ensure variety in results
+  - Minimum score thresholding
+  - Filter by chunk type (title, abstract, etc.)
+- Save/load functionality for persistent indices
+- Cost: Embedding ~$0.20 for 200 papers (one-time, cached), retrieval is free
+
+**16. EmbeddingCacheStore** (`rag/cache.py`)
+- SQLite-based persistent cache for embeddings (NO LLM COST)
+- Prevents re-embedding same text across sessions
+- Hash-based validation: invalidates cache if text changes
+- Stores: embeddings, metadata, token counts, creation timestamps
+- Provides statistics: cache size, hit rate, total tokens embedded
+
+**17. IntroductionWriterAgent** (`agents/intro_writer.py`)
+- LLM-powered introduction section writer
+- Generates three subsections:
+  - **Background**: Broad context → specific problem (200-250 words)
+  - **Rationale**: Gaps in literature, justification for review (100-150 words)
+  - **Objectives**: Clear, specific aims (80-120 words)
+- Uses RAG system for literature context retrieval (optional)
+- Follows funnel approach: general → specific
+- Tool functions: `write_background`, `write_rationale`, `write_objectives`
+- Cost: ~$1.00 per complete introduction
+
+**18. DiscussionWriterAgent** (`agents/discussion_writer.py`)
+- LLM-powered discussion section writer
+- Generates four subsections:
+  - **Summary of Main Findings**: Interpret results (150-200 words)
+  - **Comparison with Existing Literature**: Compare with previous work (250-300 words)
+  - **Limitations**: Acknowledge study limitations (150-200 words)
+  - **Implications**: Clinical and research implications (150-200 words)
+- Uses RAG system for literature comparison (optional)
+- Accepts user input for interpretation and opinions
+- Tool functions: `write_key_findings`, `write_comparison_to_literature`, `write_limitations`, `write_implications`
+- Cost: ~$1.00 per complete discussion
+
+**19. Retry Logic with Exponential Backoff** (`utils.py`)
+- `@retry_with_exponential_backoff` decorator for OpenAI API calls
+- Handles rate limits (429) and transient errors (5xx) automatically
+- Exponential backoff with jitter prevents overwhelming the API
+- Default: 5 retries, 1s initial delay, up to 60s max delay
+- Used by QueryGeneratorAgent and ScreeningAgent
+- See `RATE_LIMIT_HANDLING.md` for details
+
+### Client Architecture
+
+**BaseSearchClient** (`clients/base.py`)
+- Abstract base for all database clients
+- Key methods: `search()`, `get_paper_by_id()`, `validate_query()`, `normalize_paper()`
+- Raises: `SearchClientError`, `RateLimitError`, `NotConfiguredError`
+
+**Implementations:**
+- `PubMedClient`: Uses Biopython E-utilities, respects NCBI rate limits (3/s default, 10/s with API key)
+- `OpenAlexClient`: Supports text search and filter syntax
+- `SemanticScholarClient`: Simple text search
+- `GoogleScholarClient`: Uses scholarly library (requires careful rate limiting)
+
+### Data Models
+
+**Paper** (`models/paper.py`)
+- Central data model with normalized fields across all databases
+- Identifiers: `doi`, `pmid`, `pmcid`, `arxiv_id`, `s2_id`, `openalex_id`
+- Metadata: `title`, `abstract`, `authors`, `journal`, `year`, `keywords`, `mesh_terms`
+- Source tracking: `source`, `source_url`, `retrieved_at`
+- Access: `pdf_url`, `open_access`
+- Property: `best_identifier` returns first available ID for deduplication
+
+**SearchResult** (`models/paper.py`)
+- Container for single database search results
+- Includes: `query`, `source`, `papers`, `total_available`, `execution_time_ms`
+
+**PRISMAFlow** (`models/paper.py`)
+- Tracks systematic review statistics
+- Stages: identification, screening, eligibility, inclusion
+- Per-database tracking of records identified
+
+**ScreeningDecision** (`models/screening.py`)
+- Contains: `paper_id`, `status`, `reason`, `confidence`, `matched_inclusion/exclusion`
+- Supports dual-review with `is_conflict` and `second_opinion` fields
+
+**ExtractionSchema** (`models/extraction.py`)
+- Defines fields to extract from papers
+- Field types: NUMERIC, CATEGORICAL, TEXT, DATE, BOOLEAN, LIST
+- Validation rules: min/max, allowed values, length constraints
+- Pre-built schemas available: RCT, cohort, case-control, diagnostic
+
+**ExtractedData** (`models/extraction.py`)
+- Contains extracted data for one paper
+- Fields: `paper_id`, `data` dict, `confidence` scores per field
+- Quality metrics: `extraction_quality`, `needs_human_review`
+- Audit trail: `reviewer_decisions`, `conflicts`, `low_confidence_fields`
+
+**AnalysisResult** (`models/analysis.py`)
+- Result from a statistical test
+- Contains: `test_statistic`, `p_value`, `confidence_interval`, `effect_size`
+- Property: `is_significant` (p < 0.05)
+- Additional statistics stored in `additional_stats` dict
+
+**MetaAnalysisResult** (`models/analysis.py`)
+- Result from meta-analysis
+- Pooled effect with CI, heterogeneity statistics (I², tau², Q)
+- Individual study data with weights
+- Paths to forest plot and funnel plot
+- Properties: `is_significant`, `has_high_heterogeneity` (I² > 50%)
+
+**PRISMAFlow** (`models/visualization.py`)
+- Complete PRISMA 2020 flow tracking
+- Stages: identification (databases + registers), screening, eligibility, inclusion
+- Tracks: records identified, duplicates removed, records screened/excluded, reports assessed, studies included
+- Properties: `records_after_deduplication`, `exclusion_rate`, `retrieval_rate`
+
+**Figure** (`models/visualization.py`)
+- Manuscript figure metadata
+- Contains: `id`, `title`, `caption`, `file_path`, `figure_type`
+- Dimensions and DPI settings for publication
+
+**Table** (`models/visualization.py`)
+- Manuscript table with headers and rows
+- Methods: `markdown` and `html` for different export formats
+- Support for footnotes
+
+**Section** (`models/writing.py`)
+- Manuscript section with title and content
+- Hierarchical structure with subsections
+- Tracks citations, figures, and tables referenced
+- Methods: `to_markdown()`, `add_subsection()`, `add_citation()`
+- Property: `total_word_count` (includes subsections)
+
+**Manuscript** (`models/writing.py`)
+- Complete manuscript structure
+- Sections: abstract, introduction, methods, results, discussion, conclusions
+- Collections: figures, tables, references
+- Metadata: authors, affiliations, keywords, funding
+
+**TextChunk** (`models/rag.py`)
+- A chunk of text from a paper for embedding
+- Contains: `paper_id`, `chunk_type`, `text`, `metadata`
+- Property: `chunk_id` (unique identifier combining paper_id and chunk_type)
+
+**Embedding** (`models/rag.py`)
+- Vector embedding of a text chunk
+- Contains: `chunk_id`, `vector` (list of floats), `model`, `dimensions`, `created_at`
+- Used by VectorStore for similarity search
+
+**RetrievalQuery** (`models/rag.py`)
+- Query parameters for document retrieval
+- Fields: `query_text`, `top_k`, `min_score`, `chunk_types`, `exclude_paper_ids`, `diversity_weight`
+
+**RetrievalResult** (`models/rag.py`)
+- A single retrieved document with relevance score
+- Contains: `chunk`, `score`, `rank`
+
+**RetrievalResponse** (`models/rag.py`)
+- Response from a retrieval query
+- Contains: `query`, `results`, `total_candidates`, `search_time_ms`, `model_used`
+- Properties: `paper_ids`, `avg_score`
+
+**EmbeddingStats** (`models/rag.py`)
+- Statistics about the embedding cache
+- Contains: total chunks/embeddings, cache size, models used, oldest/newest embeddings, total tokens
+- Property: `cache_hit_rate`
+
+### Configuration
+
+**Settings** (`config.py`)
+- Uses pydantic-settings with `.env` file support
+- Required: `OPENAI_API_KEY`, `UNPAYWALL_EMAIL`
+- Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`
+- Rate limits: `pubmed_requests_per_second`, `scholarly_min_delay`, `scholarly_max_delay`
+- Access via: `get_settings()` (cached singleton)
+
+## Key Patterns
+
+### LLM Agent Pattern
+Both `QueryGeneratorAgent` and `ScreeningAgent` use OpenAI function calling:
+1. Define tool schemas with type definitions
+2. System prompt provides context and guidelines
+3. Call `client.chat.completions.create()` with `tools` parameter
+4. Parse `tool_calls` from response to extract structured data
+5. Fallback to default behavior if parsing fails
+
+### Waterfall Retrieval Pattern
+`PaperFetcher` implements priority-ordered source checking:
+1. Iterate through sources in priority order
+2. Check `can_retrieve()` before attempting
+3. Return on first success
+4. Track all sources tried for debugging
+
+### Async-First Design
+All I/O operations are async:
+- Database clients use `httpx.AsyncClient`
+- OpenAI client uses `AsyncOpenAI`
+- CLI wraps async calls with `asyncio.run_until_complete()`
+
+### Normalization Strategy
+Each client implements `normalize_paper()` to convert raw API responses to the canonical `Paper` model. This enables:
+- Uniform deduplication across sources
+- Consistent screening regardless of origin
+- Simplified downstream processing
+
+### Retry Pattern with Exponential Backoff
+OpenAI API calls use `@retry_with_exponential_backoff` decorator:
+1. Wrap API call method with decorator
+2. On rate limit (429) or server error (5xx), automatically retry
+3. Exponential backoff: 1s → 2s → 4s → 8s → 16s (with jitter)
+4. User-friendly progress messages during retries
+5. Give up after max retries (default: 5) and raise error
+6. Client errors (4xx) don't retry - fail immediately
+
+**Usage:**
+```python
+@retry_with_exponential_backoff(max_retries=5, initial_delay=1.0)
+async def _call_openai(self, messages, tools=None):
+    return await self.client.chat.completions.create(...)
+```
+
+## Testing Considerations
+
+When adding tests:
+- Use `pytest-asyncio` for async test functions (mark with `@pytest.mark.asyncio`)
+- Mock OpenAI API calls to avoid costs and flakiness
+- Mock HTTP clients using `httpx` testing utilities
+- Test deduplication with known duplicate sets
+- Verify PRISMA flow calculations
+
+## Common Modifications
+
+**Adding a new database:**
+1. Create client in `clients/` extending `BaseSearchClient`
+2. Implement: `search()`, `get_paper_by_id()`, `get_query_syntax_help()`, `normalize_paper()`
+3. Add to `SearchOrchestrator._clients` dict
+4. Add tool function to `query_generator.py` QUERY_TOOLS
+5. Update system prompt in `QueryGeneratorAgent._get_system_prompt()`
+
+**Adding a new retrieval source:**
+1. Create source in `retrieval/sources/` extending `BaseRetrievalSource`
+2. Implement: `can_retrieve()`, `retrieve()`
+3. Add to `PaperFetcher` default sources list
+
+**Modifying deduplication:**
+- Edit `Deduplicator._find_match()` to add new matching strategies
+- Adjust `title_similarity_threshold` in `Deduplicator.__init__()`
+- Update `_merge_papers()` to handle new metadata fields

@@ -1,0 +1,44 @@
+[Unit]
+Description=Arakis Systematic Review Platform
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/arakis
+User=root
+Group=root
+
+# Environment
+EnvironmentFile=/opt/arakis/.env
+
+# Start command - use production compose files
+ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# Stop command
+ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+# Reload command (graceful restart)
+ExecReload=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate --no-deps api
+
+# Restart policy
+Restart=on-failure
+RestartSec=10s
+
+# Timeout settings
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+# Security settings
+# Note: Running as root is required for Docker commands
+# Consider using rootless Docker for enhanced security
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arakis
+
+[Install]
+WantedBy=multi-user.target
