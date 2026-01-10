@@ -40,7 +40,12 @@
       "Bash(bash -n:*)",
       "Bash(chmod:*)",
       "Bash(git init:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)"
     ]
   }
 }
