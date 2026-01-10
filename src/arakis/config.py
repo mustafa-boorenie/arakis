@@ -69,6 +69,31 @@ class Settings(BaseSettings):
         """Return appropriate rate limit based on API key presence."""
         return 10.0 if self.ncbi_api_key else 3.0
 
+    @property
+    def async_database_url(self) -> str:
+        """Convert DATABASE_URL to async-compatible format.
+
+        Railway provides DATABASE_URL as postgresql://... but we need
+        postgresql+asyncpg://... for async SQLAlchemy.
+        """
+        url = self.database_url
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return url
+
+    @property
+    def sync_database_url(self) -> str:
+        """Convert DATABASE_URL to sync format for Alembic migrations.
+
+        Handles both postgresql:// and postgresql+asyncpg:// formats.
+        """
+        url = self.database_url
+        if "+asyncpg" in url:
+            return url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+        elif url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        return url
+
 
 @lru_cache
 def get_settings() -> Settings:

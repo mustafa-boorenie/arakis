@@ -15,8 +15,9 @@ from arakis.config import get_settings
 config = context.config
 
 # Load database URL from settings
+# Uses sync_database_url to handle Railway's postgresql:// format
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2"))
+config.set_main_option("sqlalchemy.url", settings.sync_database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

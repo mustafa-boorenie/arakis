@@ -10,8 +10,9 @@ from arakis.config import get_settings
 settings = get_settings()
 
 # Async engine for API (PostgreSQL with asyncpg)
+# Uses async_database_url to handle Railway's postgresql:// format
 async_engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url,
     echo=settings.debug,
     pool_size=20,
     max_overflow=40,
@@ -27,10 +28,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 # Sync engine for migrations (Alembic)
-# Replace asyncpg with psycopg2 for sync operations
-sync_database_url = settings.database_url.replace("postgresql+asyncpg", "postgresql+psycopg2")
+# Uses sync_database_url to handle Railway's postgresql:// format
 sync_engine = create_engine(
-    sync_database_url,
+    settings.sync_database_url,
     echo=settings.debug,
     pool_pre_ping=True,
 )
