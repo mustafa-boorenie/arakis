@@ -62,10 +62,10 @@ docker-compose*.yml
 # CI/CD
 .github/
 
-# Environment
+# Environment - exclude ALL env files from production builds
 .env
 .env.*
-!.env.example
+.env.example
 
 # Logs
 *.log
