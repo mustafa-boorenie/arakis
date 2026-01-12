@@ -127,6 +127,82 @@ async def health_check():
         )
 
 
+@app.get("/health/storage", tags=["health"])
+async def storage_health_check():
+    """
+    Storage health check endpoint.
+
+    Returns status of S3-compatible object storage (R2, S3, MinIO).
+    """
+    from arakis.storage import get_storage_client
+
+    storage = get_storage_client()
+    health = storage.health_check()
+
+    response = {
+        "status": "healthy" if health.connected and health.bucket_exists else "unhealthy",
+        "storage": {
+            "connected": health.connected,
+            "bucket_exists": health.bucket_exists,
+            "bucket_name": health.bucket_name,
+            "endpoint": health.endpoint,
+        },
+    }
+
+    if health.error:
+        response["storage"]["error"] = health.error
+
+    if not health.connected or not health.bucket_exists:
+        return JSONResponse(status_code=503, content=response)
+
+    return response
+
+
+@app.get("/health/all", tags=["health"])
+async def full_health_check():
+    """
+    Full health check for all services.
+
+    Checks database, storage, and other dependencies.
+    """
+    from sqlalchemy import text
+    from arakis.storage import get_storage_client
+
+    health_status = {
+        "status": "healthy",
+        "services": {},
+    }
+    all_healthy = True
+
+    # Database check
+    try:
+        async with async_engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        health_status["services"]["database"] = {"status": "connected"}
+    except Exception as e:
+        health_status["services"]["database"] = {"status": "disconnected", "error": str(e)}
+        all_healthy = False
+
+    # Storage check
+    storage = get_storage_client()
+    storage_health = storage.health_check()
+    health_status["services"]["storage"] = {
+        "status": "connected" if storage_health.connected and storage_health.bucket_exists else "disconnected",
+        "bucket": storage_health.bucket_name,
+        "configured": storage.is_configured,
+    }
+    if storage_health.error:
+        health_status["services"]["storage"]["error"] = storage_health.error
+    if not storage_health.connected or not storage_health.bucket_exists:
+        # Storage is optional, don't fail health check
+        health_status["services"]["storage"]["status"] = "unavailable"
+
+    health_status["status"] = "healthy" if all_healthy else "degraded"
+
+    status_code = 200 if all_healthy else 503
+    return JSONResponse(status_code=status_code, content=health_status)
+
+
 # Error handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):

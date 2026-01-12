@@ -10,6 +10,7 @@ from arakis.retrieval.sources.base import BaseRetrievalSource, RetrievalResult
 from arakis.retrieval.sources.unpaywall import UnpaywallSource
 from arakis.retrieval.sources.pmc import PMCSource
 from arakis.retrieval.sources.arxiv import ArxivSource
+from arakis.storage import get_storage_client
 
 
 @dataclass
@@ -40,9 +41,14 @@ class PaperFetcher:
     3. arXiv - preprints
 
     The fetcher stops at the first successful source.
+    PDFs can be cached to S3-compatible storage (R2, S3, MinIO).
     """
 
-    def __init__(self, sources: list[BaseRetrievalSource] | None = None):
+    def __init__(
+        self,
+        sources: list[BaseRetrievalSource] | None = None,
+        cache_pdfs: bool = True,
+    ):
         if sources is None:
             # Default waterfall order
             self.sources = [
@@ -53,11 +59,24 @@ class PaperFetcher:
         else:
             self.sources = sources
 
+        self.cache_pdfs = cache_pdfs
+        self._storage = None
+
+    @property
+    def storage(self):
+        """Lazy-load storage client."""
+        if self._storage is None:
+            self._storage = get_storage_client()
+        return self._storage
+
     async def fetch(
         self, paper: Paper, download: bool = False, extract_text: bool = False
     ) -> FetchResult:
         """
         Attempt to fetch a paper from multiple sources.
+
+        First checks the cache (S3/R2), then falls back to external sources.
+        Caches downloaded PDFs for future requests.
 
         Args:
             paper: Paper to fetch
@@ -68,7 +87,34 @@ class PaperFetcher:
             FetchResult with success status and retrieval details
         """
         sources_tried = []
+        paper_id = paper.best_identifier or paper.id
 
+        # Check cache first if storage is configured
+        if self.cache_pdfs and self.storage.is_configured:
+            cached_content, cache_result = self.storage.download_paper_pdf(paper_id)
+            if cached_content:
+                sources_tried.append("cache")
+                # Create a retrieval result from cache
+                cache_retrieval = RetrievalResult(
+                    success=True,
+                    source_name="cache",
+                    content=cached_content if download else None,
+                    content_url=cache_result.url,
+                )
+                paper.open_access = True
+
+                # Extract text if requested
+                if extract_text and download:
+                    await self._extract_text_from_pdf(paper, cached_content)
+
+                return FetchResult(
+                    success=True,
+                    paper=paper,
+                    retrieval_result=cache_retrieval,
+                    sources_tried=sources_tried,
+                )
+
+        # Try external sources
         for source in self.sources:
             # Check if source can handle this paper
             if not await source.can_retrieve(paper):
@@ -84,6 +130,10 @@ class PaperFetcher:
                 if result.content_url:
                     paper.pdf_url = result.content_url
                     paper.open_access = True
+
+                # Cache the PDF if we downloaded it
+                if self.cache_pdfs and download and result.content and self.storage.is_configured:
+                    self._cache_pdf(paper_id, result.content, source.name)
 
                 # Extract text from PDF if requested
                 if extract_text and download and result.content:
@@ -103,6 +153,15 @@ class PaperFetcher:
             retrieval_result=None,
             sources_tried=sources_tried,
         )
+
+    def _cache_pdf(self, paper_id: str, content: bytes, source: str) -> None:
+        """Cache a PDF to storage (non-blocking, fire-and-forget)."""
+        try:
+            metadata = {"source": source, "paper_id": paper_id}
+            self.storage.upload_paper_pdf(paper_id, content, metadata)
+        except Exception:
+            # Caching failure shouldn't break the fetch
+            pass
 
     async def fetch_batch(
         self,
