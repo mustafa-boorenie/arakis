@@ -198,8 +198,12 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                         for a in paper.authors
                     ]
 
+                # Generate unique ID for this paper in this workflow
+                paper_identifier = paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
+                unique_paper_id = f"{workflow_id}_{paper_identifier}"
+
                 db_paper = Paper(
-                    id=paper.best_identifier or f"{paper.source}_{hash(paper.title)}",
+                    id=unique_paper_id,
                     workflow_id=workflow_id,
                     doi=paper.doi,
                     pmid=paper.pmid,
@@ -244,10 +248,13 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     dual_review=dual_review,
                 )
 
-                # Save screening decision
+                # Save screening decision (use same unique ID format as papers table)
+                paper_identifier = paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
+                unique_paper_id = f"{workflow_id}_{paper_identifier}"
+
                 db_decision = ScreeningDecision(
                     workflow_id=workflow_id,
-                    paper_id=paper.best_identifier or f"{paper.source}_{hash(paper.title)}",
+                    paper_id=unique_paper_id,
                     status=decision.status,
                     reason=decision.reason,
                     confidence=decision.confidence,
