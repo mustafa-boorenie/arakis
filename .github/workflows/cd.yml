@@ -18,6 +18,7 @@ on:
 
 env:
   RAILWAY_SERVICE: api
+  DEPLOY_URL: https://arakis-production.up.railway.app
 
 jobs:
   check-tests:
@@ -42,6 +43,7 @@ jobs:
     needs: check-tests
     environment:
       name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ env.DEPLOY_URL }}
 
     steps:
       - name: Checkout code
@@ -57,71 +59,23 @@ jobs:
           railway up --detach --service ${{ env.RAILWAY_SERVICE }}
           echo "Deployment initiated"
 
-      - name: Wait for deployment to start
-        run: sleep 15
-
-  migrations:
-    name: Run Database Migrations
-    runs-on: ubuntu-latest
-    needs: deploy
-    environment:
-      name: ${{ github.event.inputs.environment || 'production' }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Run Alembic migrations
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          railway run --service ${{ env.RAILWAY_SERVICE }} alembic upgrade head
+      - name: Wait for deployment
+        run: sleep 60
 
   health-check:
     name: Post-Deployment Health Check
     runs-on: ubuntu-latest
-    needs: migrations
-    environment:
-      name: ${{ github.event.inputs.environment || 'production' }}
+    needs: deploy
 
     steps:
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Wait for deployment to stabilize
         run: sleep 30
 
-      - name: Get deployment URL
-        id: get-url
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          # Get the deployment domain from Railway
-          DEPLOY_URL=$(railway status --json 2>/dev/null | jq -r '.deploymentDomain // empty' || echo "")
-          if [ -z "$DEPLOY_URL" ]; then
-            # Fallback: try to get from environment variables
-            DEPLOY_URL="${{ secrets.RAILWAY_DOMAIN }}"
-          fi
-          if [ -z "$DEPLOY_URL" ]; then
-            echo "Could not determine deployment URL"
-            exit 1
-          fi
-          # Ensure https prefix
-          if [[ ! "$DEPLOY_URL" =~ ^https?:// ]]; then
-            DEPLOY_URL="https://$DEPLOY_URL"
-          fi
-          echo "url=${DEPLOY_URL}" >> $GITHUB_OUTPUT
-          echo "Deployment URL: ${DEPLOY_URL}"
-
       - name: Test API health endpoint
         run: |
-          URL="${{ steps.get-url.outputs.url }}"
-          echo "Testing health at: ${URL}/health"
-          for i in {1..10}; do
-            response=$(curl -s -o /dev/null -w "%{http_code}" "${URL}/health" || echo "000")
+          echo "Testing health at: ${{ env.DEPLOY_URL }}/health"
+          for i in {1..15}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.DEPLOY_URL }}/health" || echo "000")
             if [ "$response" == "200" ]; then
               echo "Health check passed (HTTP $response)"
               exit 0
@@ -129,13 +83,12 @@ jobs:
             echo "Attempt $i: HTTP $response, waiting..."
             sleep 10
           done
-          echo "Health check failed after 10 attempts"
+          echo "Health check failed after 15 attempts"
           exit 1
 
-      - name: Test API response content
+      - name: Verify health response
         run: |
-          URL="${{ steps.get-url.outputs.url }}"
-          response=$(curl -s "${URL}/health")
+          response=$(curl -s "${{ env.DEPLOY_URL }}/health")
           echo "$response" | jq .
           if echo "$response" | jq -e '.status == "healthy"' > /dev/null 2>&1; then
             echo "API is healthy"
@@ -144,35 +97,26 @@ jobs:
             exit 1
           fi
 
+      - name: Check all services health
+        run: |
+          response=$(curl -s "${{ env.DEPLOY_URL }}/health/all")
+          echo "$response" | jq .
+          if echo "$response" | jq -e '.status == "healthy" or .status == "degraded"' > /dev/null 2>&1; then
+            echo "Services are operational"
+          else
+            echo "Services health check failed"
+            exit 1
+          fi
+
   smoke-test:
     name: Smoke Tests
     runs-on: ubuntu-latest
     needs: health-check
-    environment:
-      name: ${{ github.event.inputs.environment || 'production' }}
 
     steps:
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Get deployment URL
-        id: get-url
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          DEPLOY_URL=$(railway status --json 2>/dev/null | jq -r '.deploymentDomain // empty' || echo "")
-          if [ -z "$DEPLOY_URL" ]; then
-            DEPLOY_URL="${{ secrets.RAILWAY_DOMAIN }}"
-          fi
-          if [[ ! "$DEPLOY_URL" =~ ^https?:// ]]; then
-            DEPLOY_URL="https://$DEPLOY_URL"
-          fi
-          echo "url=${DEPLOY_URL}" >> $GITHUB_OUTPUT
-
       - name: Test API root endpoint
         run: |
-          URL="${{ steps.get-url.outputs.url }}"
-          response=$(curl -s "${URL}/")
+          response=$(curl -s "${{ env.DEPLOY_URL }}/")
           echo "$response" | jq .
           if echo "$response" | jq -e '.name == "Arakis Systematic Review Platform API"' > /dev/null 2>&1; then
             echo "API root endpoint working"
@@ -183,8 +127,7 @@ jobs:
 
       - name: Test API docs
         run: |
-          URL="${{ steps.get-url.outputs.url }}"
-          status=$(curl -s -o /dev/null -w "%{http_code}" "${URL}/docs")
+          status=$(curl -s -o /dev/null -w "%{http_code}" "${{ env.DEPLOY_URL }}/docs")
           if [ "$status" == "200" ]; then
             echo "API documentation accessible"
           else
@@ -192,10 +135,20 @@ jobs:
             exit 1
           fi
 
+      - name: Test workflows endpoint
+        run: |
+          status=$(curl -sL -o /dev/null -w "%{http_code}" "${{ env.DEPLOY_URL }}/api/workflows/")
+          if [ "$status" == "200" ]; then
+            echo "Workflows API accessible"
+          else
+            echo "Workflows API not accessible (HTTP $status)"
+            exit 1
+          fi
+
   notify:
     name: Deployment Notification
     runs-on: ubuntu-latest
-    needs: [deploy, migrations, health-check, smoke-test]
+    needs: [deploy, health-check, smoke-test]
     if: always()
 
     steps:
@@ -203,7 +156,6 @@ jobs:
         id: status
         run: |
           if [ "${{ needs.deploy.result }}" == "success" ] && \
-             [ "${{ needs.migrations.result }}" == "success" ] && \
              [ "${{ needs.health-check.result }}" == "success" ] && \
              [ "${{ needs.smoke-test.result }}" == "success" ]; then
             echo "status=success" >> $GITHUB_OUTPUT
@@ -217,10 +169,10 @@ jobs:
         run: |
           echo "${{ steps.status.outputs.message }}"
           echo "Environment: ${{ github.event.inputs.environment || 'production' }}"
+          echo "URL: ${{ env.DEPLOY_URL }}"
           echo "Commit: ${{ github.sha }}"
           echo ""
           echo "Job Results:"
           echo "  - Deploy: ${{ needs.deploy.result }}"
-          echo "  - Migrations: ${{ needs.migrations.result }}"
           echo "  - Health Check: ${{ needs.health-check.result }}"
           echo "  - Smoke Test: ${{ needs.smoke-test.result }}"
