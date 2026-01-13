@@ -188,7 +188,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             )
 
             # Save papers to database
-            for paper in search_results.unique_papers:
+            for paper in search_results.papers:
                 db_paper = Paper(
                     id=paper.best_identifier or f"{paper.source}_{hash(paper.title)}",
                     workflow_id=workflow_id,
@@ -213,14 +213,14 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 )
                 db.add(db_paper)
 
-            workflow.papers_found = len(search_results.unique_papers)
+            workflow.papers_found = len(search_results.papers)
             await db.commit()
 
             # Step 2: Screen papers
             screener = ScreeningAgent()
             dual_review = not workflow_data.fast_mode
 
-            for paper in search_results.unique_papers[:min(len(search_results.unique_papers), 5)]:  # Limit to 5 for demo
+            for paper in search_results.papers[:min(len(search_results.papers), 5)]:  # Limit to 5 for demo
                 decision = await screener.screen_paper(
                     paper=paper,
                     inclusion_criteria=workflow_data.inclusion_criteria.split(","),
@@ -243,7 +243,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 )
                 db.add(db_decision)
 
-            workflow.papers_screened = min(len(search_results.unique_papers), 5)
+            workflow.papers_screened = min(len(search_results.papers), 5)
             await db.commit()
 
             # Get included papers count

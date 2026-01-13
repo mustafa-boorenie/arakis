@@ -1,13 +1,12 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import create_engine
 from sqlalchemy import pool
 
 from alembic import context
 
-# Import our models and sync engine
+# Import models for metadata (but NOT connection.py to avoid async engine creation)
 from arakis.database.models import Base
-from arakis.database.connection import sync_engine
 from arakis.config import get_settings
 
 # this is the Alembic Config object, which provides
@@ -18,6 +17,9 @@ config = context.config
 # Uses sync_database_url to handle Railway's postgresql:// format
 settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+
+# Create sync engine directly for migrations (avoids importing async engine)
+sync_engine = create_engine(settings.sync_database_url, pool_pre_ping=True)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

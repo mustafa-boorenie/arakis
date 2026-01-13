@@ -47,7 +47,12 @@
       "Bash(tree:*)",
       "Bash(find:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Add Railway deployment support\n\nReplace VM-based deployment with Railway PaaS:\n\n- Add railway.toml configuration for Railway deployment\n- Update Dockerfile to use dynamic PORT env var for Railway\n- Add async_database_url and sync_database_url properties to handle\n  Railway''s postgresql:// URL format \\(vs postgresql+asyncpg://\\)\n- Rewrite CD workflow to use Railway CLI instead of SSH deployment\n- Update database connection and migrations to use new URL properties\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Add Railway deployment support\n\nReplace VM-based deployment with Railway PaaS:\n\n- Add railway.toml configuration for Railway deployment\n- Update Dockerfile to use dynamic PORT env var for Railway\n- Add async_database_url and sync_database_url properties to handle\n  Railway''s postgresql:// URL format \\(vs postgresql+asyncpg://\\)\n- Rewrite CD workflow to use Railway CLI instead of SSH deployment\n- Update database connection and migrations to use new URL properties\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfeat: Add S3-compatible storage module for PDF caching\n\n- Add storage client module with support for R2, S3, MinIO\n- Add /health/storage and /health/all endpoints for monitoring\n- Integrate storage with PaperFetcher for PDF caching\n- Cache PDFs after fetching from external sources\n- Check cache before fetching from Unpaywall/PMC/arXiv\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C /Users/mustafaboorenie/arakis ls-files)",
+      "Bash(railway logs:*)",
+      "Bash(railway whoami:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
