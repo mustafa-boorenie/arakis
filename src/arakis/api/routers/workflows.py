@@ -226,14 +226,21 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             await db.commit()
 
             # Step 2: Screen papers
+            from arakis.models.screening import ScreeningCriteria
+
             screener = ScreeningAgent()
             dual_review = not workflow_data.fast_mode
+
+            # Create screening criteria object
+            criteria = ScreeningCriteria(
+                inclusion=[c.strip() for c in workflow_data.inclusion_criteria.split(",")],
+                exclusion=[c.strip() for c in workflow_data.exclusion_criteria.split(",")],
+            )
 
             for paper in search_results.papers[:min(len(search_results.papers), 5)]:  # Limit to 5 for demo
                 decision = await screener.screen_paper(
                     paper=paper,
-                    inclusion_criteria=workflow_data.inclusion_criteria.split(","),
-                    exclusion_criteria=workflow_data.exclusion_criteria.split(","),
+                    criteria=criteria,
                     dual_review=dual_review,
                 )
 
