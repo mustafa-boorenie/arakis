@@ -189,6 +189,15 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
 
             # Save papers to database
             for paper in search_results.papers:
+                # Serialize authors to JSON-compatible format
+                authors_json = None
+                if paper.authors:
+                    from dataclasses import asdict, is_dataclass
+                    authors_json = [
+                        asdict(a) if is_dataclass(a) else a
+                        for a in paper.authors
+                    ]
+
                 db_paper = Paper(
                     id=paper.best_identifier or f"{paper.source}_{hash(paper.title)}",
                     workflow_id=workflow_id,
@@ -202,7 +211,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     abstract=paper.abstract,
                     journal=paper.journal,
                     year=paper.year,
-                    authors=paper.authors,
+                    authors=authors_json,
                     keywords=paper.keywords,
                     mesh_terms=paper.mesh_terms,
                     pdf_url=paper.pdf_url,
