@@ -1,0 +1,8 @@
+# Cloudflare Pages configuration
+name = "arakis"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = "out"
+
+# Environment variables for production
+[vars]
+NEXT_PUBLIC_API_URL = "https://api.arakis.ai"
