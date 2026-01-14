@@ -13,6 +13,28 @@ from arakis.database.connection import async_engine
 settings = get_settings()
 
 
+def run_migrations():
+    """Run database migrations on startup."""
+    import subprocess
+    import sys
+
+    print("🔄 Running database migrations...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd="/app",  # alembic.ini is in root
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            print("✅ Database migrations complete")
+        else:
+            print(f"⚠️ Migration warning: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ Migration skipped: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -26,6 +48,9 @@ async def lifespan(app: FastAPI):
         f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'configured'}"
     )
     print(f"🔑 Debug mode: {settings.debug}")
+
+    # Run migrations
+    run_migrations()
 
     yield
 
