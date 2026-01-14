@@ -69,6 +69,16 @@ arakis workflow \
   --output ./review \
   --fast
 
+# Use cohort schema for observational studies (instead of default RCT schema)
+arakis workflow \
+  --question "Effect of metformin on mortality in type 2 diabetes" \
+  --include "Type 2 diabetes,Metformin,Mortality,Cohort studies" \
+  --exclude "Animal studies,Reviews" \
+  --schema cohort \
+  --output ./cohort_review
+
+# Available extraction schemas: rct (default), cohort, case_control, diagnostic
+
 # Skip certain stages
 arakis workflow --question "..." --include "..." --skip-analysis --skip-writing
 ```
