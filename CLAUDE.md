@@ -113,13 +113,16 @@ arakis screen results.json --include "Human RCTs" --no-dual-review --human-revie
 # Fetch full texts
 arakis fetch results.json --output ./papers/
 
-# Extract structured data from papers (triple-review mode)
-arakis extract screening_results.json --schema rct --output extractions.json
+# Extract structured data from papers (schema auto-detected from paper content)
+arakis extract screening_results.json --output extractions.json
 
 # Fast extraction (single-pass, lower cost)
-arakis extract screening_results.json --schema rct --mode fast --output extractions.json
+arakis extract screening_results.json --mode fast --output extractions.json
 
-# Other extraction schemas: cohort, case_control, diagnostic
+# Explicitly specify schema (overrides auto-detection)
+arakis extract screening_results.json --schema cohort --output extractions.json
+
+# Available extraction schemas: auto (default), rct, cohort, case_control, diagnostic
 
 # Analyze extracted data (with meta-analysis if feasible)
 arakis analyze extractions.json --output analysis.json --figures ./figures/
