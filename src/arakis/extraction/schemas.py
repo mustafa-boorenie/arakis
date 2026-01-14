@@ -604,3 +604,128 @@ def list_schemas() -> dict[str, str]:
         Dict mapping schema name to description
     """
     return {name: schema.description for name, schema in AVAILABLE_SCHEMAS.items()}
+
+
+# Keywords for auto-detecting schema from text
+_SCHEMA_KEYWORDS = {
+    "rct": [
+        "randomized controlled trial",
+        "randomised controlled trial",
+        "randomized trial",
+        "randomised trial",
+        "clinical trial",
+        "controlled trial",
+        "rct",
+        "rcts",
+        "double-blind",
+        "double blind",
+        "placebo-controlled",
+        "placebo controlled",
+    ],
+    "cohort": [
+        "cohort study",
+        "cohort studies",
+        "observational study",
+        "observational studies",
+        "prospective study",
+        "prospective studies",
+        "retrospective study",
+        "retrospective studies",
+        "longitudinal study",
+        "longitudinal studies",
+        "follow-up study",
+        "registry study",
+        "population-based study",
+    ],
+    "case_control": [
+        "case-control",
+        "case control",
+        "cases and controls",
+        "matched controls",
+    ],
+    "diagnostic": [
+        "diagnostic accuracy",
+        "diagnostic study",
+        "diagnostic test",
+        "sensitivity and specificity",
+        "test accuracy",
+        "screening test",
+        "index test",
+        "reference standard",
+        "roc curve",
+        "auc",
+    ],
+}
+
+
+def detect_schema(text: str) -> tuple[str, float]:
+    """
+    Auto-detect the most appropriate schema based on text content.
+
+    Analyzes the research question and/or inclusion criteria to determine
+    the most likely study type and returns the corresponding schema.
+
+    Args:
+        text: Text to analyze (research question, inclusion criteria, etc.)
+
+    Returns:
+        Tuple of (schema_name, confidence_score)
+        - schema_name: One of 'rct', 'cohort', 'case_control', 'diagnostic'
+        - confidence_score: 0.0 to 1.0 indicating detection confidence
+
+    Examples:
+        >>> detect_schema("Effect of aspirin in randomized controlled trials")
+        ('rct', 0.9)
+        >>> detect_schema("Cohort study of diabetes outcomes")
+        ('cohort', 0.9)
+    """
+    text_lower = text.lower()
+
+    # Count keyword matches for each schema
+    scores: dict[str, int] = {schema: 0 for schema in AVAILABLE_SCHEMAS}
+
+    for schema_name, keywords in _SCHEMA_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                # Exact phrase matches get higher weight
+                scores[schema_name] += 2 if " " in keyword else 1
+
+    # Find the schema with highest score
+    max_score = max(scores.values())
+
+    if max_score == 0:
+        # No keywords found, default to RCT with low confidence
+        return ("rct", 0.3)
+
+    # Get the winning schema
+    best_schema = max(scores, key=scores.get)
+
+    # Calculate confidence based on score and margin over second-best
+    sorted_scores = sorted(scores.values(), reverse=True)
+    margin = sorted_scores[0] - sorted_scores[1] if len(sorted_scores) > 1 else sorted_scores[0]
+
+    # Confidence: base on absolute score and margin
+    if max_score >= 4 and margin >= 2:
+        confidence = 0.95
+    elif max_score >= 2 and margin >= 1:
+        confidence = 0.8
+    elif max_score >= 1:
+        confidence = 0.6
+    else:
+        confidence = 0.4
+
+    return (best_schema, confidence)
+
+
+def get_schema_auto(text: str) -> tuple[ExtractionSchema, str, float]:
+    """
+    Auto-detect and return the appropriate schema based on text.
+
+    Args:
+        text: Text to analyze for schema detection
+
+    Returns:
+        Tuple of (schema, schema_name, confidence)
+    """
+    schema_name, confidence = detect_schema(text)
+    return (AVAILABLE_SCHEMAS[schema_name], schema_name, confidence)

@@ -69,15 +69,22 @@ arakis workflow \
   --output ./review \
   --fast
 
-# Use cohort schema for observational studies (instead of default RCT schema)
+# Schema is auto-detected from research question and inclusion criteria
+# This will auto-detect "cohort" from the inclusion criteria
 arakis workflow \
   --question "Effect of metformin on mortality in type 2 diabetes" \
   --include "Type 2 diabetes,Metformin,Mortality,Cohort studies" \
   --exclude "Animal studies,Reviews" \
-  --schema cohort \
   --output ./cohort_review
 
-# Available extraction schemas: rct (default), cohort, case_control, diagnostic
+# Explicitly specify schema (overrides auto-detection)
+arakis workflow \
+  --question "Effect of aspirin on heart disease" \
+  --include "RCTs,Placebo-controlled" \
+  --schema rct \
+  --output ./rct_review
+
+# Available extraction schemas: auto (default), rct, cohort, case_control, diagnostic
 
 # Skip certain stages
 arakis workflow --question "..." --include "..." --skip-analysis --skip-writing

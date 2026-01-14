@@ -6,6 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from arakis.extraction.schemas import (
     get_schema,
     list_schemas,
+    detect_schema,
+    get_schema_auto,
     AVAILABLE_SCHEMAS,
     RCT_SCHEMA,
     COHORT_SCHEMA,
@@ -111,6 +113,88 @@ class TestAvailableSchemas:
         for name, schema in AVAILABLE_SCHEMAS.items():
             required = [f for f in schema.fields if f.required]
             assert len(required) > 0, f"Schema '{name}' has no required fields"
+
+
+class TestDetectSchema:
+    """Tests for auto-detecting schema from text."""
+
+    def test_detect_rct_from_randomized_trial(self):
+        """Test detecting RCT schema from randomized trial mention."""
+        text = "Effect of aspirin in randomized controlled trials"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "rct"
+        assert confidence >= 0.6
+
+    def test_detect_rct_from_clinical_trial(self):
+        """Test detecting RCT schema from clinical trial mention."""
+        text = "Double-blind placebo-controlled clinical trial of drug X"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "rct"
+        assert confidence >= 0.8
+
+    def test_detect_cohort_from_cohort_study(self):
+        """Test detecting cohort schema from cohort study mention."""
+        text = "Retrospective cohort study of diabetes outcomes"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "cohort"
+        assert confidence >= 0.6
+
+    def test_detect_cohort_from_observational(self):
+        """Test detecting cohort schema from observational study mention."""
+        text = "Observational study, prospective follow-up of patients"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "cohort"
+        assert confidence >= 0.6
+
+    def test_detect_case_control(self):
+        """Test detecting case-control schema."""
+        text = "Case-control study with matched controls"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "case_control"
+        assert confidence >= 0.6
+
+    def test_detect_diagnostic(self):
+        """Test detecting diagnostic schema."""
+        text = "Diagnostic accuracy study, sensitivity and specificity of the test"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "diagnostic"
+        assert confidence >= 0.6
+
+    def test_detect_default_rct_when_no_keywords(self):
+        """Test default to RCT with low confidence when no keywords found."""
+        text = "Effect of treatment on outcomes in patients"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "rct"
+        assert confidence < 0.5  # Low confidence
+
+    def test_detect_schema_case_insensitive(self):
+        """Test that detection is case-insensitive."""
+        text = "RANDOMIZED CONTROLLED TRIAL"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "rct"
+        assert confidence >= 0.6
+
+    def test_detect_cohort_from_inclusion_criteria(self):
+        """Test detecting cohort from typical inclusion criteria."""
+        text = "Type 2 diabetes, Metformin, Mortality, Cohort or observational studies"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "cohort"
+        assert confidence >= 0.6
+
+    def test_detect_rct_from_inclusion_criteria(self):
+        """Test detecting RCT from typical RCT inclusion criteria."""
+        text = "Hypertension, Drug intervention, RCTs only, Placebo-controlled"
+        schema_name, confidence = detect_schema(text)
+        assert schema_name == "rct"
+        assert confidence >= 0.6
+
+    def test_get_schema_auto(self):
+        """Test get_schema_auto returns schema object and metadata."""
+        text = "Retrospective cohort study of outcomes"
+        schema, name, confidence = get_schema_auto(text)
+        assert name == "cohort"
+        assert schema == COHORT_SCHEMA
+        assert confidence >= 0.6
 
 
 class TestSchemaFieldDifferences:
