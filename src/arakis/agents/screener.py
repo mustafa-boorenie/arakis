@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -373,7 +374,7 @@ Use the screen_paper function to make your decision."""
         criteria: ScreeningCriteria,
         dual_review: bool = True,
         human_review: bool = False,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
     ) -> list[ScreeningDecision]:
         """
         Screen multiple papers.

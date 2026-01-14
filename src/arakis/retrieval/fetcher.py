@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Waterfall paper fetcher that tries multiple sources."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -169,7 +170,7 @@ class PaperFetcher:
         papers: list[Paper],
         download: bool = False,
         extract_text: bool = False,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
     ) -> list[FetchResult]:
         """
         Fetch multiple papers.

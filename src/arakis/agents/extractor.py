@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -504,7 +505,7 @@ Use the extract_data function."""
         schema: ExtractionSchema,
         triple_review: bool = True,
         use_full_text: bool = False,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
     ) -> ExtractionResult:
         """
         Extract data from multiple papers in batch.
