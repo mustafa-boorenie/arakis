@@ -32,7 +32,6 @@ jobs:
       - name: Run ruff linter
         run: |
           ruff check src/
-        continue-on-error: true
 
       - name: Run ruff formatter check
         run: |
@@ -41,6 +40,7 @@ jobs:
       - name: Run mypy type checker
         run: |
           mypy src/
+        # TODO: Fix existing type errors and remove continue-on-error
         continue-on-error: true
 
   test:
@@ -148,14 +148,47 @@ jobs:
           pip install bandit safety
 
       - name: Run bandit security linter
+        id: bandit
         run: |
-          bandit -r src/ -ll -f json -o bandit-report.json || true
-          bandit -r src/ -ll
+          # Generate JSON report for artifact
+          bandit -r src/ -ll -f json -o bandit-report.json || BANDIT_EXIT=$?
+
+          # Display human-readable output
+          echo "=== Bandit Security Scan Results ==="
+          bandit -r src/ -ll || true
+
+          # Report findings count
+          if [ -f bandit-report.json ]; then
+            HIGH=$(jq '[.results[] | select(.issue_severity == "HIGH")] | length' bandit-report.json)
+            MEDIUM=$(jq '[.results[] | select(.issue_severity == "MEDIUM")] | length' bandit-report.json)
+            LOW=$(jq '[.results[] | select(.issue_severity == "LOW")] | length' bandit-report.json)
+            echo ""
+            echo "Summary: $HIGH high, $MEDIUM medium, $LOW low severity issues"
+
+            if [ "$HIGH" -gt 0 ]; then
+              echo "⚠️ High severity issues found - review required"
+            fi
+          fi
 
       - name: Check dependencies for known vulnerabilities
+        id: safety
         run: |
-          safety check --json || true
-        continue-on-error: true
+          echo "=== Dependency Vulnerability Scan ==="
+          # Run safety and capture output
+          safety check --output json > safety-report.json 2>&1 || SAFETY_EXIT=$?
+
+          # Display results
+          if [ -f safety-report.json ]; then
+            VULN_COUNT=$(jq 'if type == "array" then length else 0 end' safety-report.json 2>/dev/null || echo "0")
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "⚠️ Found $VULN_COUNT vulnerable dependencies"
+              jq -r '.[] | "  - \(.package_name) \(.vulnerable_versions): \(.vulnerability_id)"' safety-report.json 2>/dev/null || cat safety-report.json
+            else
+              echo "✅ No known vulnerabilities found in dependencies"
+            fi
+          else
+            echo "Could not parse safety output"
+          fi
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4
@@ -164,6 +197,7 @@ jobs:
           name: security-reports
           path: |
             bandit-report.json
+            safety-report.json
 
   integration-test:
     name: Integration Tests
@@ -184,11 +218,37 @@ jobs:
       - name: Start services with Docker Compose
         run: |
           docker compose up -d
-          sleep 30
 
-      - name: Wait for services to be healthy
+      - name: Wait for all services to be healthy
         run: |
-          timeout 120 bash -c 'until docker compose ps | grep -q "healthy"; do sleep 5; done'
+          echo "Waiting for all services to become healthy..."
+          MAX_ATTEMPTS=24  # 2 minutes total (24 * 5s)
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+
+            # Get status of all containers
+            TOTAL=$(docker compose ps --format json | jq -s 'length')
+            HEALTHY=$(docker compose ps --format json | jq -s '[.[] | select(.Health == "healthy")] | length')
+
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS: $HEALTHY/$TOTAL services healthy"
+
+            if [ "$HEALTHY" == "$TOTAL" ] && [ "$TOTAL" -gt 0 ]; then
+              echo "✅ All $TOTAL services are healthy"
+              exit 0
+            fi
+
+            # Show which services are not healthy yet
+            docker compose ps --format json | jq -r 'select(.Health != "healthy") | "\(.Service): \(.Health // "starting")"' || true
+
+            sleep 5
+          done
+
+          echo "❌ Timeout: Not all services became healthy"
+          docker compose ps
+          docker compose logs
+          exit 1
 
       - name: Run database migrations
         run: |
