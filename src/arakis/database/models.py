@@ -45,6 +45,9 @@ class Workflow(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+
     # User (optional - for multi-user support later)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
 

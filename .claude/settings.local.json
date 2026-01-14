@@ -52,7 +52,31 @@
       "Bash(git -C /Users/mustafaboorenie/arakis ls-files)",
       "Bash(railway logs:*)",
       "Bash(railway whoami:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(bandit:*)",
+      "Bash(docker build:*)",
+      "Bash(docker buildx build:*)",
+      "Bash(pip show:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(npm run build:*)",
+      "Bash(mypy:*)",
+      "Bash(gh run list:*)",
+      "Bash(brew install:*)",
+      "Bash(pg_isready:*)",
+      "Bash(docker info:*)",
+      "Bash(git reset:*)",
+      "Bash(xargs:*)",
+      "Bash(psql:*)",
+      "Bash(gh auth status:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(open http://localhost:3000)",
+      "Bash(gh run watch:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh api:*)"
     ]
   }
 }

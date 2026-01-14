@@ -24,11 +24,11 @@ export function useWorkflow() {
     addMessage,
   } = useStore();
 
-  // Poll for workflow status when running
+  // Poll for workflow status when pending or running
   const { isPolling } = usePolling<WorkflowResponse>(
     () => api.getWorkflow(workflow.current?.id || ''),
     {
-      enabled: workflow.current?.status === 'running',
+      enabled: workflow.current?.status === 'running' || workflow.current?.status === 'pending',
       interval: 5000, // 5 seconds
       shouldStop: (data) =>
         data.status === 'completed' || data.status === 'failed',

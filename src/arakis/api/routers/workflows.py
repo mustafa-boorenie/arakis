@@ -302,14 +302,36 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             await db.commit()
 
         except Exception as e:
-            # Mark workflow as failed
+            # Mark workflow as failed with error message
+            import traceback
+            error_msg = str(e)
+            full_error = traceback.format_exc()
+
+            # Extract more useful error info
+            if "RateLimitError" in error_msg or "RateLimitError" in full_error:
+                error_msg = "OpenAI API rate limit exceeded. Please wait a few minutes and try again."
+            elif "APIError" in error_msg or "APIError" in full_error:
+                error_msg = "OpenAI API error. Please check your API key and try again."
+            elif "HTTPStatusError" in error_msg or "HTTPStatusError" in full_error:
+                # Extract HTTP status code if available
+                if "429" in full_error:
+                    error_msg = "Database API rate limit exceeded. Please wait and try again."
+                elif "503" in full_error:
+                    error_msg = "Database service temporarily unavailable. Please try again."
+                else:
+                    error_msg = "Database search failed. Please try again with fewer databases."
+            elif "RetryError" in error_msg:
+                error_msg = "Search request failed after multiple retries. Please try again."
+
             try:
                 result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
                 workflow = result.scalar_one()
                 workflow.status = "failed"
+                workflow.error_message = error_msg
                 workflow.completed_at = datetime.utcnow()
                 await db.commit()
             except Exception:
                 pass
-            # Log the error but don't re-raise to avoid background task failures
-            print(f"Workflow {workflow_id} failed: {str(e)}")
+            # Log the full error for debugging
+            print(f"Workflow {workflow_id} failed: {error_msg}")
+            print(f"Full traceback:\n{full_error}")

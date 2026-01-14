@@ -36,9 +36,7 @@ export interface WorkflowListResponse {
 }
 
 export const AVAILABLE_DATABASES = [
-  { id: 'pubmed', label: 'PubMed', description: 'NCBI biomedical literature' },
+  { id: 'pubmed', label: 'PubMed', description: 'NCBI biomedical literature (recommended)' },
   { id: 'openalex', label: 'OpenAlex', description: 'Open scholarly metadata' },
   { id: 'semantic_scholar', label: 'Semantic Scholar', description: 'AI-powered academic search' },
-  { id: 'google_scholar', label: 'Google Scholar', description: 'Broad academic coverage' },
-  { id: 'embase', label: 'Embase', description: 'Biomedical and pharmaceutical' },
 ] as const;
