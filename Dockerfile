@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for Arakis API
 
 # Stage 1: Builder - Install dependencies
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -56,7 +56,7 @@ USER arakis
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app/src:$PYTHONPATH \
+    PYTHONPATH=/app/src \
     PATH="/home/arakis/.local/bin:$PATH"
 
 # Expose port
@@ -66,5 +66,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
-# Run the application (shell form to expand PORT env var)
-CMD uvicorn arakis.api.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run the application
+CMD ["sh", "-c", "uvicorn arakis.api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
