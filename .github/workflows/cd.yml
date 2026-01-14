@@ -43,7 +43,7 @@ jobs:
           if [ "$ENVIRONMENT" == "staging" ]; then
             echo "deploy_url=https://arakis-staging.up.railway.app" >> $GITHUB_OUTPUT
           else
-            echo "deploy_url=https://arakis-production.up.railway.app" >> $GITHUB_OUTPUT
+            echo "deploy_url=https://api.arakis.ai" >> $GITHUB_OUTPUT
           fi
 
           echo "Deploying to: $ENVIRONMENT"
