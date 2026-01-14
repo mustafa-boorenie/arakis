@@ -425,7 +425,10 @@ def fetch(
 def extract(
     input_file: str = typer.Argument(..., help="JSON file with screening results"),
     schema: str = typer.Option(
-        "rct", "--schema", "-s", help="Extraction schema (rct, cohort, case_control, diagnostic)"
+        "auto",
+        "--schema",
+        "-s",
+        help="Extraction schema: auto (detect from papers), rct, cohort, case_control, diagnostic",
     ),
     mode: str = typer.Option(
         "balanced",
@@ -444,11 +447,18 @@ def extract(
     By default uses triple-review mode for high reliability and full-text extraction.
     Use --mode fast for single-pass extraction (cheaper, less reliable).
     Use --no-full-text to extract from abstracts only (not recommended).
+
+    Schema is auto-detected from paper titles/abstracts by default:
+    - auto: Detect study type from paper content (default)
+    - rct: Randomized controlled trials
+    - cohort: Cohort/observational studies
+    - case_control: Case-control studies
+    - diagnostic: Diagnostic accuracy studies
     """
     import json
 
     from arakis.agents.extractor import DataExtractionAgent
-    from arakis.extraction.schemas import get_schema, list_schemas
+    from arakis.extraction.schemas import detect_schema, get_schema, list_schemas
     from arakis.models.paper import Author, Paper, PaperSource
 
     # Load papers from screening results
@@ -519,24 +529,34 @@ def extract(
                 f"[dim]Using full text for {papers_with_full_text}/{len(papers)} papers[/dim]"
             )
 
-    # Get extraction schema
-    try:
-        extraction_schema = get_schema(schema)
-    except ValueError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("\n[bold]Available schemas:[/bold]")
-        for name, desc in list_schemas().items():
-            console.print(f"  • {name}: {desc}")
-        raise typer.Exit(1)
+    # Get extraction schema (auto-detect or explicit)
+    if schema == "auto":
+        # Auto-detect schema from paper titles and abstracts
+        detection_text = " ".join(
+            f"{p.title or ''} {p.abstract or ''}" for p in papers[:10]  # Use first 10 papers
+        )
+        detected_schema_name, confidence = detect_schema(detection_text)
+        extraction_schema = get_schema(detected_schema_name)
+        console.print(
+            f"[dim]Schema: {detected_schema_name} (auto-detected from papers, confidence: {confidence:.0%})[/dim]"
+        )
+    else:
+        try:
+            extraction_schema = get_schema(schema)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            console.print("\n[bold]Available schemas:[/bold]")
+            for name, desc in list_schemas().items():
+                console.print(f"  • {name}: {desc}")
+            raise typer.Exit(1)
+        console.print(f"[dim]Schema: {extraction_schema.name}[/dim]")
 
     # Determine mode
     triple_review = mode != "fast"
     mode_desc = "triple-review (high reliability)" if triple_review else "single-pass (fast)"
 
-    console.print(f"[bold]Extracting data from {len(papers)} papers with {mode_desc}...[/bold]")
-    console.print(
-        f"[dim]Schema: {extraction_schema.name} ({len(extraction_schema.fields)} fields)[/dim]\n"
-    )
+    console.print(f"\n[bold]Extracting data from {len(papers)} papers with {mode_desc}...[/bold]")
+    console.print(f"[dim]Fields: {len(extraction_schema.fields)}[/dim]\n")
 
     # Create agent
     agent = DataExtractionAgent()
