@@ -10,6 +10,7 @@ import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from arakis.clients.base import BaseSearchClient, RateLimitError, SearchClientError
+from arakis.config import get_settings
 from arakis.models.paper import Author, Paper, PaperSource, SearchResult
 
 
@@ -17,8 +18,9 @@ class SemanticScholarClient(BaseSearchClient):
     """
     Semantic Scholar search client.
 
-    Free API with 100 requests/5 minutes for unauthenticated users.
-    Provides citation context and influential citations.
+    Free API: 100 requests/5 minutes (1 req/sec)
+    With API key: 100 requests/second
+    Get key at: https://www.semanticscholar.org/product/api#api-key
     """
 
     source = PaperSource.SEMANTIC_SCHOLAR
@@ -34,9 +36,11 @@ class SemanticScholarClient(BaseSearchClient):
 
     def __init__(self):
         self._last_request_time = 0.0
-        # Conservative rate limit: 100 requests per 5 minutes = ~0.33/sec
-        # We'll use 1 per 5 seconds to be very conservative
-        self._min_interval = 5.0
+        self.settings = get_settings()
+        self.api_key = self.settings.semantic_scholar_api_key
+
+        # With API key: 100 req/sec, without: 1 req/sec (we use 0.5 to be safe)
+        self._min_interval = 0.1 if self.api_key else 2.0
         self._lock = None
         self._loop = None
 
@@ -70,8 +74,12 @@ class SemanticScholarClient(BaseSearchClient):
         """Make a request to the Semantic Scholar API."""
         await self._rate_limit()
 
+        headers = {}
+        if self.api_key:
+            headers["x-api-key"] = self.api_key
+
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, params=params)
+            response = await client.get(url, params=params, headers=headers)
 
             if response.status_code == 429:
                 raise RateLimitError("Semantic Scholar rate limit exceeded")

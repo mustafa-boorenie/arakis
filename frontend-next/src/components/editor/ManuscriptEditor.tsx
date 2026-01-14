@@ -175,8 +175,8 @@ export function ManuscriptEditor() {
 
             {/* Figures */}
             {manuscript.figures.length > 0 && (
-              <div className="mt-8 pt-8 border-t">
-                <h2 className="text-xl font-serif font-semibold mb-4">Figures</h2>
+              <div className="mt-10 pt-8 border-t">
+                <h2 className="text-2xl font-sans font-semibold mb-6">Figures</h2>
                 {manuscript.figures.map((figure) => (
                   <FigureRenderer key={figure.id} figure={figure} />
                 ))}
@@ -185,8 +185,8 @@ export function ManuscriptEditor() {
 
             {/* Tables */}
             {manuscript.tables.length > 0 && (
-              <div className="mt-8 pt-8 border-t">
-                <h2 className="text-xl font-serif font-semibold mb-4">Tables</h2>
+              <div className="mt-10 pt-8 border-t">
+                <h2 className="text-2xl font-sans font-semibold mb-6">Tables</h2>
                 {manuscript.tables.map((table) => (
                   <TableRenderer key={table.id} table={table} />
                 ))}
@@ -195,8 +195,8 @@ export function ManuscriptEditor() {
 
             {/* References */}
             {manuscript.references.length > 0 && (
-              <div className="mt-8 pt-8 border-t">
-                <h2 className="text-xl font-serif font-semibold mb-4">References</h2>
+              <div className="mt-10 pt-8 border-t">
+                <h2 className="text-2xl font-sans font-semibold mb-6">References</h2>
                 <ol className="list-decimal list-inside space-y-2 text-sm">
                   {manuscript.references.map((ref, index) => (
                     <li key={ref.id || index} className="text-muted-foreground">

@@ -29,8 +29,13 @@ class OpenAlexClient(BaseSearchClient):
 
     def __init__(self):
         self.settings = get_settings()
-        # OpenAlex requests polite email for identification
-        self._email = self.settings.unpaywall_email or "research@example.com"
+        # OpenAlex requests polite email for "polite pool" - faster responses
+        # Prefer openalex_email, fall back to unpaywall_email
+        self._email = (
+            self.settings.openalex_email
+            or self.settings.unpaywall_email
+            or "research@example.com"
+        )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
     async def _request(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:

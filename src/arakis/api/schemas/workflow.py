@@ -12,8 +12,20 @@ class WorkflowStatus(str, Enum):
 
     PENDING = "pending"
     RUNNING = "running"
+    NEEDS_REVIEW = "needs_review"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class WorkflowStage(str, Enum):
+    """Current workflow stage."""
+
+    SEARCHING = "searching"
+    SCREENING = "screening"
+    ANALYZING = "analyzing"
+    WRITING = "writing"
+    FINALIZING = "finalizing"
+    COMPLETED = "completed"
 
 
 class WorkflowCreate(BaseModel):
@@ -84,6 +96,7 @@ class WorkflowResponse(BaseModel):
     exclusion_criteria: Optional[str] = None
     databases: Optional[list[str]] = None
     status: str
+    current_stage: Optional[str] = None
     papers_found: int = 0
     papers_screened: int = 0
     papers_included: int = 0

@@ -1,6 +1,7 @@
 'use client';
 
 import { Card } from '@/components/ui/card';
+import { API_BASE_URL } from '@/lib/api/client';
 import type { Figure } from '@/types';
 import { ImageOff } from 'lucide-react';
 
@@ -9,15 +10,21 @@ interface FigureRendererProps {
 }
 
 export function FigureRenderer({ figure }: FigureRendererProps) {
+  // Construct full URL for figure - prepend API base URL if path starts with /api
+  const figureUrl = figure.file_path?.startsWith('/api')
+    ? `${API_BASE_URL}${figure.file_path}`
+    : figure.file_path;
+
   return (
     <Card className="my-6 p-4 text-center">
-      <div className="relative aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
-        {figure.file_path ? (
+      <div className="relative bg-muted rounded-lg flex items-center justify-center overflow-hidden p-4">
+        {figureUrl ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
-            src={figure.file_path}
+            src={figureUrl}
             alt={figure.title}
-            className="max-w-full max-h-full object-contain"
+            className="max-w-full h-auto object-contain"
+            style={{ maxHeight: '600px' }}
           />
         ) : (
           <div className="flex flex-col items-center gap-2 text-muted-foreground">

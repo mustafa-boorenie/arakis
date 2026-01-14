@@ -38,7 +38,7 @@ export const DEFAULT_WORKFLOW_FORM: WorkflowFormData = {
   research_question: '',
   inclusion_criteria: '',
   exclusion_criteria: '',
-  databases: ['pubmed', 'openalex'],
+  databases: ['pubmed'],
   max_results_per_query: 500,
   fast_mode: false,
 };

@@ -1,7 +1,15 @@
 // TypeScript types matching backend schemas from:
 // src/arakis/api/schemas/workflow.py
 
-export type WorkflowStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type WorkflowStatus = 'pending' | 'running' | 'needs_review' | 'completed' | 'failed';
+
+export type WorkflowStage =
+  | 'searching'
+  | 'screening'
+  | 'analyzing'
+  | 'writing'
+  | 'finalizing'
+  | 'completed';
 
 export interface WorkflowCreateRequest {
   research_question: string;
@@ -21,6 +29,7 @@ export interface WorkflowResponse {
   exclusion_criteria: string | null;
   databases: string[] | null;
   status: WorkflowStatus;
+  current_stage: WorkflowStage | null;
   papers_found: number;
   papers_screened: number;
   papers_included: number;
@@ -36,7 +45,7 @@ export interface WorkflowListResponse {
 }
 
 export const AVAILABLE_DATABASES = [
-  { id: 'pubmed', label: 'PubMed', description: 'NCBI biomedical literature (recommended)' },
-  { id: 'openalex', label: 'OpenAlex', description: 'Open scholarly metadata' },
-  { id: 'semantic_scholar', label: 'Semantic Scholar', description: 'AI-powered academic search' },
+  { id: 'pubmed', label: 'PubMed', description: 'NCBI biomedical literature (recommended, most reliable)' },
+  { id: 'openalex', label: 'OpenAlex', description: 'Open scholarly metadata (reliable)' },
+  { id: 'semantic_scholar', label: 'Semantic Scholar', description: 'AI-powered search (strict rate limits)' },
 ] as const;

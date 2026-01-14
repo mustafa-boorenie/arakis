@@ -19,6 +19,61 @@ from arakis.database.models import Manuscript, Workflow
 router = APIRouter(prefix="/api/manuscripts", tags=["manuscripts"])
 
 
+@router.get("/{workflow_id}/figures/{figure_id}")
+async def get_figure(
+    workflow_id: str,
+    figure_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Serve a generated figure image (PRISMA diagram, forest plot, etc.).
+
+    Returns the PNG image file for display in the frontend.
+    """
+    import os
+
+    # Get manuscript to find figure path
+    result = await db.execute(select(Manuscript).where(Manuscript.workflow_id == workflow_id))
+    manuscript = result.scalar_one_or_none()
+
+    if manuscript is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Manuscript for workflow {workflow_id} not found",
+        )
+
+    # Find figure in manuscript
+    figures = manuscript.figures or {}
+    if figure_id not in figures:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Figure {figure_id} not found in manuscript",
+        )
+
+    figure_data = figures[figure_id]
+    file_path = figure_data.get("file_path") or figure_data.get("path")
+
+    if not file_path or not os.path.exists(file_path):
+        # Try default location
+        file_path = f"/tmp/arakis/{workflow_id}/{figure_id}.png"
+        if not os.path.exists(file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Figure file not found at {file_path}",
+            )
+
+    # Read and return the image
+    with open(file_path, "rb") as f:
+        image_bytes = f.read()
+
+    return Response(
+        content=image_bytes,
+        media_type="image/png",
+        headers={"Content-Disposition": f"inline; filename={figure_id}.png"},
+    )
+
+
 @router.get("/{workflow_id}/json", response_model=ManuscriptResponse)
 async def export_manuscript_json(
     workflow_id: str,
@@ -79,13 +134,15 @@ async def export_manuscript_json(
     figures = []
     if manuscript.figures:
         for fig_id, fig_data in manuscript.figures.items():
+            # Generate API URL for serving the figure
+            figure_url = f"/api/manuscripts/{workflow_id}/figures/{fig_id}"
             figures.append(
                 Figure(
                     id=fig_id,
                     title=fig_data.get("title", ""),
                     caption=fig_data.get("caption", ""),
-                    file_path=fig_data.get("path"),
-                    figure_type=fig_data.get("type", "unknown"),
+                    file_path=figure_url,  # Use API endpoint instead of filesystem path
+                    figure_type=fig_data.get("figure_type") or fig_data.get("type", "unknown"),
                 )
             )
 

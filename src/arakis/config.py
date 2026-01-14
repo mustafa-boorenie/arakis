@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # Elsevier/Embase (optional - requires institutional subscription)
     elsevier_api_key: str = ""
 
+    # Semantic Scholar (optional - higher rate limits: 100 req/sec vs 1 req/sec)
+    # Get key at: https://www.semanticscholar.org/product/api#api-key
+    semantic_scholar_api_key: str = ""
+
+    # OpenAlex polite pool email (optional - faster responses)
+    # Just use any email to get into the "polite pool" with better rate limits
+    openalex_email: str = ""
+
     # SerpAPI (optional - alternative to scholarly for Google Scholar)
     serpapi_key: str = ""
 

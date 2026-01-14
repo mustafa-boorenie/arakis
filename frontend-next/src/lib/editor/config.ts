@@ -7,22 +7,22 @@ import { TableNode, TableRowNode, TableCellNode } from '@lexical/table';
 import { CodeNode } from '@lexical/code';
 import { LinkNode } from '@lexical/link';
 
-// Academic theme for systematic review manuscripts
+// Modern theme for systematic review manuscripts (using Inter font)
 export const academicTheme = {
   // Root container
-  root: 'editor-root prose prose-slate max-w-none focus:outline-none',
+  root: 'editor-root prose prose-slate max-w-none focus:outline-none font-sans',
 
-  // Headings with academic styling
+  // Headings with modern styling
   heading: {
-    h1: 'text-2xl font-serif font-bold mb-4 mt-6 text-foreground',
-    h2: 'text-xl font-serif font-semibold mb-3 mt-5 text-foreground border-b pb-2',
-    h3: 'text-lg font-serif font-medium mb-2 mt-4 text-foreground',
-    h4: 'text-base font-serif font-medium mb-2 mt-3 text-foreground',
-    h5: 'text-sm font-serif font-medium mb-1 mt-2 text-foreground',
+    h1: 'text-3xl font-sans font-bold mb-6 mt-8 text-foreground tracking-tight',
+    h2: 'text-2xl font-sans font-semibold mb-4 mt-6 text-foreground border-b pb-2',
+    h3: 'text-xl font-sans font-semibold mb-3 mt-5 text-foreground',
+    h4: 'text-lg font-sans font-medium mb-2 mt-4 text-foreground',
+    h5: 'text-base font-sans font-medium mb-2 mt-3 text-foreground',
   },
 
-  // Paragraphs - academic style
-  paragraph: 'font-serif text-base leading-relaxed mb-4 text-foreground',
+  // Paragraphs - clean modern style
+  paragraph: 'font-sans text-base leading-7 mb-4 text-foreground',
 
   // Lists
   list: {
