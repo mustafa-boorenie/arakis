@@ -1,19 +1,18 @@
 """Workflow CRUD and execution endpoints."""
 
-import asyncio
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arakis.api.dependencies import get_db, get_current_user
+from arakis.api.dependencies import get_current_user, get_db
 from arakis.api.schemas.workflow import (
     WorkflowCreate,
-    WorkflowResponse,
     WorkflowList,
+    WorkflowResponse,
 )
 from arakis.database.models import Workflow
 
@@ -165,7 +164,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
     Note: This function runs in a background task, so it needs its own DB session.
     """
     from arakis.database.connection import AsyncSessionLocal
-    from arakis.database.models import Paper, ScreeningDecision, Manuscript
+    from arakis.database.models import Manuscript, Paper, ScreeningDecision
 
     async with AsyncSessionLocal() as db:
         try:
@@ -176,8 +175,8 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             await db.commit()
 
             # Import modules here to avoid import issues
-            from arakis.orchestrator import SearchOrchestrator
             from arakis.agents.screener import ScreeningAgent
+            from arakis.orchestrator import SearchOrchestrator
 
             # Step 1: Search databases
             orchestrator = SearchOrchestrator()
@@ -193,10 +192,8 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 authors_json = None
                 if paper.authors:
                     from dataclasses import asdict, is_dataclass
-                    authors_json = [
-                        asdict(a) if is_dataclass(a) else a
-                        for a in paper.authors
-                    ]
+
+                    authors_json = [asdict(a) if is_dataclass(a) else a for a in paper.authors]
 
                 # Generate unique ID for this paper in this workflow
                 paper_identifier = paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
@@ -241,7 +238,9 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 exclusion=[c.strip() for c in workflow_data.exclusion_criteria.split(",")],
             )
 
-            for paper in search_results.papers[:min(len(search_results.papers), 5)]:  # Limit to 5 for demo
+            for paper in search_results.papers[
+                : min(len(search_results.papers), 5)
+            ]:  # Limit to 5 for demo
                 decision = await screener.screen_paper(
                     paper=paper,
                     criteria=criteria,
@@ -310,7 +309,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 workflow.status = "failed"
                 workflow.completed_at = datetime.utcnow()
                 await db.commit()
-            except:
+            except Exception:
                 pass
             # Log the error but don't re-raise to avoid background task failures
             print(f"Workflow {workflow_id} failed: {str(e)}")

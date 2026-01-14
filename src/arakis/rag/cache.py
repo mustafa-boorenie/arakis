@@ -8,7 +8,7 @@ import json
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Optional, Union
 
 from arakis.models.rag import Embedding, EmbeddingCache, EmbeddingStats
 

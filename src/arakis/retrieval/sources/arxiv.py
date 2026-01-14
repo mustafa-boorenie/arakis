@@ -27,7 +27,7 @@ class ArxivSource(BaseRetrievalSource):
                 success=False,
                 paper_id=paper.id,
                 source_name=self.name,
-                error="No arXiv ID available"
+                error="No arXiv ID available",
             )
 
         arxiv_id = paper.arxiv_id
@@ -36,7 +36,6 @@ class ArxivSource(BaseRetrievalSource):
             arxiv_id = arxiv_id[6:]
 
         pdf_url = f"{self.BASE_URL}/pdf/{arxiv_id}.pdf"
-        abs_url = f"{self.BASE_URL}/abs/{arxiv_id}"
 
         try:
             async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
@@ -63,15 +62,12 @@ class ArxivSource(BaseRetrievalSource):
 
         except httpx.HTTPError as e:
             return RetrievalResult(
-                success=False,
-                paper_id=paper.id,
-                source_name=self.name,
-                error=f"HTTP error: {e}"
+                success=False, paper_id=paper.id, source_name=self.name, error=f"HTTP error: {e}"
             )
 
         return RetrievalResult(
             success=False,
             paper_id=paper.id,
             source_name=self.name,
-            error="Paper not found on arXiv"
+            error="Paper not found on arXiv",
         )

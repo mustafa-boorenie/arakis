@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Semantic Scholar search client - free API with generous limits."""
 
 import hashlib
@@ -42,6 +43,7 @@ class SemanticScholarClient(BaseSearchClient):
     def _get_lock(self):
         """Get or create lock for current event loop."""
         import asyncio
+
         try:
             current_loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -136,9 +138,7 @@ class SemanticScholarClient(BaseSearchClient):
     def normalize_paper(self, raw_data: dict[str, Any]) -> Paper:
         """Convert Semantic Scholar paper to normalized Paper."""
         s2_id = raw_data.get("paperId", "")
-        paper_id = f"s2_{s2_id}" if s2_id else hashlib.md5(
-            str(raw_data).encode()
-        ).hexdigest()[:12]
+        paper_id = f"s2_{s2_id}" if s2_id else hashlib.md5(str(raw_data).encode()).hexdigest()[:12]
 
         # External IDs
         external_ids = raw_data.get("externalIds", {}) or {}
@@ -209,4 +209,3 @@ NOTE: Semantic Scholar excels at:
 - Identifying influential citations
 - Covering computer science and biomedicine
 """
-

@@ -35,7 +35,9 @@ class DiscussionWriterAgent:
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-    @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True)
+    @retry_with_exponential_backoff(
+        max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
+    )
     async def _call_openai(
         self,
         messages: list[dict[str, str]],
@@ -219,18 +221,22 @@ Write only the summary text, no headings."""
             query = f"systematic review meta-analysis {outcome_name}"
             results = await retriever.retrieve_simple(query, top_k=8, diversity=True)
             for result in results[:5]:
-                comparison_papers.append({
-                    "id": result.chunk.paper_id,
-                    "text": result.chunk.text,
-                    "score": round(result.score, 3),
-                })
+                comparison_papers.append(
+                    {
+                        "id": result.chunk.paper_id,
+                        "text": result.chunk.text,
+                        "score": round(result.score, 3),
+                    }
+                )
         elif literature_context:
             comparison_papers = [
                 {
                     "id": p.best_identifier,
                     "title": p.title,
                     "year": p.year,
-                    "abstract": p.abstract[:200] + "..." if p.abstract and len(p.abstract) > 200 else p.abstract,
+                    "abstract": p.abstract[:200] + "..."
+                    if p.abstract and len(p.abstract) > 200
+                    else p.abstract,
                 }
                 for p in literature_context[:5]
             ]

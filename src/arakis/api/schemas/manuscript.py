@@ -1,7 +1,7 @@
 """Pydantic schemas for manuscript endpoints."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,7 @@ class WorkflowMetadata(BaseModel):
     papers_found: int
     papers_included: int
     total_cost: float
-    databases_searched: List[str]
+    databases_searched: list[str]
 
 
 class ManuscriptSection(BaseModel):
@@ -49,22 +49,22 @@ class Table(BaseModel):
 
     id: str
     title: str
-    headers: List[str]
-    rows: List[List[Any]]
-    footnotes: Optional[List[str]] = None
+    headers: list[str]
+    rows: list[list[Any]]
+    footnotes: Optional[list[str]] = None
 
 
 class ManuscriptResponse(BaseModel):
     """Complete manuscript data for frontend display."""
 
     metadata: WorkflowMetadata
-    manuscript: Dict[str, str] = Field(
+    manuscript: dict[str, str] = Field(
         description="Manuscript sections (title, abstract, introduction, etc.)"
     )
-    figures: List[Figure] = Field(default_factory=list)
-    tables: List[Table] = Field(default_factory=list)
-    references: List[Dict[str, Any]] = Field(default_factory=list)
-    statistics: Optional[Dict[str, Any]] = Field(
+    figures: list[Figure] = Field(default_factory=list)
+    tables: list[Table] = Field(default_factory=list)
+    references: list[dict[str, Any]] = Field(default_factory=list)
+    statistics: Optional[dict[str, Any]] = Field(
         default=None, description="Summary statistics from the review"
     )
 
@@ -102,9 +102,7 @@ class ManuscriptResponse(BaseModel):
                         "id": "table1",
                         "title": "Characteristics of Included Studies",
                         "headers": ["Study", "Year", "N", "Intervention", "Outcome"],
-                        "rows": [
-                            ["Smith et al.", "2020", "100", "Aspirin 81mg", "30% mortality"]
-                        ],
+                        "rows": [["Smith et al.", "2020", "100", "Aspirin 81mg", "30% mortality"]],
                     }
                 ],
                 "references": [

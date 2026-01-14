@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Google Scholar client using the scholarly library with rate limiting."""
 
 import asyncio
@@ -110,9 +111,7 @@ class GoogleScholarClient(BaseSearchClient):
                 )
 
             if self._consecutive_errors >= 3:
-                raise SearchClientError(
-                    f"Google Scholar search failed repeatedly: {e}"
-                )
+                raise SearchClientError(f"Google Scholar search failed repeatedly: {e}")
 
             raise SearchClientError(f"Google Scholar search failed: {e}")
 
@@ -220,4 +219,3 @@ TIPS:
 
 NOTE: Rate limits are aggressive. Use for supplementary searches.
 """
-

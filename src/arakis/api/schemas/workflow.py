@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +36,7 @@ class WorkflowCreate(BaseModel):
         description="Comma-separated exclusion criteria",
         examples=["Pediatric patients,Animal studies,In vitro studies"],
     )
-    databases: List[str] = Field(
+    databases: list[str] = Field(
         default=["pubmed", "openalex"],
         description="List of databases to search",
         examples=[["pubmed", "openalex", "semantic_scholar"]],
@@ -82,7 +82,7 @@ class WorkflowResponse(BaseModel):
     research_question: str
     inclusion_criteria: Optional[str] = None
     exclusion_criteria: Optional[str] = None
-    databases: Optional[List[str]] = None
+    databases: Optional[list[str]] = None
     status: str
     papers_found: int = 0
     papers_screened: int = 0
@@ -115,7 +115,7 @@ class WorkflowResponse(BaseModel):
 class WorkflowList(BaseModel):
     """Schema for list of workflows."""
 
-    workflows: List[WorkflowResponse]
+    workflows: list[WorkflowResponse]
     total: int
 
     class Config:

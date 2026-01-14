@@ -11,7 +11,6 @@ from openai import AsyncOpenAI
 from arakis.config import get_settings
 from arakis.models.analysis import (
     AnalysisRecommendation,
-    EffectMeasure,
     StatisticalTest,
     TestType,
 )
@@ -22,9 +21,7 @@ from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 class AnalysisRecommenderAgent:
     """LLM agent that recommends appropriate statistical tests."""
 
-    def __init__(
-        self, model: str = "gpt-4o", temperature: float = 0.3, max_tokens: int = 4000
-    ):
+    def __init__(self, model: str = "gpt-4o", temperature: float = 0.3, max_tokens: int = 4000):
         """Initialize the analysis recommender agent.
 
         Args:
@@ -39,7 +36,9 @@ class AnalysisRecommenderAgent:
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-    @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True)
+    @retry_with_exponential_backoff(
+        max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
+    )
     async def _call_openai(
         self,
         messages: list[dict[str, str]],
@@ -140,7 +139,12 @@ Be conservative and prioritize robustness over statistical power."""
                                     },
                                     "test_type": {
                                         "type": "string",
-                                        "enum": ["parametric", "non_parametric", "meta_analysis", "descriptive"],
+                                        "enum": [
+                                            "parametric",
+                                            "non_parametric",
+                                            "meta_analysis",
+                                            "descriptive",
+                                        ],
                                         "description": "Type of statistical test",
                                     },
                                     "effect_measure": {
@@ -241,7 +245,7 @@ Be conservative and prioritize robustness over statistical power."""
 **Extraction Summary:**
 {json.dumps(data_summary, indent=2)}
 
-**Outcome of interest:** {outcome_of_interest or 'All available outcomes'}
+**Outcome of interest:** {outcome_of_interest or "All available outcomes"}
 
 Please recommend:
 1. Primary statistical test(s) for analyzing the main outcome
@@ -295,15 +299,12 @@ Consider the data type, study designs, sample sizes, and number of studies avail
                 outcomes.append(p.data["primary_outcome"])
 
         # Check for available statistics
-        has_means = any(
-            "intervention_mean" in p.data or "control_mean" in p.data for p in papers
-        )
+        has_means = any("intervention_mean" in p.data or "control_mean" in p.data for p in papers)
         has_events = any(
             "intervention_events" in p.data or "control_events" in p.data for p in papers
         )
         has_effect_sizes = any(
-            "primary_outcome_result" in p.data and p.data["primary_outcome_result"]
-            for p in papers
+            "primary_outcome_result" in p.data and p.data["primary_outcome_result"] for p in papers
         )
 
         return {

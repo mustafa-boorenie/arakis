@@ -4,20 +4,15 @@ Creates publication-ready plots for systematic reviews and meta-analyses.
 Uses matplotlib/seaborn (NO LLM COST).
 """
 
-import math
 from pathlib import Path
-from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from matplotlib.patches import Rectangle
 
 from arakis.models.analysis import (
-    AnalysisResult,
     EffectMeasure,
     MetaAnalysisResult,
-    StudyData,
 )
 
 # Set publication-quality defaults
@@ -147,7 +142,7 @@ class VisualizationGenerator:
             )
 
         # Plot pooled effect (diamond)
-        diamond_width = (ci_upper - ci_lower) / 2
+        (ci_upper - ci_lower) / 2
         diamond_height = 0.3
 
         diamond = [
@@ -264,7 +259,9 @@ class VisualizationGenerator:
         ax.scatter(effects, precisions, s=50, alpha=0.6, color="steelblue", edgecolors="black")
 
         # Add pooled effect line
-        ax.axvline(pooled_effect, color="black", linestyle="--", linewidth=1.5, label="Pooled Effect")
+        ax.axvline(
+            pooled_effect, color="black", linestyle="--", linewidth=1.5, label="Pooled Effect"
+        )
 
         # Add funnel (pseudo confidence limits)
         max_precision = max(precisions)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """PubMed search client using NCBI E-utilities."""
 
 import asyncio
@@ -105,7 +106,7 @@ class PubMedClient(BaseSearchClient):
         all_articles = []
 
         for i in range(0, len(pmids), batch_size):
-            batch = pmids[i:i + batch_size]
+            batch = pmids[i : i + batch_size]
             params = {
                 "id": ",".join(batch),
                 "rettype": "abstract",
@@ -228,9 +229,9 @@ class PubMedClient(BaseSearchClient):
     def normalize_paper(self, raw_data: dict[str, Any]) -> Paper:
         """Convert raw PubMed data to normalized Paper."""
         pmid = raw_data.get("pmid", "")
-        paper_id = f"pubmed_{pmid}" if pmid else hashlib.md5(
-            str(raw_data).encode()
-        ).hexdigest()[:12]
+        paper_id = (
+            f"pubmed_{pmid}" if pmid else hashlib.md5(str(raw_data).encode()).hexdigest()[:12]
+        )
 
         authors = [
             Author(name=a.get("name", ""), affiliation=a.get("affiliation"))
@@ -314,4 +315,3 @@ TIPS:
 - Explode MeSH terms automatically included (use [mh:noexp] to disable)
 - Use * for truncation: therap* matches therapy, therapeutic, etc.
 """
-

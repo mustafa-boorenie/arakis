@@ -1,17 +1,16 @@
 """Database models for Arakis systematic review platform."""
 
 from datetime import datetime
-from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
 )
@@ -105,9 +104,7 @@ class Paper(Base):
 
     # Relationships
     workflow = relationship("Workflow", back_populates="papers")
-    screening_decision = relationship(
-        "ScreeningDecision", back_populates="paper", uselist=False
-    )
+    screening_decision = relationship("ScreeningDecision", back_populates="paper", uselist=False)
     extraction = relationship("Extraction", back_populates="paper", uselist=False)
 
 

@@ -13,22 +13,20 @@ Run with: python -m arakis.examples.aspirin_sepsis_demo
 """
 
 import asyncio
-import json
-from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 console = Console()
 
 
 async def main():
     """Run the systematic review demo."""
-    from arakis.orchestrator import SearchOrchestrator
     from arakis.agents.screener import ScreeningAgent
     from arakis.models.screening import ScreeningCriteria
+    from arakis.orchestrator import SearchOrchestrator
     from arakis.retrieval.fetcher import PaperFetcher
 
     # Configuration
@@ -56,12 +54,14 @@ async def main():
         study_types=["RCT", "cohort", "observational"],
     )
 
-    console.print(Panel.fit(
-        f"[bold blue]Research Question:[/bold blue]\n{RESEARCH_QUESTION}\n\n"
-        f"[bold]Databases:[/bold] {', '.join(DATABASES)}\n"
-        f"[bold]Max results per query:[/bold] {MAX_RESULTS_PER_QUERY}",
-        title="🔬 Arakis Systematic Review Demo"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold blue]Research Question:[/bold blue]\n{RESEARCH_QUESTION}\n\n"
+            f"[bold]Databases:[/bold] {', '.join(DATABASES)}\n"
+            f"[bold]Max results per query:[/bold] {MAX_RESULTS_PER_QUERY}",
+            title="🔬 Arakis Systematic Review Demo",
+        )
+    )
 
     # Step 1: Comprehensive Search
     console.print("\n[bold cyan]Step 1: Generating Queries & Searching[/bold cyan]")
@@ -86,7 +86,7 @@ async def main():
         )
 
     # Display search results
-    console.print(f"\n✅ [green]Search complete![/green]")
+    console.print("\n✅ [green]Search complete![/green]")
 
     flow_table = Table(title="PRISMA Flow - Identification")
     flow_table.add_column("Source", style="cyan")
@@ -106,7 +106,9 @@ async def main():
         console.print("\n[dim]Sample papers found:[/dim]")
         for i, paper in enumerate(search_result.papers[:5], 1):
             console.print(f"  {i}. {paper.title[:70]}{'...' if len(paper.title) > 70 else ''}")
-            console.print(f"     [dim]Year: {paper.year or 'N/A'} | Source: {paper.source.value}[/dim]")
+            console.print(
+                f"     [dim]Year: {paper.year or 'N/A'} | Source: {paper.source.value}[/dim]"
+            )
 
     # Step 2: Screening
     console.print("\n[bold cyan]Step 2: Screening Papers[/bold cyan]")
@@ -121,7 +123,9 @@ async def main():
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task(f"Screening 0/{len(papers_to_screen)}...", total=len(papers_to_screen))
+        task = progress.add_task(
+            f"Screening 0/{len(papers_to_screen)}...", total=len(papers_to_screen)
+        )
 
         def screen_update(current, total):
             progress.update(task, description=f"Screening {current}/{total}...")
@@ -135,7 +139,7 @@ async def main():
         )
 
     # Display screening results
-    console.print(f"\n✅ [green]Screening complete![/green]")
+    console.print("\n✅ [green]Screening complete![/green]")
 
     summary = screener.summarize_screening(decisions)
 
@@ -155,20 +159,19 @@ async def main():
     for decision in decisions[:5]:
         paper = next((p for p in papers_to_screen if p.id == decision.paper_id), None)
         if paper:
-            status_color = {
-                "include": "green",
-                "exclude": "red",
-                "maybe": "yellow"
-            }.get(decision.status.value, "white")
-            console.print(f"  [{status_color}]{decision.status.value.upper()}[/{status_color}] {paper.title[:50]}...")
+            status_color = {"include": "green", "exclude": "red", "maybe": "yellow"}.get(
+                decision.status.value, "white"
+            )
+            console.print(
+                f"  [{status_color}]{decision.status.value.upper()}[/{status_color}] {paper.title[:50]}..."
+            )
             console.print(f"     [dim]{decision.reason[:80]}...[/dim]")
 
     # Step 3: Fetch full texts
     console.print("\n[bold cyan]Step 3: Fetching Full Texts[/bold cyan]")
 
     included_papers = [
-        p for p, d in zip(papers_to_screen, decisions)
-        if d.status.value == "include"
+        p for p, d in zip(papers_to_screen, decisions) if d.status.value == "include"
     ]
 
     if included_papers:
@@ -193,7 +196,7 @@ async def main():
 
         fetch_summary = fetcher.summarize_batch(fetch_results)
 
-        console.print(f"\n✅ [green]Fetch complete![/green]")
+        console.print("\n✅ [green]Fetch complete![/green]")
 
         fetch_table = Table(title="Fetch Results")
         fetch_table.add_column("Metric", style="cyan")
@@ -216,16 +219,18 @@ async def main():
 
     # Final summary
     console.print("\n" + "=" * 60)
-    console.print(Panel.fit(
-        f"[bold]Summary:[/bold]\n"
-        f"• Searched {len(DATABASES)} databases\n"
-        f"• Found {search_result.prisma_flow.total_identified} records\n"
-        f"• After deduplication: {len(search_result.papers)} unique papers\n"
-        f"• Screened: {len(papers_to_screen)} papers\n"
-        f"• Included: {summary['included']} papers\n"
-        f"• Retrieved: {fetch_summary.get('successful', 0) if included_papers else 0} full texts",
-        title="🎉 Demo Complete"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold]Summary:[/bold]\n"
+            f"• Searched {len(DATABASES)} databases\n"
+            f"• Found {search_result.prisma_flow.total_identified} records\n"
+            f"• After deduplication: {len(search_result.papers)} unique papers\n"
+            f"• Screened: {len(papers_to_screen)} papers\n"
+            f"• Included: {summary['included']} papers\n"
+            f"• Retrieved: {fetch_summary.get('successful', 0) if included_papers else 0} full texts",
+            title="🎉 Demo Complete",
+        )
+    )
 
 
 if __name__ == "__main__":

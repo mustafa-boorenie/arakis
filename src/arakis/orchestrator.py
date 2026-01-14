@@ -1,19 +1,19 @@
 from __future__ import annotations
+
 """Search orchestrator - coordinates multi-database searches."""
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
 from arakis.agents.query_generator import QueryGeneratorAgent
-from arakis.clients.base import BaseSearchClient, SearchClientError, RateLimitError
+from arakis.clients.base import BaseSearchClient, RateLimitError, SearchClientError
 from arakis.clients.google_scholar import GoogleScholarClient
 from arakis.clients.openalex import OpenAlexClient
 from arakis.clients.pubmed import PubMedClient
 from arakis.clients.semantic_scholar import SemanticScholarClient
-from arakis.deduplication import Deduplicator, DeduplicationResult
-from arakis.models.paper import Paper, PaperSource, PRISMAFlow, SearchResult
+from arakis.deduplication import DeduplicationResult, Deduplicator
+from arakis.models.paper import Paper, PRISMAFlow, SearchResult
 
 
 @dataclass
@@ -114,7 +114,9 @@ class SearchOrchestrator:
         databases = [db for db in databases if db in self._clients]
 
         if progress_callback:
-            progress_callback("generating_queries", f"Generating queries for {len(databases)} databases")
+            progress_callback(
+                "generating_queries", f"Generating queries for {len(databases)} databases"
+            )
 
         # Step 1: Generate optimized queries
         queries = await self.query_agent.generate_queries(
@@ -155,13 +157,16 @@ class SearchOrchestrator:
                     if progress_callback:
                         progress_callback(
                             "search_complete",
-                            f"{db_name}: {result.count} papers ({result.total_available} available)"
+                            f"{db_name}: {result.count} papers ({result.total_available} available)",
                         )
                 except (RateLimitError, SearchClientError) as e:
                     # For rate limit errors, warn but continue with partial results
                     if "rate limit" in str(e).lower() or isinstance(e, RateLimitError):
                         if progress_callback:
-                            progress_callback("search_warning", f"{db_name}: Rate limit reached, skipping remaining queries")
+                            progress_callback(
+                                "search_warning",
+                                f"{db_name}: Rate limit reached, skipping remaining queries",
+                            )
                         break  # Skip remaining queries for this database
                     else:
                         if progress_callback:
@@ -171,7 +176,10 @@ class SearchOrchestrator:
                     # Catch tenacity.RetryError and other unexpected errors
                     if "rate limit" in str(e).lower() or "retryerror" in type(e).__name__.lower():
                         if progress_callback:
-                            progress_callback("search_warning", f"{db_name}: Rate limit reached, skipping remaining queries")
+                            progress_callback(
+                                "search_warning",
+                                f"{db_name}: Rate limit reached, skipping remaining queries",
+                            )
                         break
                     else:
                         if progress_callback:
@@ -219,7 +227,7 @@ class SearchOrchestrator:
         if progress_callback:
             progress_callback(
                 "complete",
-                f"Found {len(result.papers)} unique papers from {result.prisma_flow.total_identified} total"
+                f"Found {len(result.papers)} unique papers from {result.prisma_flow.total_identified} total",
             )
 
         return result
@@ -248,10 +256,7 @@ class SearchOrchestrator:
                     # Try to refine
                     try:
                         refined_query = await self.query_agent.refine_query(
-                            db_name,
-                            query_info["query"],
-                            count,
-                            target_range
+                            db_name, query_info["query"], count, target_range
                         )
                         refined[db_name].append(refined_query)
                     except Exception:

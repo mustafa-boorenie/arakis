@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Base class for paper retrieval sources."""
 
 from abc import ABC, abstractmethod

@@ -5,12 +5,12 @@ import time
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
-from openai import RateLimitError, APIError
+from openai import APIError, RateLimitError
 from rich.console import Console
 
 console = Console()
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class RateLimiter:
@@ -59,6 +59,7 @@ def get_openai_rate_limiter() -> RateLimiter:
     global _openai_rate_limiter
     if _openai_rate_limiter is None:
         from arakis.config import get_settings
+
         settings = get_settings()
         _openai_rate_limiter = RateLimiter(calls_per_minute=settings.openai_requests_per_minute)
     return _openai_rate_limiter
@@ -88,6 +89,7 @@ def retry_with_exponential_backoff(
     Returns:
         Decorated function that retries on errors
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
@@ -105,16 +107,21 @@ def retry_with_exponential_backoff(
                 except RateLimitError as e:
                     last_exception = e
                     if attempt == max_retries:
-                        console.print(f"[red]Rate limit exceeded after {max_retries} retries. Please wait a few minutes.[/red]")
+                        console.print(
+                            f"[red]Rate limit exceeded after {max_retries} retries. Please wait a few minutes.[/red]"
+                        )
                         raise
 
                     # Add jitter to prevent synchronized retries
                     actual_delay = delay
                     if jitter:
                         import random
+
                         actual_delay = delay * (0.5 + random.random())
 
-                    console.print(f"[yellow]Rate limit hit. Retrying in {actual_delay:.1f}s (attempt {attempt + 1}/{max_retries})...[/yellow]")
+                    console.print(
+                        f"[yellow]Rate limit hit. Retrying in {actual_delay:.1f}s (attempt {attempt + 1}/{max_retries})...[/yellow]"
+                    )
                     await asyncio.sleep(actual_delay)
 
                     # Exponential backoff
@@ -123,7 +130,7 @@ def retry_with_exponential_backoff(
                 except APIError as e:
                     last_exception = e
                     # For server errors (5xx), retry
-                    if hasattr(e, 'status_code') and 500 <= e.status_code < 600:
+                    if hasattr(e, "status_code") and 500 <= e.status_code < 600:
                         if attempt == max_retries:
                             console.print(f"[red]API error after {max_retries} retries: {e}[/red]")
                             raise
@@ -131,16 +138,19 @@ def retry_with_exponential_backoff(
                         actual_delay = delay
                         if jitter:
                             import random
+
                             actual_delay = delay * (0.5 + random.random())
 
-                        console.print(f"[yellow]API error. Retrying in {actual_delay:.1f}s (attempt {attempt + 1}/{max_retries})...[/yellow]")
+                        console.print(
+                            f"[yellow]API error. Retrying in {actual_delay:.1f}s (attempt {attempt + 1}/{max_retries})...[/yellow]"
+                        )
                         await asyncio.sleep(actual_delay)
                         delay = min(delay * exponential_base, max_delay)
                     else:
                         # For client errors (4xx), don't retry
                         raise
 
-                except Exception as e:
+                except Exception:
                     # For other exceptions, don't retry
                     raise
 
@@ -149,4 +159,5 @@ def retry_with_exponential_backoff(
                 raise last_exception
 
         return wrapper
+
     return decorator

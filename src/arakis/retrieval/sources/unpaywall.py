@@ -29,10 +29,7 @@ class UnpaywallSource(BaseRetrievalSource):
         """Query Unpaywall for an open access version."""
         if not paper.doi:
             return RetrievalResult(
-                success=False,
-                paper_id=paper.id,
-                source_name=self.name,
-                error="No DOI available"
+                success=False, paper_id=paper.id, source_name=self.name, error="No DOI available"
             )
 
         if not self.email:
@@ -40,7 +37,7 @@ class UnpaywallSource(BaseRetrievalSource):
                 success=False,
                 paper_id=paper.id,
                 source_name=self.name,
-                error="Unpaywall email not configured"
+                error="Unpaywall email not configured",
             )
 
         # Query Unpaywall
@@ -56,7 +53,7 @@ class UnpaywallSource(BaseRetrievalSource):
                         success=False,
                         paper_id=paper.id,
                         source_name=self.name,
-                        error="DOI not found in Unpaywall"
+                        error="DOI not found in Unpaywall",
                     )
 
                 response.raise_for_status()
@@ -64,10 +61,7 @@ class UnpaywallSource(BaseRetrievalSource):
 
         except httpx.HTTPError as e:
             return RetrievalResult(
-                success=False,
-                paper_id=paper.id,
-                source_name=self.name,
-                error=f"HTTP error: {e}"
+                success=False, paper_id=paper.id, source_name=self.name, error=f"HTTP error: {e}"
             )
 
         # Check if open access
@@ -76,7 +70,7 @@ class UnpaywallSource(BaseRetrievalSource):
                 success=False,
                 paper_id=paper.id,
                 source_name=self.name,
-                error="Paper is not open access"
+                error="Paper is not open access",
             )
 
         # Find best OA location
@@ -91,7 +85,7 @@ class UnpaywallSource(BaseRetrievalSource):
                 success=False,
                 paper_id=paper.id,
                 source_name=self.name,
-                error="No accessible URL found"
+                error="No accessible URL found",
             )
 
         content_url = pdf_url or landing_url

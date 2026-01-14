@@ -11,16 +11,13 @@ from openai import AsyncOpenAI
 from arakis.config import get_settings
 from arakis.models.extraction import (
     ExtractedData,
-    ExtractionField,
     ExtractionMethod,
     ExtractionResult,
     ExtractionSchema,
-    FieldType,
     ReviewerDecision,
 )
 from arakis.models.paper import Paper
 from arakis.utils import retry_with_exponential_backoff
-
 
 # Tool function definitions for LLM
 EXTRACTION_TOOLS = [
@@ -40,7 +37,7 @@ EXTRACTION_TOOLS = [
                             "properties": {
                                 "field_name": {
                                     "type": "string",
-                                    "description": "Name of the field being extracted"
+                                    "description": "Name of the field being extracted",
                                 },
                                 "value": {
                                     "description": "Extracted value (type depends on field type)"
@@ -49,20 +46,20 @@ EXTRACTION_TOOLS = [
                                     "type": "number",
                                     "minimum": 0,
                                     "maximum": 1,
-                                    "description": "Confidence in this extraction (0-1)"
+                                    "description": "Confidence in this extraction (0-1)",
                                 },
                                 "reasoning": {
                                     "type": "string",
-                                    "description": "Brief explanation of where/why this value was extracted"
-                                }
+                                    "description": "Brief explanation of where/why this value was extracted",
+                                },
                             },
-                            "required": ["field_name", "value", "confidence"]
-                        }
+                            "required": ["field_name", "value", "confidence"],
+                        },
                     }
                 },
-                "required": ["extractions"]
-            }
-        }
+                "required": ["extractions"],
+            },
+        },
     }
 ]
 
@@ -284,7 +281,7 @@ Use the extract_data function."""
         response = await self._call_openai(
             messages=[
                 {"role": "system", "content": self._get_system_prompt(schema)},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             tools=EXTRACTION_TOOLS,
             tool_choice={"type": "function", "function": {"name": "extract_data"}},
@@ -302,23 +299,23 @@ Use the extract_data function."""
                 extractions = args.get("extractions", [])
 
                 for extraction in extractions:
-                    decisions.append(ReviewerDecision(
-                        field_name=extraction["field_name"],
-                        value=extraction["value"],
-                        confidence=extraction.get("confidence", 0.5),
-                        reasoning=extraction.get("reasoning", ""),
-                        reviewer_id=reviewer_id
-                    ))
-            except (json.JSONDecodeError, KeyError) as e:
+                    decisions.append(
+                        ReviewerDecision(
+                            field_name=extraction["field_name"],
+                            value=extraction["value"],
+                            confidence=extraction.get("confidence", 0.5),
+                            reasoning=extraction.get("reasoning", ""),
+                            reviewer_id=reviewer_id,
+                        )
+                    )
+            except (json.JSONDecodeError, KeyError):
                 # If parsing fails, return empty decisions
                 pass
 
         return decisions
 
     def _resolve_conflicts(
-        self,
-        all_decisions: list[list[ReviewerDecision]],
-        schema: ExtractionSchema
+        self, all_decisions: list[list[ReviewerDecision]], schema: ExtractionSchema
     ) -> tuple[dict[str, Any], dict[str, float], list[str]]:
         """
         Resolve conflicts between multiple reviewers using majority voting.
@@ -375,17 +372,28 @@ Use the extract_data function."""
 
                     # Confidence based on agreement
                     agreement_rate = max_count / len(field_decisions)
-                    avg_confidence = sum(d.confidence for d in field_decisions if str(d.value) == majority_value_str) / max_count
+                    avg_confidence = (
+                        sum(
+                            d.confidence
+                            for d in field_decisions
+                            if str(d.value) == majority_value_str
+                        )
+                        / max_count
+                    )
                     confidence_scores[field.name] = agreement_rate * avg_confidence
 
                     # Flag conflict if not unanimous
                     if max_count < len(field_decisions):
-                        conflicts.append(f"{field.name}: {max_count}/{len(field_decisions)} agreement")
+                        conflicts.append(
+                            f"{field.name}: {max_count}/{len(field_decisions)} agreement"
+                        )
                 else:
                     # Tie - pick highest confidence
                     best_decision = max(field_decisions, key=lambda d: d.confidence)
                     final_data[field.name] = best_decision.value
-                    confidence_scores[field.name] = best_decision.confidence * 0.5  # Reduce confidence for ties
+                    confidence_scores[field.name] = (
+                        best_decision.confidence * 0.5
+                    )  # Reduce confidence for ties
                     conflicts.append(f"{field.name}: Tie between reviewers")
             else:
                 # Single decision
@@ -400,7 +408,7 @@ Use the extract_data function."""
         paper: Paper,
         schema: ExtractionSchema,
         triple_review: bool = True,
-        use_full_text: bool = False
+        use_full_text: bool = False,
     ) -> ExtractedData:
         """
         Extract data from a single paper.
@@ -437,7 +445,11 @@ Use the extract_data function."""
 
         for temp, reviewer_id in zip(temperatures, reviewer_ids):
             decisions = await self._single_extraction_pass(
-                paper, schema, temperature=temp, reviewer_id=reviewer_id, use_full_text=use_full_text
+                paper,
+                schema,
+                temperature=temp,
+                reviewer_id=reviewer_id,
+                use_full_text=use_full_text,
             )
             all_decisions.append(decisions)
             all_reviewer_decisions.extend(decisions)
@@ -448,8 +460,7 @@ Use the extract_data function."""
         # Calculate quality metrics
         extraction_quality = 1.0
         low_confidence_fields = [
-            field_name for field_name, conf in confidence_scores.items()
-            if conf < 0.7
+            field_name for field_name, conf in confidence_scores.items() if conf < 0.7
         ]
 
         # Reduce quality score for conflicts and low confidence
@@ -461,9 +472,7 @@ Use the extract_data function."""
 
         # Determine if needs review
         needs_review = (
-            len(conflicts) > 0 or
-            len(low_confidence_fields) > 0 or
-            extraction_quality < 0.8
+            len(conflicts) > 0 or len(low_confidence_fields) > 0 or extraction_quality < 0.8
         )
 
         # Create result
@@ -495,7 +504,7 @@ Use the extract_data function."""
         schema: ExtractionSchema,
         triple_review: bool = True,
         use_full_text: bool = False,
-        progress_callback: callable = None
+        progress_callback: callable = None,
     ) -> ExtractionResult:
         """
         Extract data from multiple papers in batch.
@@ -516,9 +525,7 @@ Use the extract_data function."""
         total_tokens_output = 0
 
         for i, paper in enumerate(papers, 1):
-            extraction = await self.extract_paper(
-                paper, schema, triple_review, use_full_text
-            )
+            extraction = await self.extract_paper(paper, schema, triple_review, use_full_text)
             extractions.append(extraction)
 
             if progress_callback:
@@ -537,12 +544,16 @@ Use the extract_data function."""
             total_tokens_output = len(papers) * 1000
 
         # GPT-4o pricing: $2.50/1M input, $10/1M output
-        estimated_cost = (total_tokens_input * 2.50 / 1_000_000) + (total_tokens_output * 10 / 1_000_000)
+        estimated_cost = (total_tokens_input * 2.50 / 1_000_000) + (
+            total_tokens_output * 10 / 1_000_000
+        )
 
         result = ExtractionResult(
             schema=schema,
             extractions=extractions,
-            extraction_method=ExtractionMethod.TRIPLE_REVIEW if triple_review else ExtractionMethod.SINGLE_PASS,
+            extraction_method=ExtractionMethod.TRIPLE_REVIEW
+            if triple_review
+            else ExtractionMethod.SINGLE_PASS,
             total_time_ms=total_time_ms,
             total_tokens_input=total_tokens_input,
             total_tokens_output=total_tokens_output,

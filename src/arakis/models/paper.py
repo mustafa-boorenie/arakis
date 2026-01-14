@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Data models for papers and authors."""
 
 from dataclasses import dataclass, field

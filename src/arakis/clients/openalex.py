@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """OpenAlex search client - free, no API key required."""
 
 import hashlib
@@ -142,9 +143,11 @@ class OpenAlexClient(BaseSearchClient):
         if openalex_id.startswith("https://openalex.org/"):
             openalex_id = openalex_id.replace("https://openalex.org/", "")
 
-        paper_id = f"openalex_{openalex_id}" if openalex_id else hashlib.md5(
-            str(raw_data).encode()
-        ).hexdigest()[:12]
+        paper_id = (
+            f"openalex_{openalex_id}"
+            if openalex_id
+            else hashlib.md5(str(raw_data).encode()).hexdigest()[:12]
+        )
 
         # DOI
         doi = raw_data.get("doi")
@@ -237,4 +240,3 @@ EXAMPLES:
 2. Filter: publication_year:2020-2024,type:journal-article
 3. Combined: Search "sepsis" then filter by year in results
 """
-

@@ -18,10 +18,7 @@ class FieldValidator:
     """Validates extracted field values against schema constraints."""
 
     def validate_field(
-        self,
-        field: ExtractionField,
-        value: Any,
-        raise_on_error: bool = False
+        self, field: ExtractionField, value: Any, raise_on_error: bool = False
     ) -> tuple[bool, list[str]]:
         """
         Validate a single field value against its schema definition.
@@ -62,7 +59,9 @@ class FieldValidator:
         is_valid = len(errors) == 0
 
         if not is_valid and raise_on_error:
-            raise ValidationError(f"Validation failed for field '{field.name}': {'; '.join(errors)}")
+            raise ValidationError(
+                f"Validation failed for field '{field.name}': {'; '.join(errors)}"
+            )
 
         return is_valid, errors
 
@@ -181,15 +180,14 @@ class FieldValidator:
             allowed = [str(v).lower() for v in rules["allowed_values"]]
             for item in value:
                 if str(item).lower() not in allowed:
-                    errors.append(f"List item '{item}' is not in allowed values: {rules['allowed_values']}")
+                    errors.append(
+                        f"List item '{item}' is not in allowed values: {rules['allowed_values']}"
+                    )
 
         return errors
 
     def validate_extraction(
-        self,
-        schema: ExtractionSchema,
-        data: dict[str, Any],
-        raise_on_error: bool = False
+        self, schema: ExtractionSchema, data: dict[str, Any], raise_on_error: bool = False
     ) -> tuple[bool, dict[str, list[str]]]:
         """
         Validate all fields in an extraction against schema.
@@ -239,9 +237,7 @@ _validator = FieldValidator()
 
 
 def validate_field(
-    field: ExtractionField,
-    value: Any,
-    raise_on_error: bool = False
+    field: ExtractionField, value: Any, raise_on_error: bool = False
 ) -> tuple[bool, list[str]]:
     """
     Validate a single field value.
@@ -260,9 +256,7 @@ def validate_field(
 
 
 def validate_extraction(
-    schema: ExtractionSchema,
-    data: dict[str, Any],
-    raise_on_error: bool = False
+    schema: ExtractionSchema, data: dict[str, Any], raise_on_error: bool = False
 ) -> tuple[bool, dict[str, list[str]]]:
     """
     Validate extracted data against schema.

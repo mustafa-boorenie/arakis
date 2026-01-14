@@ -15,7 +15,6 @@ from arakis.clients.semantic_scholar import SemanticScholarClient
 from arakis.config import get_settings
 from arakis.utils import retry_with_exponential_backoff
 
-
 # Tool function definitions for GPT
 QUERY_TOOLS = [
     {
@@ -28,16 +27,16 @@ QUERY_TOOLS = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The complete PubMed query with MeSH terms, field tags, and Boolean operators"
+                        "description": "The complete PubMed query with MeSH terms, field tags, and Boolean operators",
                     },
                     "explanation": {
                         "type": "string",
-                        "description": "Brief explanation of the query strategy"
-                    }
+                        "description": "Brief explanation of the query strategy",
+                    },
                 },
-                "required": ["query", "explanation"]
-            }
-        }
+                "required": ["query", "explanation"],
+            },
+        },
     },
     {
         "type": "function",
@@ -49,16 +48,16 @@ QUERY_TOOLS = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The OpenAlex query (simple text or filter syntax)"
+                        "description": "The OpenAlex query (simple text or filter syntax)",
                     },
                     "explanation": {
                         "type": "string",
-                        "description": "Brief explanation of the query strategy"
-                    }
+                        "description": "Brief explanation of the query strategy",
+                    },
                 },
-                "required": ["query", "explanation"]
-            }
-        }
+                "required": ["query", "explanation"],
+            },
+        },
     },
     {
         "type": "function",
@@ -68,18 +67,15 @@ QUERY_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The Semantic Scholar search query"
-                    },
+                    "query": {"type": "string", "description": "The Semantic Scholar search query"},
                     "explanation": {
                         "type": "string",
-                        "description": "Brief explanation of the query strategy"
-                    }
+                        "description": "Brief explanation of the query strategy",
+                    },
                 },
-                "required": ["query", "explanation"]
-            }
-        }
+                "required": ["query", "explanation"],
+            },
+        },
     },
     {
         "type": "function",
@@ -91,16 +87,16 @@ QUERY_TOOLS = [
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "The Google Scholar query with optional operators"
+                        "description": "The Google Scholar query with optional operators",
                     },
                     "explanation": {
                         "type": "string",
-                        "description": "Brief explanation of the query strategy"
-                    }
+                        "description": "Brief explanation of the query strategy",
+                    },
                 },
-                "required": ["query", "explanation"]
-            }
-        }
+                "required": ["query", "explanation"],
+            },
+        },
     },
     {
         "type": "function",
@@ -112,25 +108,22 @@ QUERY_TOOLS = [
                 "properties": {
                     "population": {
                         "type": "string",
-                        "description": "Target population or patient group"
+                        "description": "Target population or patient group",
                     },
                     "intervention": {
                         "type": "string",
-                        "description": "Treatment, exposure, or intervention being studied"
+                        "description": "Treatment, exposure, or intervention being studied",
                     },
                     "comparison": {
                         "type": "string",
-                        "description": "Comparison group or alternative (if applicable)"
+                        "description": "Comparison group or alternative (if applicable)",
                     },
-                    "outcome": {
-                        "type": "string",
-                        "description": "Outcome being measured"
-                    }
+                    "outcome": {"type": "string", "description": "Outcome being measured"},
                 },
-                "required": ["population", "intervention", "outcome"]
-            }
-        }
-    }
+                "required": ["population", "intervention", "outcome"],
+            },
+        },
+    },
 ]
 
 
@@ -229,7 +222,7 @@ When generating queries:
         # Build the user prompt
         user_prompt = f"""Research Question: {research_question}
 
-Generate {num_variations} search query variations for each of these databases: {', '.join(databases)}
+Generate {num_variations} search query variations for each of these databases: {", ".join(databases)}
 
 For each query:
 1. First call extract_pico to identify the key components
@@ -242,7 +235,7 @@ Call the appropriate function for each query you generate."""
         response = await self._call_openai(
             messages=[
                 {"role": "system", "content": self._get_system_prompt()},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             tools=QUERY_TOOLS,
         )
@@ -264,25 +257,24 @@ Call the appropriate function for each query you generate."""
                 if func_name == "extract_pico":
                     pico = args
                 elif func_name == "generate_pubmed_query" and "pubmed" in databases:
-                    results["pubmed"].append({
-                        "query": args.get("query", ""),
-                        "explanation": args.get("explanation", "")
-                    })
+                    results["pubmed"].append(
+                        {"query": args.get("query", ""), "explanation": args.get("explanation", "")}
+                    )
                 elif func_name == "generate_openalex_query" and "openalex" in databases:
-                    results["openalex"].append({
-                        "query": args.get("query", ""),
-                        "explanation": args.get("explanation", "")
-                    })
-                elif func_name == "generate_semantic_scholar_query" and "semantic_scholar" in databases:
-                    results["semantic_scholar"].append({
-                        "query": args.get("query", ""),
-                        "explanation": args.get("explanation", "")
-                    })
+                    results["openalex"].append(
+                        {"query": args.get("query", ""), "explanation": args.get("explanation", "")}
+                    )
+                elif (
+                    func_name == "generate_semantic_scholar_query"
+                    and "semantic_scholar" in databases
+                ):
+                    results["semantic_scholar"].append(
+                        {"query": args.get("query", ""), "explanation": args.get("explanation", "")}
+                    )
                 elif func_name == "generate_google_scholar_query" and "google_scholar" in databases:
-                    results["google_scholar"].append({
-                        "query": args.get("query", ""),
-                        "explanation": args.get("explanation", "")
-                    })
+                    results["google_scholar"].append(
+                        {"query": args.get("query", ""), "explanation": args.get("explanation", "")}
+                    )
 
         # If GPT didn't generate enough queries, request more
         for db in databases:
@@ -295,21 +287,17 @@ Call the appropriate function for each query you generate."""
         return results
 
     async def _generate_additional_queries(
-        self,
-        research_question: str,
-        database: str,
-        count: int,
-        pico: dict[str, str]
+        self, research_question: str, database: str, count: int, pico: dict[str, str]
     ) -> list[dict[str, str]]:
         """Generate additional queries for a specific database."""
         pico_context = ""
         if pico:
             pico_context = f"""
 PICO components:
-- Population: {pico.get('population', 'N/A')}
-- Intervention: {pico.get('intervention', 'N/A')}
-- Comparison: {pico.get('comparison', 'N/A')}
-- Outcome: {pico.get('outcome', 'N/A')}
+- Population: {pico.get("population", "N/A")}
+- Intervention: {pico.get("intervention", "N/A")}
+- Comparison: {pico.get("comparison", "N/A")}
+- Outcome: {pico.get("outcome", "N/A")}
 """
 
         user_prompt = f"""Research Question: {research_question}
@@ -320,7 +308,7 @@ Use the generate_{database}_query function for each query."""
         response = await self._call_openai(
             messages=[
                 {"role": "system", "content": self._get_system_prompt()},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             tools=QUERY_TOOLS,
         )
@@ -334,18 +322,19 @@ Use the generate_{database}_query function for each query."""
                 if database in func_name:
                     try:
                         args = json.loads(tool_call.function.arguments)
-                        results.append({
-                            "query": args.get("query", ""),
-                            "explanation": args.get("explanation", "")
-                        })
+                        results.append(
+                            {
+                                "query": args.get("query", ""),
+                                "explanation": args.get("explanation", ""),
+                            }
+                        )
                     except json.JSONDecodeError:
                         continue
 
         return results
 
     async def validate_queries(
-        self,
-        queries: dict[str, list[dict[str, str]]]
+        self, queries: dict[str, list[dict[str, str]]]
     ) -> dict[str, list[dict[str, Any]]]:
         """
         Validate queries by executing them and checking result counts.
@@ -369,12 +358,9 @@ Use the generate_{database}_query function for each query."""
                 query = query_info["query"]
                 is_valid, count, error = await client.validate_query(query)
 
-                validated[db_name].append({
-                    **query_info,
-                    "valid": is_valid,
-                    "result_count": count,
-                    "error": error
-                })
+                validated[db_name].append(
+                    {**query_info, "valid": is_valid, "result_count": count, "error": error}
+                )
 
         return validated
 
@@ -383,7 +369,7 @@ Use the generate_{database}_query function for each query."""
         database: str,
         original_query: str,
         result_count: int,
-        target_range: tuple[int, int] = (50, 5000)
+        target_range: tuple[int, int] = (50, 5000),
     ) -> dict[str, str]:
         """
         Refine a query that returns too many or too few results.
@@ -419,7 +405,7 @@ Generate a refined query using the generate_{database}_query function."""
         response = await self._call_openai(
             messages=[
                 {"role": "system", "content": self._get_system_prompt()},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             tools=QUERY_TOOLS,
         )
@@ -433,7 +419,7 @@ Generate a refined query using the generate_{database}_query function."""
                         args = json.loads(tool_call.function.arguments)
                         return {
                             "query": args.get("query", original_query),
-                            "explanation": args.get("explanation", "")
+                            "explanation": args.get("explanation", ""),
                         }
                     except json.JSONDecodeError:
                         pass

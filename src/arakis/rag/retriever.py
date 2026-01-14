@@ -7,8 +7,6 @@ import time
 from pathlib import Path
 from typing import Optional, Union
 
-import numpy as np
-
 from arakis.models.paper import Paper
 from arakis.models.rag import (
     ChunkType,

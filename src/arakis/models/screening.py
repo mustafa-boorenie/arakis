@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Models for paper screening decisions."""
 
 from dataclasses import dataclass, field
@@ -33,7 +34,7 @@ class ScreeningDecision:
 
     # For dual-review mode
     is_conflict: bool = False
-    second_opinion: "ScreeningDecision | None" = None
+    second_opinion: ScreeningDecision | None = None
 
     # For human-in-the-loop review
     human_reviewed: bool = False
@@ -77,10 +78,10 @@ class ScreeningCriteria:
             parts.append(f"Outcome: {self.outcome}")
 
         if self.inclusion:
-            parts.append(f"\nInclusion criteria:\n" + "\n".join(f"- {c}" for c in self.inclusion))
+            parts.append("\nInclusion criteria:\n" + "\n".join(f"- {c}" for c in self.inclusion))
 
         if self.exclusion:
-            parts.append(f"\nExclusion criteria:\n" + "\n".join(f"- {c}" for c in self.exclusion))
+            parts.append("\nExclusion criteria:\n" + "\n".join(f"- {c}" for c in self.exclusion))
 
         if self.study_types:
             parts.append(f"\nAccepted study types: {', '.join(self.study_types)}")

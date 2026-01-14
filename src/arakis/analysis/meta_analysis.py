@@ -61,7 +61,9 @@ class MetaAnalysisEngine:
         if method == AnalysisMethod.RANDOM_EFFECTS:
             if heterogeneity.i_squared > 50:
                 # High heterogeneity - use random effects
-                pooled_effect, ci, weights = self._random_effects_meta_analysis(studies, heterogeneity)
+                pooled_effect, ci, weights = self._random_effects_meta_analysis(
+                    studies, heterogeneity
+                )
             else:
                 # Low heterogeneity - random effects reduces to fixed effects
                 pooled_effect, ci, weights = self._fixed_effects_meta_analysis(studies)
@@ -422,7 +424,9 @@ class MetaAnalysisEngine:
         standardized_effects = effects / ses
 
         # Perform regression
-        slope, intercept, r_value, p_value, std_err = stats.linregress(precisions, standardized_effects)
+        slope, intercept, r_value, p_value, std_err = stats.linregress(
+            precisions, standardized_effects
+        )
 
         # Egger's test p-value is the p-value for the intercept
         # We use the t-statistic for the intercept

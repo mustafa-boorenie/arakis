@@ -1,6 +1,5 @@
 """PDF text extraction with waterfall fallback strategy."""
 
-import asyncio
 import io
 import time
 from dataclasses import dataclass, field
@@ -46,9 +45,7 @@ class PDFParser:
     4. Fail gracefully with error message
     """
 
-    def __init__(
-        self, clean: bool = True, remove_repeating: bool = True, use_ocr: bool = True
-    ):
+    def __init__(self, clean: bool = True, remove_repeating: bool = True, use_ocr: bool = True):
         """
         Initialize PDF parser.
 
@@ -125,9 +122,7 @@ class PDFParser:
             warnings=warnings,
         )
 
-    async def _extract_with_pymupdf(
-        self, pdf_bytes: bytes, clean: bool
-    ) -> PDFExtractionResult:
+    async def _extract_with_pymupdf(self, pdf_bytes: bytes, clean: bool) -> PDFExtractionResult:
         """
         Extract text using PyMuPDF (fitz).
 
@@ -179,8 +174,7 @@ class PDFParser:
 
             if len(raw_text.strip()) < 100:
                 raise PDFNoTextError(
-                    f"Minimal text extracted ({len(raw_text)} chars). "
-                    "Likely image-based PDF."
+                    f"Minimal text extracted ({len(raw_text)} chars). Likely image-based PDF."
                 )
 
             # Clean text if requested
@@ -220,9 +214,7 @@ class PDFParser:
         except Exception as e:
             raise PDFExtractionError(f"PyMuPDF extraction failed: {str(e)}")
 
-    async def _extract_with_pdfplumber(
-        self, pdf_bytes: bytes, clean: bool
-    ) -> PDFExtractionResult:
+    async def _extract_with_pdfplumber(self, pdf_bytes: bytes, clean: bool) -> PDFExtractionResult:
         """
         Extract text using pdfplumber (fallback method).
 
@@ -267,8 +259,7 @@ class PDFParser:
 
             if len(raw_text.strip()) < 100:
                 raise PDFNoTextError(
-                    f"Minimal text extracted ({len(raw_text)} chars). "
-                    "Likely image-based PDF."
+                    f"Minimal text extracted ({len(raw_text)} chars). Likely image-based PDF."
                 )
 
             # Clean text if requested
@@ -308,9 +299,7 @@ class PDFParser:
         except Exception as e:
             raise PDFExtractionError(f"pdfplumber extraction failed: {str(e)}")
 
-    async def _extract_with_ocr(
-        self, pdf_bytes: bytes, clean: bool
-    ) -> PDFExtractionResult:
+    async def _extract_with_ocr(self, pdf_bytes: bytes, clean: bool) -> PDFExtractionResult:
         """
         Extract text using OCR (Optical Character Recognition).
 
@@ -334,8 +323,7 @@ class PDFParser:
             from pdf2image import convert_from_bytes
         except ImportError:
             raise PDFExtractionError(
-                "OCR libraries not installed. "
-                "Run: pip install pytesseract pdf2image"
+                "OCR libraries not installed. Run: pip install pytesseract pdf2image"
             )
 
         try:

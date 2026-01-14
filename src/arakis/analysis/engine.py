@@ -3,11 +3,7 @@
 Pure Python statistical computations using scipy/statsmodels (NO LLM COST).
 """
 
-import math
-from typing import Any
-
 import numpy as np
-import pandas as pd
 from scipy import stats
 
 from arakis.models.analysis import (
@@ -60,7 +56,9 @@ class StatisticalEngine:
 
         # Calculate confidence interval for mean difference
         mean_diff = np.mean(group1) - np.mean(group2)
-        se_diff = np.sqrt(np.var(group1, ddof=1) / len(group1) + np.var(group2, ddof=1) / len(group2))
+        se_diff = np.sqrt(
+            np.var(group1, ddof=1) / len(group1) + np.var(group2, ddof=1) / len(group2)
+        )
         df = len(group1) + len(group2) - 2
         t_crit = stats.t.ppf(1 - self.alpha / 2, df)
         ci = ConfidenceInterval(
@@ -121,7 +119,9 @@ class StatisticalEngine:
         df = len(differences) - 1
         t_crit = stats.t.ppf(1 - self.alpha / 2, df)
         ci = ConfidenceInterval(
-            lower=mean_diff - t_crit * se, upper=mean_diff + t_crit * se, level=self.confidence_level
+            lower=mean_diff - t_crit * se,
+            upper=mean_diff + t_crit * se,
+            level=self.confidence_level,
         )
 
         return AnalysisResult(

@@ -11,10 +11,8 @@ from openai import AsyncOpenAI
 
 from arakis.config import get_settings
 from arakis.models.analysis import MetaAnalysisResult
-from arakis.models.extraction import ExtractionResult
 from arakis.models.paper import Paper
-from arakis.models.screening import ScreeningDecision, ScreeningStatus
-from arakis.models.visualization import PRISMAFlow, Figure, Table
+from arakis.models.visualization import PRISMAFlow
 from arakis.models.writing import Section, WritingResult
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 
@@ -37,7 +35,9 @@ class ResultsWriterAgent:
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-    @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True)
+    @retry_with_exponential_backoff(
+        max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
+    )
     async def _call_openai(
         self,
         messages: list[dict[str, str]],
@@ -341,16 +341,22 @@ Write only the paragraph text, no headings."""
         results_section = Section(title="Results", content="")
 
         # 1. Study Selection
-        selection_result = await self.write_study_selection(prisma_flow, prisma_flow.records_identified_total)
+        selection_result = await self.write_study_selection(
+            prisma_flow, prisma_flow.records_identified_total
+        )
         results_section.add_subsection(selection_result.section)
 
         # 2. Study Characteristics
-        characteristics_result = await self.write_study_characteristics(included_papers, extraction_summary)
+        characteristics_result = await self.write_study_characteristics(
+            included_papers, extraction_summary
+        )
         results_section.add_subsection(characteristics_result.section)
 
         # 3. Synthesis of Results (if meta-analysis available)
         if meta_analysis_result:
-            synthesis_result = await self.write_synthesis_of_results(meta_analysis_result, outcome_name)
+            synthesis_result = await self.write_synthesis_of_results(
+                meta_analysis_result, outcome_name
+            )
             results_section.add_subsection(synthesis_result.section)
 
         return results_section

@@ -1,13 +1,12 @@
 from logging.config import fileConfig
 
-from sqlalchemy import create_engine
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import create_engine
+
+from arakis.config import get_settings
 
 # Import models for metadata (but NOT connection.py to avoid async engine creation)
 from arakis.database.models import Base
-from arakis.config import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -71,9 +70,7 @@ def run_migrations_online() -> None:
     connectable = sync_engine
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -230,9 +230,13 @@ class ExtractedData:
     confidence: dict[str, float] = field(default_factory=dict)  # field_name → confidence (0-1)
 
     # Audit trail for quality assurance
-    reviewer_decisions: list[ReviewerDecision] = field(default_factory=list)  # All reviewer decisions
+    reviewer_decisions: list[ReviewerDecision] = field(
+        default_factory=list
+    )  # All reviewer decisions
     conflicts: list[str] = field(default_factory=list)  # Fields with reviewer disagreement
-    low_confidence_fields: list[str] = field(default_factory=list)  # Fields below confidence threshold
+    low_confidence_fields: list[str] = field(
+        default_factory=list
+    )  # Fields below confidence threshold
 
     # Metadata
     extraction_quality: float = 1.0  # Overall quality score (0-1)
@@ -348,9 +352,15 @@ class ExtractionResult:
             self.papers_needing_review = sum(1 for e in self.extractions if e.needs_human_review)
 
             # Quality metrics
-            self.average_quality = sum(e.extraction_quality for e in self.extractions) / self.total_papers
-            self.average_confidence = sum(e.average_confidence for e in self.extractions) / self.total_papers
-            self.conflict_rate = sum(1 for e in self.extractions if e.has_conflicts) / self.total_papers
+            self.average_quality = (
+                sum(e.extraction_quality for e in self.extractions) / self.total_papers
+            )
+            self.average_confidence = (
+                sum(e.average_confidence for e in self.extractions) / self.total_papers
+            )
+            self.conflict_rate = (
+                sum(1 for e in self.extractions if e.has_conflicts) / self.total_papers
+            )
 
             # Performance
             if self.total_time_ms > 0 and self.total_papers > 0:
@@ -414,7 +424,7 @@ class ExtractionResult:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExtractionResult":
+    def from_dict(cls, data: dict[str, Any]) -> ExtractionResult:
         """Create ExtractionResult from dictionary.
 
         Args:

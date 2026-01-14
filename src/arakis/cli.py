@@ -5,9 +5,9 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 app = typer.Typer(
     name="arakis",
@@ -26,23 +26,18 @@ def search(
     question: str = typer.Argument(..., help="Research question to search for"),
     databases: str = typer.Option(
         "pubmed,openalex,semantic_scholar",
-        "--databases", "-d",
-        help="Comma-separated list of databases to search"
+        "--databases",
+        "-d",
+        help="Comma-separated list of databases to search",
     ),
-    max_results: int = typer.Option(
-        100,
-        "--max-results", "-n",
-        help="Maximum results per query"
-    ),
+    max_results: int = typer.Option(100, "--max-results", "-n", help="Maximum results per query"),
     validate: bool = typer.Option(
         False,
         "--validate",
-        help="Validate and refine queries based on result counts (slower, more API calls)"
+        help="Validate and refine queries based on result counts (slower, more API calls)",
     ),
     output: Optional[str] = typer.Option(
-        None,
-        "--output", "-o",
-        help="Output file for results (JSON)"
+        None, "--output", "-o", help="Output file for results (JSON)"
     ),
 ):
     """
@@ -51,15 +46,15 @@ def search(
     Uses AI to generate optimized queries for each database,
     then deduplicates results.
     """
-    from arakis.orchestrator import SearchOrchestrator
     import json
+
+    from arakis.orchestrator import SearchOrchestrator
 
     db_list = [d.strip() for d in databases.split(",")]
 
-    console.print(Panel.fit(
-        f"[bold blue]Research Question:[/bold blue]\n{question}",
-        title="Arakis Search"
-    ))
+    console.print(
+        Panel.fit(f"[bold blue]Research Question:[/bold blue]\n{question}", title="Arakis Search")
+    )
 
     orchestrator = SearchOrchestrator()
 
@@ -74,13 +69,15 @@ def search(
             progress.update(task, description=f"{stage}: {detail}")
 
         try:
-            result = _run_async(orchestrator.comprehensive_search(
-                research_question=question,
-                databases=db_list,
-                max_results_per_query=max_results,
-                validate_queries=validate,
-                progress_callback=update_progress,
-            ))
+            result = _run_async(
+                orchestrator.comprehensive_search(
+                    research_question=question,
+                    databases=db_list,
+                    max_results_per_query=max_results,
+                    validate_queries=validate,
+                    progress_callback=update_progress,
+                )
+            )
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(1)
@@ -103,7 +100,9 @@ def search(
 
     # Papers table (first 10)
     if result.papers:
-        papers_table = Table(title=f"\nTop Papers (showing {min(10, len(result.papers))} of {len(result.papers)})")
+        papers_table = Table(
+            title=f"\nTop Papers (showing {min(10, len(result.papers))} of {len(result.papers)})"
+        )
         papers_table.add_column("#", style="dim", width=3)
         papers_table.add_column("Title", max_width=60)
         papers_table.add_column("Year", width=6)
@@ -111,12 +110,7 @@ def search(
 
         for i, paper in enumerate(result.papers[:10], 1):
             title = paper.title[:57] + "..." if len(paper.title) > 60 else paper.title
-            papers_table.add_row(
-                str(i),
-                title,
-                str(paper.year or "?"),
-                paper.source.value
-            )
+            papers_table.add_row(str(i), title, str(paper.year or "?"), paper.source.value)
 
         console.print(papers_table)
 
@@ -136,7 +130,7 @@ def search(
                     "source": p.source.value,
                 }
                 for p in result.papers
-            ]
+            ],
         }
         with open(output, "w") as f:
             json.dump(output_data, f, indent=2)
@@ -148,8 +142,14 @@ def screen(
     input_file: str = typer.Argument(..., help="JSON file from search command"),
     include: str = typer.Option(..., "--include", "-i", help="Inclusion criteria"),
     exclude: str = typer.Option("", "--exclude", "-e", help="Exclusion criteria"),
-    dual_review: bool = typer.Option(True, "--dual-review/--no-dual-review", help="Enable dual reviewer mode with conflict detection (default: True)"),
-    human_review: bool = typer.Option(False, "--human-review", help="Enable human-in-the-loop review (only with --no-dual-review)"),
+    dual_review: bool = typer.Option(
+        True,
+        "--dual-review/--no-dual-review",
+        help="Enable dual reviewer mode with conflict detection (default: True)",
+    ),
+    human_review: bool = typer.Option(
+        False, "--human-review", help="Enable human-in-the-loop review (only with --no-dual-review)"
+    ),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file"),
 ):
     """
@@ -161,9 +161,10 @@ def screen(
     For single-pass screening with human verification, use: --no-dual-review --human-review
     """
     import json
+
     from arakis.agents.screener import ScreeningAgent
-    from arakis.models.paper import Paper, Author, PaperSource
-    from arakis.models.screening import ScreeningCriteria, ScreeningStatus
+    from arakis.models.paper import Author, Paper, PaperSource
+    from arakis.models.screening import ScreeningCriteria
 
     # Load papers
     with open(input_file) as f:
@@ -188,15 +189,21 @@ def screen(
 
     # Validate parameters
     if human_review and dual_review:
-        console.print("[yellow]Warning: --human-review is ignored when --dual-review is enabled.[/yellow]")
-        console.print("[yellow]Use --no-dual-review --human-review for human-in-the-loop screening.[/yellow]\n")
+        console.print(
+            "[yellow]Warning: --human-review is ignored when --dual-review is enabled.[/yellow]"
+        )
+        console.print(
+            "[yellow]Use --no-dual-review --human-review for human-in-the-loop screening.[/yellow]\n"
+        )
         human_review = False
 
     # Display screening mode
     if dual_review:
         console.print(f"[bold]Screening {len(papers)} papers with dual-review mode...[/bold]")
     elif human_review:
-        console.print(f"[bold]Screening {len(papers)} papers with human-in-the-loop review...[/bold]")
+        console.print(
+            f"[bold]Screening {len(papers)} papers with human-in-the-loop review...[/bold]"
+        )
         console.print("[dim]You will be prompted to review each AI decision.[/dim]")
     else:
         console.print(f"[bold]Screening {len(papers)} papers with single-pass AI...[/bold]")
@@ -212,9 +219,9 @@ def screen(
 
     # Note: Progress bar disabled for human review mode
     if human_review:
-        decisions = _run_async(screener.screen_batch(
-            papers, criteria, dual_review, human_review, None
-        ))
+        decisions = _run_async(
+            screener.screen_batch(papers, criteria, dual_review, human_review, None)
+        )
     else:
         with Progress(
             SpinnerColumn(),
@@ -227,9 +234,9 @@ def screen(
                 progress.update(task, description=f"Screening {current}/{total}...")
                 progress.advance(task)
 
-            decisions = _run_async(screener.screen_batch(
-                papers, criteria, dual_review, human_review, update
-        ))
+            decisions = _run_async(
+                screener.screen_batch(papers, criteria, dual_review, human_review, update)
+            )
 
     # Summary
     summary = screener.summarize_screening(decisions)
@@ -269,7 +276,7 @@ def screen(
                     "human_reason": d.human_reason,
                 }
                 for d in decisions
-            ]
+            ],
         }
         with open(output, "w") as f:
             json.dump(output_data, f, indent=2)
@@ -290,8 +297,9 @@ def fetch(
     """
     import json
     import os
+
+    from arakis.models.paper import Paper, PaperSource
     from arakis.retrieval.fetcher import PaperFetcher
-    from arakis.models.paper import Paper, Author, PaperSource
 
     # Validate parameters
     if extract_text and not download:
@@ -375,15 +383,19 @@ def fetch(
             text_data = []
             for result in results:
                 if result.success and result.paper.has_full_text:
-                    text_data.append({
-                        "paper_id": result.paper.id,
-                        "title": result.paper.title,
-                        "full_text": result.paper.full_text,
-                        "char_count": result.paper.text_length,
-                        "extraction_method": result.paper.text_extraction_method,
-                        "quality_score": result.paper.text_quality_score,
-                        "extracted_at": result.paper.full_text_extracted_at.isoformat() if result.paper.full_text_extracted_at else None,
-                    })
+                    text_data.append(
+                        {
+                            "paper_id": result.paper.id,
+                            "title": result.paper.title,
+                            "full_text": result.paper.full_text,
+                            "char_count": result.paper.text_length,
+                            "extraction_method": result.paper.text_extraction_method,
+                            "quality_score": result.paper.text_quality_score,
+                            "extracted_at": result.paper.full_text_extracted_at.isoformat()
+                            if result.paper.full_text_extracted_at
+                            else None,
+                        }
+                    )
 
             if text_data:
                 text_file = os.path.join(output_dir, "extracted_texts.json")
@@ -401,7 +413,8 @@ def fetch(
                 "url": r.pdf_url,
                 "source": r.retrieval_result.source_name if r.retrieval_result else None,
             }
-            for r in results if r.success
+            for r in results
+            if r.success
         ]
         with open(urls_file, "w") as f:
             json.dump(urls_data, f, indent=2)
@@ -411,8 +424,15 @@ def fetch(
 @app.command()
 def extract(
     input_file: str = typer.Argument(..., help="JSON file with screening results"),
-    schema: str = typer.Option("rct", "--schema", "-s", help="Extraction schema (rct, cohort, case_control, diagnostic)"),
-    mode: str = typer.Option("balanced", "--mode", "-m", help="Extraction mode (fast=single-pass, balanced=triple-review)"),
+    schema: str = typer.Option(
+        "rct", "--schema", "-s", help="Extraction schema (rct, cohort, case_control, diagnostic)"
+    ),
+    mode: str = typer.Option(
+        "balanced",
+        "--mode",
+        "-m",
+        help="Extraction mode (fast=single-pass, balanced=triple-review)",
+    ),
     use_full_text: bool = typer.Option(
         True, "--use-full-text/--no-full-text", help="Use full text if available (default: True)"
     ),
@@ -426,10 +446,10 @@ def extract(
     Use --no-full-text to extract from abstracts only (not recommended).
     """
     import json
+
     from arakis.agents.extractor import DataExtractionAgent
     from arakis.extraction.schemas import get_schema, list_schemas
-    from arakis.models.paper import Paper, Author, PaperSource
-    from arakis.models.screening import ScreeningStatus
+    from arakis.models.paper import Author, Paper, PaperSource
 
     # Load papers from screening results
     with open(input_file) as f:
@@ -437,8 +457,7 @@ def extract(
 
     # Get included papers only
     included_paper_ids = [
-        d["paper_id"] for d in data.get("decisions", [])
-        if d.get("status") == "include"
+        d["paper_id"] for d in data.get("decisions", []) if d.get("status") == "include"
     ]
 
     if not included_paper_ids:
@@ -455,7 +474,9 @@ def extract(
                 search_data = json.load(f)
                 papers_data = search_data.get("papers", [])
         except FileNotFoundError:
-            console.print(f"[red]Could not find paper details. Expected papers in {input_file} or {search_file}[/red]")
+            console.print(
+                f"[red]Could not find paper details. Expected papers in {input_file} or {search_file}[/red]"
+            )
             raise typer.Exit(1)
 
     # Filter to included papers
@@ -490,9 +511,13 @@ def extract(
                 "[yellow]Warning: --use-full-text enabled but no papers have full text. "
                 "Using abstracts only.[/yellow]"
             )
-            console.print("[dim]Tip: Use 'arakis fetch --download --extract-text' to extract full text first.[/dim]\n")
+            console.print(
+                "[dim]Tip: Use 'arakis fetch --download --extract-text' to extract full text first.[/dim]\n"
+            )
         else:
-            console.print(f"[dim]Using full text for {papers_with_full_text}/{len(papers)} papers[/dim]")
+            console.print(
+                f"[dim]Using full text for {papers_with_full_text}/{len(papers)} papers[/dim]"
+            )
 
     # Get extraction schema
     try:
@@ -509,7 +534,9 @@ def extract(
     mode_desc = "triple-review (high reliability)" if triple_review else "single-pass (fast)"
 
     console.print(f"[bold]Extracting data from {len(papers)} papers with {mode_desc}...[/bold]")
-    console.print(f"[dim]Schema: {extraction_schema.name} ({len(extraction_schema.fields)} fields)[/dim]\n")
+    console.print(
+        f"[dim]Schema: {extraction_schema.name} ({len(extraction_schema.fields)} fields)[/dim]\n"
+    )
 
     # Create agent
     agent = DataExtractionAgent()
@@ -526,9 +553,11 @@ def extract(
             progress.update(task, description=f"Extracting {current}/{total}...")
             progress.advance(task)
 
-        result = _run_async(agent.extract_batch(
-            papers, extraction_schema, triple_review, use_full_text, progress_callback=update
-        ))
+        result = _run_async(
+            agent.extract_batch(
+                papers, extraction_schema, triple_review, use_full_text, progress_callback=update
+            )
+        )
 
     # Summary
     summary_table = Table(title="Extraction Summary")
@@ -548,7 +577,9 @@ def extract(
 
     # Show papers needing review
     if result.papers_needing_review > 0:
-        console.print(f"\n[yellow]{result.papers_needing_review} papers flagged for human review:[/yellow]")
+        console.print(
+            f"\n[yellow]{result.papers_needing_review} papers flagged for human review:[/yellow]"
+        )
         for extraction in result.get_extractions_needing_review()[:5]:
             console.print(f"  • {extraction.paper_id}")
             if extraction.conflicts:
@@ -582,9 +613,16 @@ def extract(
 def analyze(
     input_file: str = typer.Argument(..., help="JSON file with extraction results"),
     outcome: Optional[str] = typer.Option(None, "--outcome", "-o", help="Outcome to analyze"),
-    method: str = typer.Option("random_effects", "--method", "-m", help="Meta-analysis method (random_effects or fixed_effects)"),
+    method: str = typer.Option(
+        "random_effects",
+        "--method",
+        "-m",
+        help="Meta-analysis method (random_effects or fixed_effects)",
+    ),
     output: Optional[str] = typer.Option(None, "--output", help="Output file for analysis results"),
-    figures_dir: str = typer.Option("./figures", "--figures", "-f", help="Directory for saving figures"),
+    figures_dir: str = typer.Option(
+        "./figures", "--figures", "-f", help="Directory for saving figures"
+    ),
 ):
     """
     Perform statistical analysis on extracted data.
@@ -593,11 +631,12 @@ def analyze(
     """
     import json
     from datetime import datetime
-    from arakis.analysis.recommender import AnalysisRecommenderAgent
+
     from arakis.analysis.meta_analysis import MetaAnalysisEngine
+    from arakis.analysis.recommender import AnalysisRecommenderAgent
     from arakis.analysis.visualizer import VisualizationGenerator
-    from arakis.models.extraction import ExtractionResult
     from arakis.models.analysis import AnalysisMethod, EffectMeasure, StudyData
+    from arakis.models.extraction import ExtractionResult
 
     # Load extraction results
     with open(input_file) as f:
@@ -625,7 +664,7 @@ def analyze(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Analyzing data characteristics...", total=None)
+        progress.add_task("Analyzing data characteristics...", total=None)
         recommendation = _run_async(recommender.recommend_tests(extraction_result, outcome))
 
     # Display recommendations
@@ -638,7 +677,7 @@ def analyze(
         rec_table.add_row(
             test.test_name.replace("_", " ").title(),
             test.test_type.value,
-            test.parameters.get("priority", "N/A")
+            test.parameters.get("priority", "N/A"),
         )
 
     console.print(rec_table)
@@ -687,14 +726,16 @@ def analyze(
             raise typer.Exit(0)
 
         # Run meta-analysis
-        analysis_method = AnalysisMethod.RANDOM_EFFECTS if method == "random_effects" else AnalysisMethod.FIXED_EFFECTS
+        analysis_method = (
+            AnalysisMethod.RANDOM_EFFECTS
+            if method == "random_effects"
+            else AnalysisMethod.FIXED_EFFECTS
+        )
         meta_engine = MetaAnalysisEngine()
 
         try:
             meta_result = meta_engine.calculate_pooled_effect(
-                studies=studies,
-                method=analysis_method,
-                effect_measure=effect_measure
+                studies=studies, method=analysis_method, effect_measure=effect_measure
             )
 
             # Display results
@@ -707,7 +748,7 @@ def analyze(
             meta_table.add_row("Pooled Effect", f"{meta_result.pooled_effect:.3f}")
             meta_table.add_row(
                 "95% CI",
-                f"[{meta_result.confidence_interval.lower:.3f}, {meta_result.confidence_interval.upper:.3f}]"
+                f"[{meta_result.confidence_interval.lower:.3f}, {meta_result.confidence_interval.upper:.3f}]",
             )
             meta_table.add_row("P-value", f"{meta_result.p_value:.4f}")
             meta_table.add_row("Significant", "Yes ✓" if meta_result.is_significant else "No")
@@ -721,7 +762,9 @@ def analyze(
             # Interpretation
             if meta_result.has_high_heterogeneity:
                 console.print("\n[yellow]⚠ Substantial heterogeneity detected (I² > 50%)[/yellow]")
-                console.print("[dim]Consider subgroup analysis or investigate sources of heterogeneity[/dim]")
+                console.print(
+                    "[dim]Consider subgroup analysis or investigate sources of heterogeneity[/dim]"
+                )
 
             # Step 3: Generate visualizations
             console.print("\n[bold cyan]Step 3:[/bold cyan] Generating visualizations...")
@@ -745,7 +788,9 @@ def analyze(
                         meta_result.egger_test_p_value = egger_p
                         console.print(f"  ✓ Egger's test p-value: {egger_p:.4f}")
                         if egger_p < 0.05:
-                            console.print("    [yellow]⚠ Significant publication bias detected[/yellow]")
+                            console.print(
+                                "    [yellow]⚠ Significant publication bias detected[/yellow]"
+                            )
                     except Exception as e:
                         console.print(f"    [dim]Egger's test failed: {e}[/dim]")
 
@@ -792,14 +837,20 @@ def analyze(
                         },
                         "forest_plot": meta_result.forest_plot_path,
                         "funnel_plot": meta_result.funnel_plot_path,
-                        "egger_test_p_value": float(meta_result.egger_test_p_value) if meta_result.egger_test_p_value is not None else None,
+                        "egger_test_p_value": float(meta_result.egger_test_p_value)
+                        if meta_result.egger_test_p_value is not None
+                        else None,
                         "studies": [
                             {
                                 "study_id": s.study_id,
                                 "effect": float(s.effect) if s.effect is not None else None,
-                                "standard_error": float(s.standard_error) if s.standard_error is not None else None,
+                                "standard_error": float(s.standard_error)
+                                if s.standard_error is not None
+                                else None,
                                 "weight": float(s.weight) if s.weight is not None else None,
-                                "sample_size": int(s.sample_size) if s.sample_size is not None else None,
+                                "sample_size": int(s.sample_size)
+                                if s.sample_size is not None
+                                else None,
                             }
                             for s in meta_result.studies
                         ],
@@ -813,6 +864,7 @@ def analyze(
         except Exception as e:
             console.print(f"[red]Meta-analysis failed: {e}[/red]")
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
     else:
@@ -831,8 +883,9 @@ def prisma_diagram(
     Generate PRISMA 2020 flow diagram from search/screening results.
     """
     import json
-    from arakis.visualization.prisma import PRISMADiagramGenerator
+
     from arakis.models.visualization import PRISMAFlow
+    from arakis.visualization.prisma import PRISMADiagramGenerator
 
     # Load data
     with open(input_file) as f:
@@ -874,11 +927,11 @@ def prisma_diagram(
         console.print("[red]Could not parse PRISMA flow data from input file[/red]")
         raise typer.Exit(1)
 
-    console.print(f"[bold]Generating PRISMA diagram...[/bold]\n")
+    console.print("[bold]Generating PRISMA diagram...[/bold]\n")
 
     # Generate diagram
     generator = PRISMADiagramGenerator(output_dir=".")
-    diagram = generator.generate(flow, output)
+    generator.generate(flow, output)
 
     # Display summary
     summary_table = Table(title="PRISMA Flow Summary")
@@ -899,7 +952,9 @@ def prisma_diagram(
 def write_results(
     search_file: str = typer.Option(..., "--search", "-s", help="Search results JSON"),
     screening_file: str = typer.Option(..., "--screening", "-c", help="Screening results JSON"),
-    analysis_file: Optional[str] = typer.Option(None, "--analysis", "-a", help="Analysis results JSON"),
+    analysis_file: Optional[str] = typer.Option(
+        None, "--analysis", "-a", help="Analysis results JSON"
+    ),
     outcome: str = typer.Option("primary outcome", "--outcome", "-o", help="Outcome name"),
     output: Optional[str] = typer.Option(None, "--output", help="Output markdown file"),
 ):
@@ -909,13 +964,17 @@ def write_results(
     Generates study selection, characteristics, and synthesis subsections.
     """
     import json
+
     from arakis.agents.results_writer import ResultsWriterAgent
-    from arakis.models.paper import Paper, Author, PaperSource
-    from arakis.models.visualization import PRISMAFlow
     from arakis.models.analysis import (
-        MetaAnalysisResult, ConfidenceInterval, Heterogeneity,
-        AnalysisMethod, EffectMeasure, StudyData
+        AnalysisMethod,
+        ConfidenceInterval,
+        EffectMeasure,
+        Heterogeneity,
+        MetaAnalysisResult,
     )
+    from arakis.models.paper import Author, Paper, PaperSource
+    from arakis.models.visualization import PRISMAFlow
 
     # Load search results
     console.print("[bold]Loading data...[/bold]")
@@ -946,9 +1005,7 @@ def write_results(
 
     # Extract included papers
     included_ids = [
-        d["paper_id"]
-        for d in screening_data.get("decisions", [])
-        if d.get("status") == "include"
+        d["paper_id"] for d in screening_data.get("decisions", []) if d.get("status") == "include"
     ]
 
     papers = [
@@ -1006,7 +1063,7 @@ def write_results(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Generating results section...", total=None)
+        progress.add_task("Generating results section...", total=None)
         results_section = _run_async(
             writer.write_complete_results_section(
                 prisma_flow=flow,
@@ -1048,8 +1105,12 @@ def write_results(
 def write_intro(
     research_question: str = typer.Argument(..., help="Research question for the review"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output markdown file"),
-    literature: Optional[str] = typer.Option(None, "--literature", "-l", help="JSON file with relevant papers for context"),
-    use_rag: bool = typer.Option(False, "--use-rag", help="Use RAG system to retrieve literature context"),
+    literature: Optional[str] = typer.Option(
+        None, "--literature", "-l", help="JSON file with relevant papers for context"
+    ),
+    use_rag: bool = typer.Option(
+        False, "--use-rag", help="Use RAG system to retrieve literature context"
+    ),
 ):
     """
     Write introduction section for a systematic review.
@@ -1057,6 +1118,7 @@ def write_intro(
     Generates background, rationale, and objectives subsections.
     """
     import json
+
     from arakis.agents.intro_writer import IntroductionWriterAgent
     from arakis.models.paper import Paper
     from arakis.rag import Retriever
@@ -1075,7 +1137,9 @@ def write_intro(
     retriever = None
     if use_rag:
         if not papers:
-            console.print("[yellow]Warning: RAG requested but no literature provided. Skipping RAG.[/yellow]\n")
+            console.print(
+                "[yellow]Warning: RAG requested but no literature provided. Skipping RAG.[/yellow]\n"
+            )
         else:
             console.print("[cyan]Indexing papers for RAG...[/cyan]")
             retriever = Retriever(cache_dir=".arakis_cache")
@@ -1090,7 +1154,7 @@ def write_intro(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Generating introduction...", total=None)
+        progress.add_task("Generating introduction...", total=None)
         intro_section = _run_async(
             writer.write_complete_introduction(
                 research_question=research_question,
@@ -1132,11 +1196,21 @@ def write_discussion(
     analysis_file: str = typer.Argument(..., help="JSON file with meta-analysis results"),
     outcome: str = typer.Option("primary outcome", "--outcome", "-o", help="Name of the outcome"),
     output: Optional[str] = typer.Option(None, "--output", help="Output markdown file"),
-    literature: Optional[str] = typer.Option(None, "--literature", "-l", help="JSON file with relevant papers for comparison"),
-    use_rag: bool = typer.Option(False, "--use-rag", help="Use RAG system for literature comparison"),
-    interpretation: Optional[str] = typer.Option(None, "--interpretation", help="Your interpretation notes"),
-    limitations: Optional[str] = typer.Option(None, "--limitations", help="Additional limitations to mention"),
-    implications: Optional[str] = typer.Option(None, "--implications", help="Implications to discuss"),
+    literature: Optional[str] = typer.Option(
+        None, "--literature", "-l", help="JSON file with relevant papers for comparison"
+    ),
+    use_rag: bool = typer.Option(
+        False, "--use-rag", help="Use RAG system for literature comparison"
+    ),
+    interpretation: Optional[str] = typer.Option(
+        None, "--interpretation", help="Your interpretation notes"
+    ),
+    limitations: Optional[str] = typer.Option(
+        None, "--limitations", help="Additional limitations to mention"
+    ),
+    implications: Optional[str] = typer.Option(
+        None, "--implications", help="Implications to discuss"
+    ),
 ):
     """
     Write discussion section for a systematic review.
@@ -1144,9 +1218,10 @@ def write_discussion(
     Generates summary of findings, comparison with literature, limitations, and implications.
     """
     import json
+
     from arakis.agents.discussion_writer import DiscussionWriterAgent
+    from arakis.models.analysis import MetaAnalysisResult
     from arakis.models.paper import Paper
-    from arakis.models.analysis import MetaAnalysisResult, AnalysisMethod, EffectMeasure
     from arakis.rag import Retriever
 
     console.print("[bold]Writing Discussion Section...[/bold]\n")
@@ -1162,7 +1237,9 @@ def write_discussion(
         console.print(f"[red]Error loading analysis results: {e}[/red]")
         raise typer.Exit(1)
 
-    console.print(f"Loaded meta-analysis: {meta_result.studies_included} studies, n={meta_result.total_sample_size}\n")
+    console.print(
+        f"Loaded meta-analysis: {meta_result.studies_included} studies, n={meta_result.total_sample_size}\n"
+    )
 
     # Load literature context if provided
     papers = None
@@ -1176,7 +1253,9 @@ def write_discussion(
     retriever = None
     if use_rag:
         if not papers:
-            console.print("[yellow]Warning: RAG requested but no literature provided. Skipping RAG.[/yellow]\n")
+            console.print(
+                "[yellow]Warning: RAG requested but no literature provided. Skipping RAG.[/yellow]\n"
+            )
         else:
             console.print("[cyan]Indexing papers for RAG...[/cyan]")
             retriever = Retriever(cache_dir=".arakis_cache")
@@ -1191,7 +1270,7 @@ def write_discussion(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Generating discussion...", total=None)
+        progress.add_task("Generating discussion...", total=None)
         discussion_section = _run_async(
             writer.write_complete_discussion(
                 meta_analysis_result=meta_result,
@@ -1214,7 +1293,9 @@ def write_discussion(
     for subsection in discussion_section.subsections:
         discussion_table.add_row(subsection.title, str(subsection.word_count))
 
-    discussion_table.add_row("[bold]Total[/bold]", f"[bold]{discussion_section.total_word_count}[/bold]")
+    discussion_table.add_row(
+        "[bold]Total[/bold]", f"[bold]{discussion_section.total_word_count}[/bold]"
+    )
 
     console.print(discussion_table)
 
@@ -1234,11 +1315,17 @@ def write_discussion(
 
 @app.command()
 def write_abstract(
-    manuscript_file: str = typer.Argument(..., help="JSON file with manuscript sections or introduction/results/discussion files"),
+    manuscript_file: str = typer.Argument(
+        ..., help="JSON file with manuscript sections or introduction/results/discussion files"
+    ),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output markdown file"),
-    format: str = typer.Option("structured", "--format", "-f", help="Format: 'structured' (IMRAD) or 'unstructured'"),
+    format: str = typer.Option(
+        "structured", "--format", "-f", help="Format: 'structured' (IMRAD) or 'unstructured'"
+    ),
     word_limit: int = typer.Option(300, "--word-limit", "-w", help="Maximum word count"),
-    introduction: Optional[str] = typer.Option(None, "--introduction", help="Introduction markdown file"),
+    introduction: Optional[str] = typer.Option(
+        None, "--introduction", help="Introduction markdown file"
+    ),
     methods: Optional[str] = typer.Option(None, "--methods", help="Methods markdown file"),
     results: Optional[str] = typer.Option(None, "--results", help="Results markdown file"),
     discussion: Optional[str] = typer.Option(None, "--discussion", help="Discussion markdown file"),
@@ -1259,6 +1346,7 @@ def write_abstract(
         arakis write-abstract manuscript.json --format unstructured --word-limit 250
     """
     import json
+
     from arakis.agents.abstract_writer import AbstractWriterAgent
     from arakis.models.writing import Manuscript, Section
 
@@ -1266,7 +1354,9 @@ def write_abstract(
 
     # Validate format
     if format not in ["structured", "unstructured"]:
-        console.print(f"[red]Invalid format: {format}. Must be 'structured' or 'unstructured'[/red]")
+        console.print(
+            f"[red]Invalid format: {format}. Must be 'structured' or 'unstructured'[/red]"
+        )
         raise typer.Exit(1)
 
     structured = format == "structured"
@@ -1308,7 +1398,7 @@ def write_abstract(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Generating abstract from sections...", total=None)
+            progress.add_task("Generating abstract from sections...", total=None)
             result = _run_async(
                 writer.write_abstract_from_sections(
                     title="Systematic Review",
@@ -1344,23 +1434,15 @@ def write_abstract(
                 sections_data = data["sections"]
                 if sections_data.get("introduction"):
                     manuscript.introduction = Section(
-                        title="Introduction",
-                        content=sections_data["introduction"]
+                        title="Introduction", content=sections_data["introduction"]
                     )
                 if sections_data.get("methods"):
-                    manuscript.methods = Section(
-                        title="Methods",
-                        content=sections_data["methods"]
-                    )
+                    manuscript.methods = Section(title="Methods", content=sections_data["methods"])
                 if sections_data.get("results"):
-                    manuscript.results = Section(
-                        title="Results",
-                        content=sections_data["results"]
-                    )
+                    manuscript.results = Section(title="Results", content=sections_data["results"])
                 if sections_data.get("discussion"):
                     manuscript.discussion = Section(
-                        title="Discussion",
-                        content=sections_data["discussion"]
+                        title="Discussion", content=sections_data["discussion"]
                     )
 
         except Exception as e:
@@ -1368,8 +1450,12 @@ def write_abstract(
             raise typer.Exit(1)
 
         # Check if manuscript has content
-        if not any([manuscript.introduction, manuscript.methods, manuscript.results, manuscript.discussion]):
-            console.print("[yellow]Warning: No sections found in manuscript. Abstract may be incomplete.[/yellow]\n")
+        if not any(
+            [manuscript.introduction, manuscript.methods, manuscript.results, manuscript.discussion]
+        ):
+            console.print(
+                "[yellow]Warning: No sections found in manuscript. Abstract may be incomplete.[/yellow]\n"
+            )
 
         # Generate abstract
         writer = AbstractWriterAgent()
@@ -1379,8 +1465,10 @@ def write_abstract(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Generating abstract...", total=None)
-            result = _run_async(writer.write_abstract(manuscript, structured=structured, word_limit=word_limit))
+            progress.add_task("Generating abstract...", total=None)
+            result = _run_async(
+                writer.write_abstract(manuscript, structured=structured, word_limit=word_limit)
+            )
 
     # Display results
     console.print("\n[bold green]Abstract Generated![/bold green]\n")
@@ -1400,7 +1488,9 @@ def write_abstract(
 
     # Check word limit
     if result.section.word_count > word_limit:
-        console.print(f"\n[yellow]⚠ Word count ({result.section.word_count}) exceeds limit ({word_limit})[/yellow]")
+        console.print(
+            f"\n[yellow]⚠ Word count ({result.section.word_count}) exceeds limit ({word_limit})[/yellow]"
+        )
 
     # Display abstract
     console.print("\n[bold]Generated Abstract:[/bold]\n")
@@ -1415,19 +1505,27 @@ def write_abstract(
 
 @app.command()
 def workflow(
-    research_question: str = typer.Option(..., "--question", "-q", help="Research question for the systematic review"),
-    include: str = typer.Option(..., "--include", "-i", help="Inclusion criteria (comma-separated)"),
+    research_question: str = typer.Option(
+        ..., "--question", "-q", help="Research question for the systematic review"
+    ),
+    include: str = typer.Option(
+        ..., "--include", "-i", help="Inclusion criteria (comma-separated)"
+    ),
     exclude: str = typer.Option("", "--exclude", "-e", help="Exclusion criteria (comma-separated)"),
     databases: str = typer.Option(
-        "pubmed",
-        "--databases", "-d",
-        help="Comma-separated list of databases"
+        "pubmed", "--databases", "-d", help="Comma-separated list of databases"
     ),
     max_results: int = typer.Option(20, "--max-results", "-n", help="Maximum results per database"),
     output_dir: str = typer.Option("./workflow_output", "--output", "-o", help="Output directory"),
-    fast_mode: bool = typer.Option(False, "--fast", help="Fast mode: single-pass screening and extraction"),
-    extract_text: bool = typer.Option(True, "--extract-text/--no-extract-text", help="Extract full text from PDFs (default: True)"),
-    use_full_text: bool = typer.Option(True, "--use-full-text/--no-full-text", help="Use full text for extraction (default: True)"),
+    fast_mode: bool = typer.Option(
+        False, "--fast", help="Fast mode: single-pass screening and extraction"
+    ),
+    extract_text: bool = typer.Option(
+        True, "--extract-text/--no-extract-text", help="Extract full text from PDFs (default: True)"
+    ),
+    use_full_text: bool = typer.Option(
+        True, "--use-full-text/--no-full-text", help="Use full text for extraction (default: True)"
+    ),
     skip_analysis: bool = typer.Option(False, "--skip-analysis", help="Skip statistical analysis"),
     skip_writing: bool = typer.Option(False, "--skip-writing", help="Skip manuscript writing"),
 ):
@@ -1447,24 +1545,25 @@ def workflow(
     data extraction. Use --no-extract-text or --no-full-text to disable.
     """
     import json
-    import os
-    from pathlib import Path
-    from datetime import datetime
     from dataclasses import asdict
+    from datetime import datetime
+    from pathlib import Path
 
     # Setup
     start_time = datetime.now()
     output_path = Path(output_dir)
     output_path.mkdir(exist_ok=True)
 
-    console.print(Panel.fit(
-        f"[bold blue]Arakis Systematic Review Workflow[/bold blue]\n\n"
-        f"[cyan]Research Question:[/cyan]\n{research_question}\n\n"
-        f"[cyan]Inclusion:[/cyan] {include}\n"
-        f"[cyan]Exclusion:[/cyan] {exclude or '(none)'}\n\n"
-        f"[dim]Output: {output_dir}[/dim]",
-        title="🚀 Starting Workflow"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold blue]Arakis Systematic Review Workflow[/bold blue]\n\n"
+            f"[cyan]Research Question:[/cyan]\n{research_question}\n\n"
+            f"[cyan]Inclusion:[/cyan] {include}\n"
+            f"[cyan]Exclusion:[/cyan] {exclude or '(none)'}\n\n"
+            f"[dim]Output: {output_dir}[/dim]",
+            title="🚀 Starting Workflow",
+        )
+    )
 
     workflow_results = {
         "research_question": research_question,
@@ -1492,13 +1591,15 @@ def workflow(
         def update_search(stage: str, detail: str):
             progress.update(task, description=f"{stage}: {detail}")
 
-        search_result = _run_async(orchestrator.comprehensive_search(
-            research_question=research_question,
-            databases=db_list,
-            max_results_per_query=max_results,
-            validate_queries=False,
-            progress_callback=update_search,
-        ))
+        search_result = _run_async(
+            orchestrator.comprehensive_search(
+                research_question=research_question,
+                databases=db_list,
+                max_results_per_query=max_results,
+                validate_queries=False,
+                progress_callback=update_search,
+            )
+        )
 
     # Save search results
     search_file = output_path / "1_search_results.json"
@@ -1524,8 +1625,8 @@ def workflow(
     console.print(f"[dim]Screening with {mode_desc} mode...[/dim]\n")
 
     from arakis.agents.screener import ScreeningAgent
+    from arakis.models.paper import Paper
     from arakis.models.screening import ScreeningCriteria
-    from arakis.models.paper import Paper, Author, PaperSource
 
     papers = [
         Paper(
@@ -1558,13 +1659,15 @@ def workflow(
             progress.update(task, description=f"Screening {current}/{total}...")
             progress.advance(task)
 
-        decisions = _run_async(screener.screen_batch(
-            papers,
-            criteria,
-            dual_review=not fast_mode,
-            human_review=False,
-            progress_callback=update_screen,
-        ))
+        decisions = _run_async(
+            screener.screen_batch(
+                papers,
+                criteria,
+                dual_review=not fast_mode,
+                human_review=False,
+                progress_callback=update_screen,
+            )
+        )
 
     # Save screening results
     screening_file = output_path / "2_screening_decisions.json"
@@ -1573,7 +1676,9 @@ def workflow(
     with open(screening_file, "w") as f:
         json.dump([asdict(d) for d in decisions], f, indent=2, default=str)
 
-    console.print(f"[green]✓ Included: {summary['included']}, Excluded: {summary['excluded']}, Maybe: {summary['maybe']}[/green]")
+    console.print(
+        f"[green]✓ Included: {summary['included']}, Excluded: {summary['excluded']}, Maybe: {summary['maybe']}[/green]"
+    )
     if not fast_mode:
         console.print(f"[yellow]  Conflicts: {summary['conflicts']}[/yellow]")
     console.print(f"[dim]Saved to {screening_file}[/dim]\n")
@@ -1594,7 +1699,7 @@ def workflow(
     # Stage 3: PDF Fetch and Text Extraction
     if extract_text:
         console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction")
-        console.print(f"[dim]Downloading and extracting text from included papers...[/dim]\n")
+        console.print("[dim]Downloading and extracting text from included papers...[/dim]\n")
 
         from arakis.retrieval.fetcher import PaperFetcher
 
@@ -1609,29 +1714,43 @@ def workflow(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task(f"Fetching 0/{len(included_papers_to_fetch)}...", total=len(included_papers_to_fetch))
+            task = progress.add_task(
+                f"Fetching 0/{len(included_papers_to_fetch)}...",
+                total=len(included_papers_to_fetch),
+            )
 
             def update_fetch(current, total, paper):
                 progress.update(task, description=f"Fetching {current}/{total}...")
                 progress.advance(task)
 
-            fetch_results = _run_async(fetcher.fetch_batch(
-                included_papers_to_fetch, download=True, extract_text=True, progress_callback=update_fetch
-            ))
+            fetch_results = _run_async(
+                fetcher.fetch_batch(
+                    included_papers_to_fetch,
+                    download=True,
+                    extract_text=True,
+                    progress_callback=update_fetch,
+                )
+            )
 
         # Update papers with extracted text
         papers_with_text = sum(1 for r in fetch_results if r.success and r.paper.has_full_text)
-        console.print(f"[green]✓ Extracted text from {papers_with_text}/{len(included_papers_to_fetch)} papers[/green]")
+        console.print(
+            f"[green]✓ Extracted text from {papers_with_text}/{len(included_papers_to_fetch)} papers[/green]"
+        )
         console.print(f"[dim]Downloaded to {output_path / 'pdfs'}[/dim]\n")
 
         workflow_results["stages"]["fetch"] = {
             "total_fetched": len(fetch_results),
             "with_full_text": papers_with_text,
-            "success_rate": papers_with_text / len(included_papers_to_fetch) if included_papers_to_fetch else 0,
+            "success_rate": papers_with_text / len(included_papers_to_fetch)
+            if included_papers_to_fetch
+            else 0,
         }
 
     # Stage 4: Extraction
-    console.print(f"[bold cyan]Stage {'4' if extract_text else '3'}/{'8' if extract_text else '7'}:[/bold cyan] Data Extraction")
+    console.print(
+        f"[bold cyan]Stage {'4' if extract_text else '3'}/{'8' if extract_text else '7'}:[/bold cyan] Data Extraction"
+    )
     extraction_mode = "single-pass" if fast_mode else "triple-review"
     text_mode = "full text" if use_full_text else "abstracts"
     console.print(f"[dim]Extracting with {extraction_mode} mode using {text_mode}...[/dim]\n")
@@ -1651,19 +1770,23 @@ def workflow(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task(f"Extracting 0/{len(included_papers)}...", total=len(included_papers))
+        task = progress.add_task(
+            f"Extracting 0/{len(included_papers)}...", total=len(included_papers)
+        )
 
         def update_extract(current, total):
             progress.update(task, description=f"Extracting {current}/{total}...")
             progress.advance(task)
 
-        extraction_result = _run_async(agent.extract_batch(
-            included_papers,
-            schema,
-            triple_review=not fast_mode,
-            use_full_text=use_full_text,
-            progress_callback=update_extract,
-        ))
+        extraction_result = _run_async(
+            agent.extract_batch(
+                included_papers,
+                schema,
+                triple_review=not fast_mode,
+                use_full_text=use_full_text,
+                progress_callback=update_extract,
+            )
+        )
 
     # Save extraction results
     extraction_file = output_path / "3_extraction_results.json"
@@ -1671,7 +1794,9 @@ def workflow(
         json.dump(extraction_result.to_dict(), f, indent=2, default=str)
 
     console.print(f"[green]✓ Extracted {extraction_result.successful_extractions} papers[/green]")
-    console.print(f"[dim]Quality: {extraction_result.average_quality:.2f}, Cost: ${extraction_result.estimated_cost:.2f}[/dim]")
+    console.print(
+        f"[dim]Quality: {extraction_result.average_quality:.2f}, Cost: ${extraction_result.estimated_cost:.2f}[/dim]"
+    )
     console.print(f"[dim]Saved to {extraction_file}[/dim]\n")
 
     workflow_results["stages"]["extraction"] = {
@@ -1689,8 +1814,8 @@ def workflow(
         console.print("[bold cyan]Stage 4/7:[/bold cyan] Statistical Analysis")
         console.print("[dim]Running analysis...[/dim]\n")
 
-        from arakis.analysis.recommender import AnalysisRecommenderAgent
         from arakis.analysis.meta_analysis import MetaAnalysisEngine
+        from arakis.analysis.recommender import AnalysisRecommenderAgent
         from arakis.models.analysis import AnalysisMethod, EffectMeasure, StudyData
 
         recommender = AnalysisRecommenderAgent()
@@ -1703,7 +1828,9 @@ def workflow(
             task = progress.add_task("Analyzing data...", total=None)
             recommendation = _run_async(recommender.recommend_tests(extraction_result, None))
 
-        console.print(f"[green]✓ Recommended tests: {len(recommendation.recommended_tests)}[/green]")
+        console.print(
+            f"[green]✓ Recommended tests: {len(recommendation.recommended_tests)}[/green]"
+        )
 
         # Try meta-analysis if feasible
         meta_result = None
@@ -1731,16 +1858,20 @@ def workflow(
             has_binary = any(s.intervention_events is not None for s in studies)
 
             if has_continuous or has_binary:
-                effect_measure = EffectMeasure.MEAN_DIFFERENCE if has_continuous else EffectMeasure.ODDS_RATIO
+                effect_measure = (
+                    EffectMeasure.MEAN_DIFFERENCE if has_continuous else EffectMeasure.ODDS_RATIO
+                )
                 meta_engine = MetaAnalysisEngine()
 
                 try:
                     meta_result = meta_engine.calculate_pooled_effect(
                         studies=studies,
                         method=AnalysisMethod.RANDOM_EFFECTS,
-                        effect_measure=effect_measure
+                        effect_measure=effect_measure,
                     )
-                    console.print(f"[green]  ✓ Meta-analysis: Effect={meta_result.pooled_effect:.3f}, p={meta_result.p_value:.4f}[/green]")
+                    console.print(
+                        f"[green]  ✓ Meta-analysis: Effect={meta_result.pooled_effect:.3f}, p={meta_result.p_value:.4f}[/green]"
+                    )
                 except Exception as e:
                     console.print(f"[yellow]  Meta-analysis failed: {e}[/yellow]")
 
@@ -1791,12 +1922,14 @@ def workflow(
     console.print("[bold cyan]Stage 5/7:[/bold cyan] PRISMA Diagram")
     console.print("[dim]Generating diagram...[/dim]\n")
 
-    from arakis.visualization.prisma import PRISMADiagramGenerator
     from arakis.models.visualization import PRISMAFlow
+    from arakis.visualization.prisma import PRISMADiagramGenerator
 
     flow = PRISMAFlow(
         records_identified_total=search_result.prisma_flow.total_identified,
-        records_identified_databases={k: v for k, v in search_result.prisma_flow.records_identified.items()},
+        records_identified_databases={
+            k: v for k, v in search_result.prisma_flow.records_identified.items()
+        },
         records_removed_duplicates=search_result.prisma_flow.duplicates_removed,
         records_screened=len(decisions),
         records_excluded=summary["excluded"],
@@ -1807,10 +1940,10 @@ def workflow(
     )
 
     generator = PRISMADiagramGenerator(output_dir=str(output_path))
-    diagram = generator.generate(flow, "5_prisma_diagram.png")
+    generator.generate(flow, "5_prisma_diagram.png")
     prisma_file = output_path / "5_prisma_diagram.png"
 
-    console.print(f"[green]✓ PRISMA diagram generated[/green]")
+    console.print("[green]✓ PRISMA diagram generated[/green]")
     console.print(f"[dim]Saved to {prisma_file}[/dim]\n")
 
     workflow_results["stages"]["prisma"] = {
@@ -1832,11 +1965,13 @@ def workflow(
             console=console,
         ) as progress:
             task = progress.add_task("Writing introduction...", total=None)
-            intro_section = _run_async(intro_writer.write_complete_introduction(
-                research_question=research_question,
-                literature_context=None,
-                retriever=None,
-            ))
+            intro_section = _run_async(
+                intro_writer.write_complete_introduction(
+                    research_question=research_question,
+                    literature_context=None,
+                    retriever=None,
+                )
+            )
 
         intro_file = output_path / "6_introduction.md"
         with open(intro_file, "w") as f:
@@ -1865,12 +2000,14 @@ def workflow(
             console=console,
         ) as progress:
             task = progress.add_task("Writing results...", total=None)
-            results_section = _run_async(results_writer.write_complete_results_section(
-                prisma_flow=flow,
-                included_papers=included_papers,
-                meta_analysis_result=None,
-                outcome_name="primary outcome",
-            ))
+            results_section = _run_async(
+                results_writer.write_complete_results_section(
+                    prisma_flow=flow,
+                    included_papers=included_papers,
+                    meta_analysis_result=None,
+                    outcome_name="primary outcome",
+                )
+            )
 
         results_file = output_path / "7_results.md"
         with open(results_file, "w") as f:
@@ -1899,16 +2036,18 @@ def workflow(
 
     # Display final summary
     console.print("\n")
-    console.print(Panel.fit(
-        f"[bold green]✓ Workflow Complete![/bold green]\n\n"
-        f"[cyan]Duration:[/cyan] {duration:.1f}s\n"
-        f"[cyan]Total Cost:[/cyan] ${workflow_results['total_cost']:.2f}\n\n"
-        f"[cyan]Papers Found:[/cyan] {workflow_results['stages']['search']['papers_found']}\n"
-        f"[cyan]Papers Included:[/cyan] {workflow_results['stages']['screening']['included']}\n"
-        f"[cyan]Data Extracted:[/cyan] {workflow_results['stages']['extraction']['successful']}\n\n"
-        f"[dim]All outputs saved to: {output_dir}[/dim]",
-        title="🎉 Success"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold green]✓ Workflow Complete![/bold green]\n\n"
+            f"[cyan]Duration:[/cyan] {duration:.1f}s\n"
+            f"[cyan]Total Cost:[/cyan] ${workflow_results['total_cost']:.2f}\n\n"
+            f"[cyan]Papers Found:[/cyan] {workflow_results['stages']['search']['papers_found']}\n"
+            f"[cyan]Papers Included:[/cyan] {workflow_results['stages']['screening']['included']}\n"
+            f"[cyan]Data Extracted:[/cyan] {workflow_results['stages']['extraction']['successful']}\n\n"
+            f"[dim]All outputs saved to: {output_dir}[/dim]",
+            title="🎉 Success",
+        )
+    )
 
     # List output files
     console.print("\n[bold]Output Files:[/bold]")
@@ -1924,6 +2063,7 @@ def workflow(
 def version():
     """Show version information."""
     from arakis import __version__
+
     console.print(f"Arakis v{__version__}")
 
 

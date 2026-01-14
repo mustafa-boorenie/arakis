@@ -34,7 +34,9 @@ class IntroductionWriterAgent:
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-    @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True)
+    @retry_with_exponential_backoff(
+        max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
+    )
     async def _call_openai(
         self,
         messages: list[dict[str, str]],
@@ -137,26 +139,25 @@ class IntroductionWriterAgent:
             # Get paper details from chunks
             for paper_id in paper_ids[:5]:  # Limit to top 5 papers
                 chunk = results[0].chunk  # Use first result as example
-                relevant_papers.append({
-                    "id": paper_id,
-                    "text": chunk.text,
-                    "metadata": chunk.metadata,
-                })
+                relevant_papers.append(
+                    {
+                        "id": paper_id,
+                        "text": chunk.text,
+                        "metadata": chunk.metadata,
+                    }
+                )
         elif literature_context:
             relevant_papers = [
                 {
                     "id": p.best_identifier,
                     "title": p.title,
-                    "abstract": p.abstract[:200] + "..." if p.abstract and len(p.abstract) > 200 else p.abstract,
+                    "abstract": p.abstract[:200] + "..."
+                    if p.abstract and len(p.abstract) > 200
+                    else p.abstract,
                     "year": p.year,
                 }
                 for p in literature_context[:5]
             ]
-
-        context = {
-            "topic": topic,
-            "relevant_literature": relevant_papers,
-        }
 
         prompt = f"""Write the "Background" subsection for a systematic review introduction.
 
@@ -221,11 +222,13 @@ Write only the background text, no headings."""
             query = f"systematic review meta-analysis {research_question}"
             results = await retriever.retrieve_simple(query, top_k=5, diversity=True)
             for result in results:
-                review_context.append({
-                    "id": result.chunk.paper_id,
-                    "text": result.chunk.text,
-                    "score": result.score,
-                })
+                review_context.append(
+                    {
+                        "id": result.chunk.paper_id,
+                        "text": result.chunk.text,
+                        "score": result.score,
+                    }
+                )
         elif existing_reviews:
             review_context = [
                 {

@@ -32,7 +32,9 @@ class AbstractWriterAgent:
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-    @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True)
+    @retry_with_exponential_backoff(
+        max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
+    )
     async def _call_openai(
         self,
         messages: list[dict[str, str]],
@@ -324,7 +326,10 @@ Use the provided tools to extract:
 Extract precise information from the text. For statistics, use exact values mentioned."""
 
         messages = [
-            {"role": "system", "content": "You are a systematic review expert extracting key information for abstract writing."},
+            {
+                "role": "system",
+                "content": "You are a systematic review expert extracting key information for abstract writing.",
+            },
             {"role": "user", "content": extraction_prompt},
         ]
 
@@ -378,14 +383,14 @@ Extract precise information from the text. For statistics, use exact values ment
         components = await self.extract_components(manuscript)
 
         # Compose abstract
-        composition_prompt = f"""Write a {('structured (IMRAD)' if structured else 'unstructured')} abstract for this systematic review.
+        composition_prompt = f"""Write a {("structured (IMRAD)" if structured else "unstructured")} abstract for this systematic review.
 
 **Extracted Information:**
 {json.dumps(components, indent=2)}
 
 **Requirements:**
 - Target length: {word_limit} words (absolute maximum)
-- Format: {'Structured with clear section labels (Background/Objective, Methods, Results, Conclusions)' if structured else 'Single flowing paragraph'}
+- Format: {"Structured with clear section labels (Background/Objective, Methods, Results, Conclusions)" if structured else "Single flowing paragraph"}
 - Include specific statistics: effect sizes, confidence intervals, p-values, I²
 - Past tense for methods/results, present tense for conclusions
 - Clear, concise, objective
@@ -404,7 +409,7 @@ Write the complete abstract now."""
         tokens_used = response.usage.total_tokens if response.usage else 0
         cost = self._estimate_cost(
             response.usage.prompt_tokens if response.usage else 0,
-            response.usage.completion_tokens if response.usage else 0
+            response.usage.completion_tokens if response.usage else 0,
         )
 
         section = Section(title="Abstract", content=content)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """Base class for all search clients."""
 
 from abc import ABC, abstractmethod

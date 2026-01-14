@@ -104,6 +104,10 @@ target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+ignore = [
+    "E501",  # Line too long - often unavoidable in docstrings
+    "E402",  # Module level import not at top - caused by docstrings after __future__ imports
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

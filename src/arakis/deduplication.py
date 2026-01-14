@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 """Multi-strategy deduplication engine for papers."""
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+
 from rapidfuzz import fuzz
 
 from arakis.models.paper import Paper
@@ -61,9 +63,7 @@ class Deduplicator:
         title_index: dict[str, str] = {}  # Normalized title -> canonical ID
 
         for paper in papers:
-            match_id = self._find_match(
-                paper, doi_index, pmid_index, title_index, canonical
-            )
+            match_id = self._find_match(paper, doi_index, pmid_index, title_index, canonical)
 
             if match_id:
                 # This is a duplicate - merge into canonical
@@ -131,15 +131,15 @@ class Deduplicator:
         # Strategy 4: Author + Year + Title prefix
         if paper.authors and paper.year:
             first_author = paper.authors[0].name.lower() if paper.authors else ""
-            title_prefix = norm_title[:self.title_prefix_length] if norm_title else ""
+            title_prefix = norm_title[: self.title_prefix_length] if norm_title else ""
             key = f"{first_author}_{paper.year}_{title_prefix}"
 
             for canonical_id, canonical_paper in canonical.items():
                 if canonical_paper.authors and canonical_paper.year == paper.year:
                     canon_first = canonical_paper.authors[0].name.lower()
-                    canon_prefix = self._normalize_title(
-                        canonical_paper.title
-                    )[:self.title_prefix_length]
+                    canon_prefix = self._normalize_title(canonical_paper.title)[
+                        : self.title_prefix_length
+                    ]
                     canon_key = f"{canon_first}_{canonical_paper.year}_{canon_prefix}"
 
                     if key == canon_key:
@@ -153,7 +153,7 @@ class Deduplicator:
         # Remove common prefixes
         for prefix in ["https://doi.org/", "http://doi.org/", "doi:"]:
             if doi.startswith(prefix):
-                doi = doi[len(prefix):]
+                doi = doi[len(prefix) :]
         return doi
 
     def _normalize_title(self, title: str) -> str:
@@ -201,6 +201,4 @@ class Deduplicator:
             if canonical.citation_count is None:
                 canonical.citation_count = duplicate.citation_count
             else:
-                canonical.citation_count = max(
-                    canonical.citation_count, duplicate.citation_count
-                )
+                canonical.citation_count = max(canonical.citation_count, duplicate.citation_count)

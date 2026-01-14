@@ -3,9 +3,6 @@
 Generates embeddings using OpenAI's text-embedding models with caching.
 """
 
-import time
-from typing import Any
-
 import tiktoken
 from openai import AsyncOpenAI
 

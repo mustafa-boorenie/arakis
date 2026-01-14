@@ -6,8 +6,7 @@ Creates PRISMA-compliant flow diagrams for systematic reviews.
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 from arakis.models.visualization import PRISMADiagram, PRISMAFlow
 
@@ -80,7 +79,10 @@ class PRISMADiagramGenerator:
         # Registers (if any)
         if flow.records_identified_registers > 0:
             self._draw_box(
-                ax, 5.5, y, f"Records identified from\nregisters:\nn = {flow.records_identified_registers}"
+                ax,
+                5.5,
+                y,
+                f"Records identified from\nregisters:\nn = {flow.records_identified_registers}",
             )
 
         y -= self.box_height + 0.3
@@ -93,7 +95,7 @@ class PRISMADiagramGenerator:
         )
 
         if removed_total > 0:
-            removed_text = f"Records removed before screening:\n"
+            removed_text = "Records removed before screening:\n"
             removed_text += f"Duplicate records: n = {flow.records_removed_duplicates}\n"
             if flow.records_removed_automated > 0:
                 removed_text += f"Automated tools: n = {flow.records_removed_automated}\n"

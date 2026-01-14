@@ -1,5 +1,6 @@
-from __future__ import annotations
 """LLM-powered paper screening agent."""
+
+from __future__ import annotations
 
 import json
 from typing import Any
@@ -10,7 +11,6 @@ from arakis.config import get_settings
 from arakis.models.paper import Paper
 from arakis.models.screening import ScreeningCriteria, ScreeningDecision, ScreeningStatus
 from arakis.utils import retry_with_exponential_backoff
-
 
 SCREENING_TOOLS = [
     {
@@ -24,32 +24,29 @@ SCREENING_TOOLS = [
                     "decision": {
                         "type": "string",
                         "enum": ["INCLUDE", "EXCLUDE", "MAYBE"],
-                        "description": "The screening decision"
+                        "description": "The screening decision",
                     },
                     "confidence": {
                         "type": "number",
                         "minimum": 0,
                         "maximum": 1,
-                        "description": "Confidence in the decision (0-1)"
+                        "description": "Confidence in the decision (0-1)",
                     },
-                    "reason": {
-                        "type": "string",
-                        "description": "Detailed reason for the decision"
-                    },
+                    "reason": {"type": "string", "description": "Detailed reason for the decision"},
                     "matched_inclusion": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Which inclusion criteria the paper meets"
+                        "description": "Which inclusion criteria the paper meets",
                     },
                     "matched_exclusion": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Which exclusion criteria the paper meets"
-                    }
+                        "description": "Which exclusion criteria the paper meets",
+                    },
                 },
-                "required": ["decision", "confidence", "reason"]
-            }
-        }
+                "required": ["decision", "confidence", "reason"],
+            },
+        },
     }
 ]
 
@@ -79,7 +76,7 @@ class ScreeningAgent:
         messages: list[dict],
         tools: list | None = None,
         tool_choice: dict | str = "auto",
-        temperature: float = 0.3
+        temperature: float = 0.3,
     ):
         """
         Call OpenAI API with retry logic for rate limits.
@@ -126,10 +123,7 @@ DECISION GUIDELINES:
 For each paper, call the screen_paper function with your decision."""
 
     def _prompt_human_review(
-        self,
-        paper: Paper,
-        ai_decision: ScreeningDecision,
-        criteria: ScreeningCriteria
+        self, paper: Paper, ai_decision: ScreeningDecision, criteria: ScreeningCriteria
     ) -> tuple[ScreeningStatus, str | None]:
         """
         Prompt human for review of AI decision.
@@ -144,43 +138,56 @@ For each paper, call the screen_paper function with your decision."""
         """
         from rich.console import Console
         from rich.panel import Panel
-        from rich.prompt import Prompt, Confirm
+        from rich.prompt import Confirm, Prompt
 
         console = Console()
 
         # Display paper info
         console.print("\n" + "=" * 80)
-        console.print(Panel.fit(
-            f"[bold cyan]Human Review Required[/bold cyan]\n\n"
-            f"Paper ID: {paper.id}",
-            title="Screening Review"
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold cyan]Human Review Required[/bold cyan]\n\nPaper ID: {paper.id}",
+                title="Screening Review",
+            )
+        )
 
-        console.print(f"\n[bold]Title:[/bold]")
+        console.print("\n[bold]Title:[/bold]")
         console.print(f"  {paper.title}")
 
-        console.print(f"\n[bold]Abstract:[/bold]")
-        abstract_preview = paper.abstract[:500] + "..." if paper.abstract and len(paper.abstract) > 500 else paper.abstract or "No abstract available"
+        console.print("\n[bold]Abstract:[/bold]")
+        abstract_preview = (
+            paper.abstract[:500] + "..."
+            if paper.abstract and len(paper.abstract) > 500
+            else paper.abstract or "No abstract available"
+        )
         console.print(f"  {abstract_preview}")
 
-        console.print(f"\n[bold]Metadata:[/bold]")
+        console.print("\n[bold]Metadata:[/bold]")
         console.print(f"  Year: {paper.year or 'Unknown'}")
         console.print(f"  Authors: {paper.authors_string[:100] if paper.authors else 'Unknown'}")
         console.print(f"  Journal: {paper.journal or 'Unknown'}")
 
         # Display AI decision
-        status_color = "green" if ai_decision.status == ScreeningStatus.INCLUDE else "red" if ai_decision.status == ScreeningStatus.EXCLUDE else "yellow"
-        console.print(f"\n[bold]AI Decision:[/bold] [{status_color}]{ai_decision.status.value.upper()}[/{status_color}]")
+        status_color = (
+            "green"
+            if ai_decision.status == ScreeningStatus.INCLUDE
+            else "red"
+            if ai_decision.status == ScreeningStatus.EXCLUDE
+            else "yellow"
+        )
+        console.print(
+            f"\n[bold]AI Decision:[/bold] [{status_color}]{ai_decision.status.value.upper()}[/{status_color}]"
+        )
         console.print(f"[bold]Confidence:[/bold] {ai_decision.confidence:.2f}")
         console.print(f"[bold]Reason:[/bold] {ai_decision.reason}")
 
         if ai_decision.matched_inclusion:
-            console.print(f"\n[bold]Matched Inclusion Criteria:[/bold]")
+            console.print("\n[bold]Matched Inclusion Criteria:[/bold]")
             for criterion in ai_decision.matched_inclusion:
                 console.print(f"  • {criterion}")
 
         if ai_decision.matched_exclusion:
-            console.print(f"\n[bold]Matched Exclusion Criteria:[/bold]")
+            console.print("\n[bold]Matched Exclusion Criteria:[/bold]")
             for criterion in ai_decision.matched_exclusion:
                 console.print(f"  • {criterion}")
 
@@ -200,24 +207,17 @@ For each paper, call the screen_paper function with your decision."""
         console.print("  2. EXCLUDE - Paper should be excluded")
         console.print("  3. MAYBE - Uncertain, needs further review")
 
-        choice = Prompt.ask(
-            "Select decision",
-            choices=["1", "2", "3"],
-            default="3"
-        )
+        choice = Prompt.ask("Select decision", choices=["1", "2", "3"], default="3")
 
         status_map = {
             "1": ScreeningStatus.INCLUDE,
             "2": ScreeningStatus.EXCLUDE,
-            "3": ScreeningStatus.MAYBE
+            "3": ScreeningStatus.MAYBE,
         }
         human_status = status_map[choice]
 
         # Get reason for override
-        human_reason = Prompt.ask(
-            "Reason for override (optional)",
-            default=""
-        )
+        human_reason = Prompt.ask("Reason for override (optional)", default="")
 
         return human_status, human_reason or None
 
@@ -226,7 +226,7 @@ For each paper, call the screen_paper function with your decision."""
         paper: Paper,
         criteria: ScreeningCriteria,
         dual_review: bool = True,
-        human_review: bool = False
+        human_review: bool = False,
     ) -> ScreeningDecision:
         """
         Screen a single paper against criteria.
@@ -288,7 +288,9 @@ For each paper, call the screen_paper function with your decision."""
 
                 # Update reason to include both AI and human reasoning
                 if human_reason:
-                    decision.reason = f"Human override: {human_reason}. Original AI reasoning: {decision.reason}"
+                    decision.reason = (
+                        f"Human override: {human_reason}. Original AI reasoning: {decision.reason}"
+                    )
                 else:
                     decision.reason = f"Human overrode AI decision from {decision.ai_decision.value} to {human_status.value}. Original AI reasoning: {decision.reason}"
 
@@ -297,20 +299,17 @@ For each paper, call the screen_paper function with your decision."""
         return decision
 
     async def _single_screen(
-        self,
-        paper: Paper,
-        criteria: ScreeningCriteria,
-        temperature: float = 0.3
+        self, paper: Paper, criteria: ScreeningCriteria, temperature: float = 0.3
     ) -> ScreeningDecision:
         """Execute a single screening pass."""
         # Prepare paper info
         paper_text = f"""Title: {paper.title}
 
-Abstract: {paper.abstract or 'No abstract available'}
+Abstract: {paper.abstract or "No abstract available"}
 
-Year: {paper.year or 'Unknown'}
-Journal: {paper.journal or 'Unknown'}
-Publication Types: {', '.join(paper.publication_types) or 'Unknown'}"""
+Year: {paper.year or "Unknown"}
+Journal: {paper.journal or "Unknown"}
+Publication Types: {", ".join(paper.publication_types) or "Unknown"}"""
 
         user_prompt = f"""Screen the following paper:
 
@@ -321,7 +320,7 @@ Use the screen_paper function to make your decision."""
         response = await self._call_openai(
             messages=[
                 {"role": "system", "content": self._get_system_prompt(criteria)},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             tools=SCREENING_TOOLS,
             tool_choice={"type": "function", "function": {"name": "screen_paper"}},
@@ -345,7 +344,7 @@ Use the screen_paper function to make your decision."""
             status=ScreeningStatus.MAYBE,
             reason="Failed to parse screening decision",
             confidence=0.0,
-            screener=self.model
+            screener=self.model,
         )
 
     def _parse_decision(self, paper_id: str, args: dict[str, Any]) -> ScreeningDecision:
@@ -365,7 +364,7 @@ Use the screen_paper function to make your decision."""
             confidence=args.get("confidence", 0.5),
             matched_inclusion=args.get("matched_inclusion", []),
             matched_exclusion=args.get("matched_exclusion", []),
-            screener=self.model
+            screener=self.model,
         )
 
     async def screen_batch(
@@ -374,7 +373,7 @@ Use the screen_paper function to make your decision."""
         criteria: ScreeningCriteria,
         dual_review: bool = True,
         human_review: bool = False,
-        progress_callback: callable = None
+        progress_callback: callable = None,
     ) -> list[ScreeningDecision]:
         """
         Screen multiple papers.
@@ -402,10 +401,7 @@ Use the screen_paper function to make your decision."""
 
         return results
 
-    def summarize_screening(
-        self,
-        decisions: list[ScreeningDecision]
-    ) -> dict[str, Any]:
+    def summarize_screening(self, decisions: list[ScreeningDecision]) -> dict[str, Any]:
         """
         Summarize screening results.
 
@@ -422,9 +418,7 @@ Use the screen_paper function to make your decision."""
         human_reviewed = sum(1 for d in decisions if d.human_reviewed)
         overridden = sum(1 for d in decisions if d.overridden)
 
-        avg_confidence = (
-            sum(d.confidence for d in decisions) / total if total > 0 else 0
-        )
+        avg_confidence = sum(d.confidence for d in decisions) / total if total > 0 else 0
 
         summary = {
             "total": total,

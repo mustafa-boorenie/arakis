@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from arakis.api.routers import workflows, manuscripts
+from arakis.api.routers import manuscripts, workflows
 from arakis.config import get_settings
 from arakis.database.connection import async_engine
 
@@ -22,7 +22,9 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     print("🚀 Starting Arakis API...")
-    print(f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'configured'}")
+    print(
+        f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'configured'}"
+    )
     print(f"🔑 Debug mode: {settings.debug}")
 
     yield
@@ -166,6 +168,7 @@ async def full_health_check():
     Checks database, storage, and other dependencies.
     """
     from sqlalchemy import text
+
     from arakis.storage import get_storage_client
 
     health_status = {
@@ -187,7 +190,9 @@ async def full_health_check():
     storage = get_storage_client()
     storage_health = storage.health_check()
     health_status["services"]["storage"] = {
-        "status": "connected" if storage_health.connected and storage_health.bucket_exists else "disconnected",
+        "status": "connected"
+        if storage_health.connected and storage_health.bucket_exists
+        else "disconnected",
         "bucket": storage_health.bucket_name,
         "configured": storage.is_configured,
     }
@@ -218,9 +223,7 @@ async def internal_error_handler(request, exc):
     """Custom 500 handler."""
     return JSONResponse(
         status_code=500,
-        content={
-            "detail": "Internal server error. Please try again or contact support."
-        },
+        content={"detail": "Internal server error. Please try again or contact support."},
     )
 
 

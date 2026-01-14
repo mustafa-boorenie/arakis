@@ -24,10 +24,7 @@ class PMCSource(BaseRetrievalSource):
         """Retrieve paper from PubMed Central."""
         if not paper.pmcid:
             return RetrievalResult(
-                success=False,
-                paper_id=paper.id,
-                source_name=self.name,
-                error="No PMCID available"
+                success=False, paper_id=paper.id, source_name=self.name, error="No PMCID available"
             )
 
         pmcid = paper.pmcid
@@ -76,15 +73,12 @@ class PMCSource(BaseRetrievalSource):
 
         except httpx.HTTPError as e:
             return RetrievalResult(
-                success=False,
-                paper_id=paper.id,
-                source_name=self.name,
-                error=f"HTTP error: {e}"
+                success=False, paper_id=paper.id, source_name=self.name, error=f"HTTP error: {e}"
             )
 
         return RetrievalResult(
             success=False,
             paper_id=paper.id,
             source_name=self.name,
-            error="Paper not accessible in PMC"
+            error="Paper not accessible in PMC",
         )
