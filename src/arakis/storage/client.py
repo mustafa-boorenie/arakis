@@ -7,7 +7,7 @@ import io
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 import boto3
 from botocore.config import Config
@@ -193,7 +193,7 @@ class StorageClient:
             )
 
         try:
-            extra_args = {"ContentType": content_type}
+            extra_args: dict[str, Any] = {"ContentType": content_type}
             if metadata:
                 extra_args["Metadata"] = metadata
 
@@ -246,7 +246,7 @@ class StorageClient:
             )
 
         try:
-            extra_args = {"ContentType": content_type}
+            extra_args: dict[str, Any] = {"ContentType": content_type}
             if metadata:
                 extra_args["Metadata"] = metadata
 
