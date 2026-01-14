@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RAILWAY_SERVICE: arakis-api
+  RAILWAY_SERVICE: api
 
 jobs:
   check-tests:
