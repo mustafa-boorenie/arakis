@@ -1528,6 +1528,9 @@ def workflow(
     ),
     skip_analysis: bool = typer.Option(False, "--skip-analysis", help="Skip statistical analysis"),
     skip_writing: bool = typer.Option(False, "--skip-writing", help="Skip manuscript writing"),
+    schema: str = typer.Option(
+        "rct", "--schema", "-s", help="Extraction schema (rct, cohort, case_control, diagnostic)"
+    ),
 ):
     """
     Run complete systematic review workflow end-to-end.
@@ -1543,6 +1546,12 @@ def workflow(
 
     By default, the workflow extracts and uses full PDF text for higher quality
     data extraction. Use --no-extract-text or --no-full-text to disable.
+
+    Use --schema to specify the extraction schema based on study design:
+    - rct: Randomized controlled trials (default)
+    - cohort: Cohort/observational studies
+    - case_control: Case-control studies
+    - diagnostic: Diagnostic accuracy studies
     """
     import json
     from dataclasses import asdict
@@ -1753,16 +1762,25 @@ def workflow(
     )
     extraction_mode = "single-pass" if fast_mode else "triple-review"
     text_mode = "full text" if use_full_text else "abstracts"
-    console.print(f"[dim]Extracting with {extraction_mode} mode using {text_mode}...[/dim]\n")
+    console.print(f"[dim]Extracting with {extraction_mode} mode using {text_mode}...[/dim]")
+    console.print(f"[dim]Schema: {schema}[/dim]\n")
 
     from arakis.agents.extractor import DataExtractionAgent
-    from arakis.extraction.schemas import get_schema
+    from arakis.extraction.schemas import get_schema, list_schemas
 
     # Get included papers
     included_ids = [d.paper_id for d in decisions if d.status.value == "include"]
     included_papers = [p for p in papers if p.id in included_ids]
 
-    schema = get_schema("rct")  # Default to RCT schema
+    # Get extraction schema
+    try:
+        extraction_schema = get_schema(schema)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        console.print("\n[bold]Available schemas:[/bold]")
+        for s in list_schemas():
+            console.print(f"  • {s}")
+        raise typer.Exit(1)
     agent = DataExtractionAgent()
 
     with Progress(
@@ -1781,7 +1799,7 @@ def workflow(
         extraction_result = _run_async(
             agent.extract_batch(
                 included_papers,
-                schema,
+                extraction_schema,
                 triple_review=not fast_mode,
                 use_full_text=use_full_text,
                 progress_callback=update_extract,
