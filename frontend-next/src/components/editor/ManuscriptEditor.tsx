@@ -13,7 +13,6 @@ import {
   $getRoot,
   $createParagraphNode,
   $createTextNode,
-  type EditorState,
 } from 'lexical';
 import { $createHeadingNode } from '@lexical/rich-text';
 import { useStore } from '@/store';
@@ -122,23 +121,17 @@ function EmptyState() {
 }
 
 export function ManuscriptEditor() {
-  const { editor: editorState, setEditorDirty, setActiveSection } = useStore();
-  const { manuscript, isLoading } = editorState;
+  const { editor: editorStore, setEditorDirty } = useStore();
+  const { manuscript, isLoading } = editorStore;
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleChange = useCallback(
-    (editorState: EditorState) => {
+    () => {
       // Mark as dirty when content changes
       setEditorDirty(true);
     },
     [setEditorDirty]
   );
-
-  const scrollToSection = useCallback((sectionId: string) => {
-    setActiveSection(sectionId);
-    // Scroll to section in editor
-    // This would need DOM element references for each section
-  }, [setActiveSection]);
 
   // Show loading state
   if (isLoading) {

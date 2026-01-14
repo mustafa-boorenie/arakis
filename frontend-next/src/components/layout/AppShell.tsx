@@ -8,10 +8,6 @@ import { Button } from '@/components/ui/button';
 import {
   MessageSquare,
   FileText,
-  Menu,
-  X,
-  PanelLeftClose,
-  PanelLeft
 } from 'lucide-react';
 
 interface AppShellProps {

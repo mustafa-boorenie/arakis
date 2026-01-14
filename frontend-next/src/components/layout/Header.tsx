@@ -2,7 +2,7 @@
 
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, History, FileText } from 'lucide-react';
+import { PlusCircle, FileText } from 'lucide-react';
 
 export function Header() {
   const { resetChat, layout } = useStore();

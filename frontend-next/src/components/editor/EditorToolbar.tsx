@@ -12,7 +12,6 @@ import {
   Strikethrough,
   List,
   ListOrdered,
-  Quote,
   Undo,
   Redo,
 } from 'lucide-react';

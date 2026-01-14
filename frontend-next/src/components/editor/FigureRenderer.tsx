@@ -13,6 +13,7 @@ export function FigureRenderer({ figure }: FigureRendererProps) {
     <Card className="my-6 p-4 text-center">
       <div className="relative aspect-video bg-muted rounded-lg flex items-center justify-center overflow-hidden">
         {figure.file_path ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={figure.file_path}
             alt={figure.title}

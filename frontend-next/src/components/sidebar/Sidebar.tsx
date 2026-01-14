@@ -4,7 +4,6 @@ import { useStore } from '@/store';
 import { WorkflowHistory } from './WorkflowHistory';
 import { ExportMenu } from './ExportMenu';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChatContainer } from '@/components/chat';
 import { MessageSquare, History, PlusCircle, FileText } from 'lucide-react';

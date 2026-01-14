@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
 interface UsePollingOptions<T> {
   enabled: boolean;
@@ -23,64 +24,84 @@ export function usePolling<T>(
 ): UsePollingResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<Error | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [stopped, setStopped] = useState(false);
   const mountedRef = useRef(true);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const poll = useCallback(async () => {
-    if (!mountedRef.current) return;
+  // Memoize isPolling to avoid issues
+  const isPolling = useMemo(() => {
+    return options.enabled && !stopped;
+  }, [options.enabled, stopped]);
 
+  const clearPollingInterval = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const executePoll = useCallback(async (): Promise<boolean> => {
     try {
       const result = await fetcher();
-      if (!mountedRef.current) return;
 
       setData(result);
       setError(null);
       options.onSuccess?.(result);
 
       if (options.shouldStop?.(result)) {
-        setIsPolling(false);
-        return;
+        setStopped(true);
+        return false;
       }
-
-      // Schedule next poll
-      timeoutRef.current = setTimeout(poll, options.interval);
+      return true;
     } catch (err) {
-      if (!mountedRef.current) return;
-      const error = err instanceof Error ? err : new Error(String(err));
-      setError(error);
-      options.onError?.(error);
-      setIsPolling(false);
+      const pollError = err instanceof Error ? err : new Error(String(err));
+      setError(pollError);
+      options.onError?.(pollError);
+      setStopped(true);
+      return false;
     }
   }, [fetcher, options]);
 
   const refetch = useCallback(async () => {
-    await poll();
-  }, [poll]);
+    setStopped(false);
+    await executePoll();
+  }, [executePoll]);
 
   useEffect(() => {
     mountedRef.current = true;
+    setStopped(false);
 
     if (!options.enabled) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-      setIsPolling(false);
+      clearPollingInterval();
       return;
     }
 
-    setIsPolling(true);
-    poll();
+    // Initial fetch
+    const initialFetch = async () => {
+      const shouldContinue = await executePoll();
+      if (!shouldContinue) {
+        clearPollingInterval();
+      }
+    };
+    initialFetch();
+
+    // Set up interval for subsequent polls
+    intervalRef.current = setInterval(async () => {
+      if (!mountedRef.current) {
+        clearPollingInterval();
+        return;
+      }
+      const continuePolling = await executePoll();
+      if (!continuePolling) {
+        clearPollingInterval();
+      }
+    }, options.interval);
 
     return () => {
       mountedRef.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+      clearPollingInterval();
     };
-  }, [options.enabled, poll]);
+  }, [options.enabled, options.interval, executePoll, clearPollingInterval]);
 
   return { data, error, isPolling, refetch };
 }
