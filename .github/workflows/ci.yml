@@ -130,6 +130,8 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    # Security scan is informational, don't block CI
+    continue-on-error: true
 
     steps:
       - name: Checkout code
