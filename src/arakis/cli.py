@@ -533,7 +533,8 @@ def extract(
     if schema == "auto":
         # Auto-detect schema from paper titles and abstracts
         detection_text = " ".join(
-            f"{p.title or ''} {p.abstract or ''}" for p in papers[:10]  # Use first 10 papers
+            f"{p.title or ''} {p.abstract or ''}"
+            for p in papers[:10]  # Use first 10 papers
         )
         detected_schema_name, confidence = detect_schema(detection_text)
         extraction_schema = get_schema(detected_schema_name)
