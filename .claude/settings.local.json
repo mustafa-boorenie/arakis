@@ -76,7 +76,19 @@
       "Bash(open http://localhost:3000)",
       "Bash(gh run watch:*)",
       "Bash(gh run view:*)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://arakis:arakis_dev_password@localhost:5432/arakis\" uvicorn:*)",
+      "Bash(DATABASE_URL=\"postgresql+psycopg2://arakis:arakis_dev_password@localhost:5432/arakis\" alembic revision:*)",
+      "Bash(DATABASE_URL=\"postgresql+psycopg2://arakis:arakis_dev_password@localhost:5432/arakis\" alembic upgrade:*)",
+      "Bash(npm run lint)",
+      "Bash(npx wrangler:*)",
+      "Bash(railway run:*)",
+      "Bash(railway shell:*)",
+      "Bash(railway up:*)",
+      "Bash(docker-compose:*)",
+      "Bash(npm run dev:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)"
     ]
   }
 }

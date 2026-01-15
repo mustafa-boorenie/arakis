@@ -48,10 +48,17 @@ class ApiClient {
       );
     }
 
+    // Handle empty responses (204 No Content)
+    if (response.status === 204 || response.headers.get('content-length') === '0') {
+      return undefined as T;
+    }
+
     // Handle different response types
     const contentType = response.headers.get('content-type');
     if (contentType?.includes('application/json')) {
-      return response.json();
+      const text = await response.text();
+      if (!text) return undefined as T;
+      return JSON.parse(text);
     }
     // For file downloads, return blob
     return response.blob() as unknown as T;

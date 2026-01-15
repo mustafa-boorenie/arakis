@@ -13,7 +13,7 @@ import { DEFAULT_WORKFLOW_FORM } from '@/types';
 
 // ============= Layout State =============
 
-export type LayoutMode = 'chat-fullscreen' | 'split-view';
+export type LayoutMode = 'landing' | 'chat-fullscreen' | 'split-view';
 export type MobileView = 'sidebar' | 'editor';
 
 interface LayoutState {
@@ -22,6 +22,7 @@ interface LayoutState {
   isTransitioning: boolean;
   mobileView: MobileView;
   isMobileSidebarOpen: boolean;
+  isSidebarCollapsed: boolean;
 }
 
 // ============= Workflow State =============
@@ -29,6 +30,7 @@ interface LayoutState {
 interface WorkflowState {
   current: WorkflowResponse | null;
   history: WorkflowResponse[];
+  archived: string[]; // IDs of archived workflows
   isCreating: boolean;
   isPolling: boolean;
 }
@@ -67,6 +69,8 @@ interface AppState {
   setMobileView: (view: MobileView) => void;
   toggleMobileSidebar: () => void;
   setMobileSidebarOpen: (open: boolean) => void;
+  toggleSidebarCollapsed: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 
   // Workflow actions
   setCurrentWorkflow: (workflow: WorkflowResponse | null) => void;
@@ -75,6 +79,8 @@ interface AppState {
   setIsCreating: (isCreating: boolean) => void;
   setIsPolling: (isPolling: boolean) => void;
   removeFromHistory: (id: string) => void;
+  archiveWorkflow: (id: string) => void;
+  unarchiveWorkflow: (id: string) => void;
 
   // Editor actions
   setManuscript: (manuscript: ManuscriptResponse | null) => void;
@@ -98,15 +104,17 @@ export const useStore = create<AppState>()(
       (set) => ({
         // ============= Initial State =============
         layout: {
-          mode: 'chat-fullscreen',
-          sidebarWidth: 380,
+          mode: 'landing',
+          sidebarWidth: 260,
           isTransitioning: false,
           mobileView: 'editor',
           isMobileSidebarOpen: false,
+          isSidebarCollapsed: false,
         },
         workflow: {
           current: null,
           history: [],
+          archived: [],
           isCreating: false,
           isPolling: false,
         },
@@ -158,6 +166,16 @@ export const useStore = create<AppState>()(
             layout: { ...state.layout, isMobileSidebarOpen },
           })),
 
+        toggleSidebarCollapsed: () =>
+          set((state) => ({
+            layout: { ...state.layout, isSidebarCollapsed: !state.layout.isSidebarCollapsed },
+          })),
+
+        setSidebarCollapsed: (isSidebarCollapsed) =>
+          set((state) => ({
+            layout: { ...state.layout, isSidebarCollapsed },
+          })),
+
         // ============= Workflow Actions =============
         setCurrentWorkflow: (workflow) =>
           set((state) => ({
@@ -205,6 +223,29 @@ export const useStore = create<AppState>()(
               current: state.workflow.current?.id === id ? null : state.workflow.current,
             },
           })),
+
+        archiveWorkflow: (id) =>
+          set((state) => {
+            const archived = state.workflow.archived || [];
+            return {
+              workflow: {
+                ...state.workflow,
+                archived: archived.includes(id) ? archived : [...archived, id],
+                current: state.workflow.current?.id === id ? null : state.workflow.current,
+              },
+            };
+          }),
+
+        unarchiveWorkflow: (id) =>
+          set((state) => {
+            const archived = state.workflow.archived || [];
+            return {
+              workflow: {
+                ...state.workflow,
+                archived: archived.filter((archivedId) => archivedId !== id),
+              },
+            };
+          }),
 
         // ============= Editor Actions =============
         setManuscript: (manuscript) =>
@@ -265,7 +306,7 @@ export const useStore = create<AppState>()(
             },
             layout: {
               ...state.layout,
-              mode: 'chat-fullscreen',
+              mode: 'landing',
               mobileView: 'editor',
               isMobileSidebarOpen: false,
             },
@@ -286,8 +327,11 @@ export const useStore = create<AppState>()(
       {
         name: 'arakis-storage',
         partialize: (state) => ({
-          // Only persist workflow history
-          workflow: { history: state.workflow.history },
+          // Persist workflow history and archived IDs
+          workflow: {
+            history: state.workflow.history,
+            archived: state.workflow.archived,
+          },
         }),
       }
     )

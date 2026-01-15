@@ -8,12 +8,15 @@ import { Button } from '@/components/ui/button';
 import {
   MessageSquare,
   FileText,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 
 interface AppShellProps {
   sidebar: React.ReactNode;
   editor: React.ReactNode;
   chat: React.ReactNode;
+  landing?: React.ReactNode;
 }
 
 // Hook to detect mobile screen
@@ -30,8 +33,71 @@ function useIsMobile() {
   return isMobile;
 }
 
-export function AppShell({ sidebar, editor, chat }: AppShellProps) {
-  const { layout, setMobileView, setMobileSidebarOpen } = useStore();
+// Collapsible Sidebar wrapper
+function CollapsibleSidebar({
+  children,
+  isCollapsed,
+  width,
+}: {
+  children: React.ReactNode;
+  isCollapsed: boolean;
+  width: number;
+}) {
+  return (
+    <motion.div
+      initial={false}
+      animate={{
+        width: isCollapsed ? 0 : width,
+        opacity: isCollapsed ? 0 : 1,
+      }}
+      transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+      className={cn(
+        'h-full flex-shrink-0 border-r border-border bg-sidebar overflow-hidden',
+        isCollapsed && 'border-r-0'
+      )}
+    >
+      <div style={{ width }} className="h-full">
+        {children}
+      </div>
+    </motion.div>
+  );
+}
+
+// Sidebar toggle button
+function SidebarToggle({
+  isCollapsed,
+  onToggle,
+}: {
+  isCollapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        'absolute top-3 z-50 p-2 rounded-lg',
+        'bg-background/80 backdrop-blur border border-border',
+        'hover:bg-muted transition-colors',
+        'text-muted-foreground hover:text-foreground',
+        isCollapsed ? 'left-3' : 'left-[270px]'
+      )}
+      style={{
+        left: isCollapsed ? 12 : 248,
+        transition: 'left 0.2s ease',
+      }}
+      title={isCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+    >
+      {isCollapsed ? (
+        <PanelLeft className="w-4 h-4" />
+      ) : (
+        <PanelLeftClose className="w-4 h-4" />
+      )}
+    </button>
+  );
+}
+
+export function AppShell({ sidebar, editor, chat, landing }: AppShellProps) {
+  const { layout, setMobileView, setMobileSidebarOpen, toggleSidebarCollapsed } = useStore();
   const isMobile = useIsMobile();
 
   // Close mobile sidebar when switching to desktop
@@ -41,23 +107,83 @@ export function AppShell({ sidebar, editor, chat }: AppShellProps) {
     }
   }, [isMobile, setMobileSidebarOpen]);
 
+  // Desktop layout with persistent sidebar
+  const renderDesktopWithSidebar = (content: React.ReactNode, key: string) => (
+    <motion.div
+      key={key}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+      className="h-full w-full flex relative"
+    >
+      {/* Sidebar Toggle Button */}
+      <SidebarToggle
+        isCollapsed={layout.isSidebarCollapsed}
+        onToggle={toggleSidebarCollapsed}
+      />
+
+      {/* Collapsible Sidebar */}
+      <CollapsibleSidebar
+        isCollapsed={layout.isSidebarCollapsed}
+        width={layout.sidebarWidth}
+      >
+        {sidebar}
+      </CollapsibleSidebar>
+
+      {/* Main Content */}
+      <div className="flex-1 h-full overflow-hidden min-w-0 min-h-0 flex flex-col">
+        {content}
+      </div>
+    </motion.div>
+  );
+
   return (
     <div className="h-screen w-full overflow-hidden bg-background">
       <AnimatePresence mode="wait">
-        {layout.mode === 'chat-fullscreen' ? (
-          // Full-screen chat mode (same for mobile and desktop)
-          <motion.div
-            key="chat-fullscreen"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="h-full w-full flex items-center justify-center px-2 sm:px-4 md:px-8 lg:px-12"
-          >
-            <div className="w-full max-w-2xl lg:max-w-3xl xl:max-w-4xl 2xl:max-w-5xl h-full flex flex-col">
+        {layout.mode === 'landing' ? (
+          // Landing mode with sidebar + centered input (ChatGPT style)
+          isMobile ? (
+            // Mobile: just show landing view full screen
+            <motion.div
+              key="landing-mobile"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full flex flex-col"
+            >
+              {landing || chat}
+            </motion.div>
+          ) : (
+            // Desktop: sidebar + landing view
+            renderDesktopWithSidebar(landing || chat, 'landing-desktop')
+          )
+        ) : layout.mode === 'chat-fullscreen' ? (
+          // Chat mode with persistent sidebar
+          isMobile ? (
+            // Mobile: full-screen chat
+            <motion.div
+              key="chat-fullscreen-mobile"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="h-full w-full flex flex-col min-h-0 overflow-hidden"
+            >
               {chat}
-            </div>
-          </motion.div>
+            </motion.div>
+          ) : (
+            // Desktop: sidebar + chat (full width, full height for scrolling)
+            renderDesktopWithSidebar(
+              <div className="flex-1 h-full overflow-hidden">
+                <div className="w-full h-full flex flex-col min-h-0">
+                  {chat}
+                </div>
+              </div>,
+              'chat-fullscreen-desktop'
+            )
+          )
         ) : isMobile ? (
           // Mobile split-view: tabs to switch between sidebar and editor
           <motion.div
@@ -128,29 +254,28 @@ export function AppShell({ sidebar, editor, chat }: AppShellProps) {
             </div>
           </motion.div>
         ) : (
-          // Desktop split-view
+          // Desktop split-view (with editor)
           <motion.div
             key="desktop-split-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="h-full w-full flex"
+            className="h-full w-full flex relative"
           >
-            {/* Sidebar */}
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: layout.sidebarWidth, opacity: 1 }}
-              transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
-              className={cn(
-                'h-full flex-shrink-0 border-r bg-muted/30',
-                'min-w-[300px] max-w-[450px]',
-                layout.isTransitioning && 'pointer-events-none'
-              )}
-              style={{ width: layout.sidebarWidth }}
+            {/* Sidebar Toggle Button */}
+            <SidebarToggle
+              isCollapsed={layout.isSidebarCollapsed}
+              onToggle={toggleSidebarCollapsed}
+            />
+
+            {/* Collapsible Sidebar */}
+            <CollapsibleSidebar
+              isCollapsed={layout.isSidebarCollapsed}
+              width={layout.sidebarWidth}
             >
               {sidebar}
-            </motion.div>
+            </CollapsibleSidebar>
 
             {/* Editor */}
             <motion.div

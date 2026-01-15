@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useLayoutEffect, useState } from 'react';
+import { useEffect, useRef, useLayoutEffect } from 'react';
 import { useStore } from '@/store';
 import { useWorkflow } from '@/hooks';
 import { ChatMessage } from './ChatMessage';
@@ -9,17 +9,8 @@ import { DatabaseSelector } from './DatabaseSelector';
 import { WorkflowProgress } from './WorkflowProgress';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Sparkles, History, FileText, Loader2 } from 'lucide-react';
-import { api } from '@/lib/api/client';
-import type { WorkflowCreateRequest, WorkflowResponse } from '@/types';
+import { Sparkles } from 'lucide-react';
+import type { WorkflowCreateRequest } from '@/types';
 
 const CHAT_PROMPTS = {
   welcome:
@@ -36,12 +27,22 @@ const CHAT_PROMPTS = {
     'Starting your systematic review... This may take a few minutes depending on the number of results.',
 };
 
+const EXAMPLE_PROMPTS: Record<string, string[]> = {
+  inclusion: [
+    'Adult patients, RCTs, English language, Published after 2010',
+    'Human studies, Peer-reviewed, Full-text available',
+    'Prospective studies, Sample size > 50, Primary outcome reported',
+  ],
+  exclusion: [
+    'Animal studies, Case reports, Reviews, Editorials',
+    'Pediatric population, Non-English, Abstracts only',
+    'Unpublished data, Duplicate publications, Conference abstracts',
+  ],
+};
+
 export function ChatContainer() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyWorkflows, setHistoryWorkflows] = useState<WorkflowResponse[]>([]);
   const {
     chat,
     addMessage,
@@ -49,62 +50,14 @@ export function ChatContainer() {
     updateFormData,
     workflow,
     layout,
-    setLayoutMode,
-    setManuscript,
-    setCurrentWorkflow,
-    addToHistory,
-    setEditorLoading,
   } = useStore();
   const { createWorkflow, isCreating } = useWorkflow();
 
-  // Load history when drawer opens
-  const handleOpenHistory = async () => {
-    setHistoryOpen(true);
-    setHistoryLoading(true);
-    try {
-      const response = await api.listWorkflows();
-      setHistoryWorkflows(response.workflows);
-      // Also add to store
-      for (const w of response.workflows) {
-        addToHistory(w);
-      }
-    } catch (error) {
-      console.error('Failed to load history:', error);
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  // Load a workflow from history
-  const handleLoadWorkflow = async (w: WorkflowResponse) => {
-    setHistoryOpen(false);
-    setCurrentWorkflow(w);
-
-    if (w.status === 'completed') {
-      setEditorLoading(true);
-      try {
-        const manuscript = await api.getManuscript(w.id);
-        setManuscript(manuscript);
-        setLayoutMode('split-view');
-        setChatStage('complete');
-        addMessage({
-          role: 'assistant',
-          content: `Loaded your review: "${w.research_question}". Found ${w.papers_found} papers, included ${w.papers_included} after screening.`,
-        });
-      } catch (error) {
-        console.error('Failed to load manuscript:', error);
-        addMessage({
-          role: 'assistant',
-          content: 'Failed to load manuscript. Please try again.',
-        });
-      } finally {
-        setEditorLoading(false);
-      }
-    }
-  };
-
-  // Initialize with welcome message
+  // Initialize with welcome message (only if not in landing mode)
   useEffect(() => {
+    // Skip initialization if we're in landing mode - LandingView handles the first step
+    if (layout.mode === 'landing') return;
+
     if (chat.messages.length === 0 && chat.stage === 'welcome') {
       addMessage({
         role: 'assistant',
@@ -112,7 +65,7 @@ export function ChatContainer() {
       });
       setChatStage('question');
     }
-  }, [chat.messages.length, chat.stage, addMessage, setChatStage]);
+  }, [chat.messages.length, chat.stage, addMessage, setChatStage, layout.mode]);
 
   // Auto-scroll to bottom on new messages or stage changes
   useLayoutEffect(() => {
@@ -199,81 +152,13 @@ export function ChatContainer() {
     chat.stage === 'complete';
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      {/* Header - only show in fullscreen chat mode */}
-      {layout.mode === 'chat-fullscreen' && (
-        <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            <span className="font-semibold">Arakis</span>
-          </div>
-          <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={handleOpenHistory}
-              >
-                <History className="w-4 h-4" />
-                History
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[80vh]">
-              <DialogHeader>
-                <DialogTitle>Review History</DialogTitle>
-              </DialogHeader>
-              <ScrollArea className="h-[60vh] mt-4">
-                {historyLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : historyWorkflows.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p>No previous reviews found.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 pr-4">
-                    {historyWorkflows.map((w) => (
-                      <Card
-                        key={w.id}
-                        className="p-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                        onClick={() => handleLoadWorkflow(w)}
-                      >
-                        <p className="font-medium text-sm line-clamp-2">
-                          {w.research_question}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                          <span
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              w.status === 'completed'
-                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                : w.status === 'failed'
-                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                                  : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                            }`}
-                          >
-                            {w.status}
-                          </span>
-                          <span>{w.papers_found} papers found</span>
-                          <span>{w.papers_included} included</span>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </ScrollArea>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
-
+    <div className="flex flex-col h-full min-h-0 w-full">
       {/* Messages - scrollable container */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 lg:p-8 scroll-smooth w-full"
       >
-        <div className="space-y-4 max-w-full mx-auto">
+        <div className="space-y-4 w-full">
           {chat.messages.map((msg) => (
             <ChatMessage key={msg.id} message={msg} />
           ))}
@@ -330,6 +215,31 @@ export function ChatContainer() {
           <div ref={bottomRef} className="h-1" />
         </div>
       </div>
+
+      {/* Example prompts for inclusion/exclusion stages */}
+      {(chat.stage === 'inclusion' || chat.stage === 'exclusion') && (
+        <div className="px-4 pb-2">
+          <p className="text-xs text-muted-foreground mb-2">Try an example:</p>
+          <div className="flex flex-wrap gap-2">
+            {EXAMPLE_PROMPTS[chat.stage]?.map((prompt, index) => (
+              <button
+                key={index}
+                onClick={() => handleUserMessage(prompt)}
+                className="
+                  px-3 py-1.5 text-xs
+                  bg-secondary/50 hover:bg-secondary
+                  border border-border hover:border-foreground/20
+                  rounded-full
+                  text-muted-foreground hover:text-foreground
+                  transition-colors
+                "
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <ChatInput

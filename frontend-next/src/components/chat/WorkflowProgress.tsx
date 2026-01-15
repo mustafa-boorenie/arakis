@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,15 +15,23 @@ import {
   Loader2,
   AlertCircle,
   AlertTriangle,
+  Clock,
 } from 'lucide-react';
 
-const STAGES = [
-  { id: 'searching', label: 'Searching databases', icon: Search },
-  { id: 'screening', label: 'Screening papers', icon: Filter },
-  { id: 'analyzing', label: 'Analyzing data', icon: BarChart3 },
-  { id: 'writing', label: 'Writing manuscript', icon: FileText },
-  { id: 'finalizing', label: 'Finalizing', icon: CheckCircle },
-  { id: 'completed', label: 'Complete', icon: CheckCircle },
+interface StageConfig {
+  id: string;
+  label: string;
+  icon: typeof Search;
+  estimatedMinutes: number;
+}
+
+const STAGES: StageConfig[] = [
+  { id: 'searching', label: 'Searching databases', icon: Search, estimatedMinutes: 2 },
+  { id: 'screening', label: 'Screening papers', icon: Filter, estimatedMinutes: 5 },
+  { id: 'analyzing', label: 'Analyzing data', icon: BarChart3, estimatedMinutes: 3 },
+  { id: 'writing', label: 'Writing manuscript', icon: FileText, estimatedMinutes: 4 },
+  { id: 'finalizing', label: 'Finalizing', icon: CheckCircle, estimatedMinutes: 1 },
+  { id: 'completed', label: 'Complete', icon: CheckCircle, estimatedMinutes: 0 },
 ];
 
 const STAGE_DESCRIPTIONS: Record<string, string> = {
@@ -34,14 +43,38 @@ const STAGE_DESCRIPTIONS: Record<string, string> = {
   completed: 'Your systematic review is ready!',
 };
 
+// Format time remaining
+function formatTimeRemaining(minutes: number): string {
+  if (minutes < 1) return '< 1 min';
+  if (minutes === 1) return '~1 min';
+  return `~${Math.round(minutes)} mins`;
+}
+
+// Get estimated time for a stage
+function getStageEstimate(stageId: string): string {
+  const stage = STAGES.find((s) => s.id === stageId);
+  if (!stage || stage.estimatedMinutes === 0) return '';
+  return formatTimeRemaining(stage.estimatedMinutes);
+}
+
+// Calculate total remaining time from a stage index
+function getTotalRemainingFromStage(stageIndex: number): number {
+  if (stageIndex < 0) return 0;
+  let total = 0;
+  for (let i = stageIndex; i < STAGES.length; i++) {
+    total += STAGES[i].estimatedMinutes;
+  }
+  return total;
+}
+
 export function WorkflowProgress() {
   const { workflow } = useStore();
   const current = workflow.current;
-
-  if (!current) return null;
+  const [, setTick] = useState(0);
 
   // Use current_stage from backend, fall back to derived stage
   const getCurrentStage = () => {
+    if (!current) return 'searching';
     if (current.status === 'completed') return 'completed';
     if (current.status === 'failed') return 'failed';
     if (current.status === 'needs_review') return 'needs_review';
@@ -58,6 +91,20 @@ export function WorkflowProgress() {
   };
 
   const currentStage = getCurrentStage();
+
+  // Force re-render every 30 seconds to update time estimates
+  useEffect(() => {
+    if (currentStage === 'completed' || currentStage === 'failed') return;
+
+    const interval = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [currentStage]);
+
+  if (!current) return null;
+
   const stageIndex = STAGES.findIndex((s) => s.id === currentStage);
   const progress =
     currentStage === 'completed'
@@ -68,6 +115,9 @@ export function WorkflowProgress() {
 
   const isNeedsReview = current.status === 'needs_review';
   const isFailed = current.status === 'failed';
+
+  // Get total remaining time from current stage
+  const totalRemainingMinutes = getTotalRemainingFromStage(stageIndex);
 
   return (
     <Card className="p-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
@@ -93,7 +143,15 @@ export function WorkflowProgress() {
                 ? 'Complete!'
                 : STAGE_DESCRIPTIONS[currentStage] || 'Processing...'}
             </span>
-            <span className="font-medium">{Math.round(progress)}%</span>
+            <div className="flex items-center gap-3">
+              {currentStage !== 'completed' && currentStage !== 'failed' && !isNeedsReview && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" />
+                  {formatTimeRemaining(totalRemainingMinutes)} remaining
+                </span>
+              )}
+              <span className="font-medium">{Math.round(progress)}%</span>
+            </div>
           </div>
           <Progress
             value={progress}
@@ -153,6 +211,12 @@ export function WorkflowProgress() {
                   >
                     {stage.label}
                   </span>
+                  {/* Time estimate for non-complete stages */}
+                  {!isComplete && !isFailed && !isNeedsReview && stage.estimatedMinutes > 0 && (
+                    <span className="text-xs text-muted-foreground mr-2">
+                      {getStageEstimate(stage.id)}
+                    </span>
+                  )}
                   {isActive && !isFailed && !isNeedsReview && (
                     <Badge variant="secondary" className="ml-auto">
                       In Progress
