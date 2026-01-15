@@ -165,9 +165,9 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
 
     Note: This function runs in a background task with its own DB session.
     """
-    from dataclasses import asdict, is_dataclass
     import os
     import traceback
+    from dataclasses import asdict, is_dataclass
 
     from arakis.database.connection import AsyncSessionLocal
     from arakis.database.models import Manuscript, Paper, ScreeningDecision
@@ -272,7 +272,9 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 second_opinion_data = None
                 if decision.second_opinion:
                     second_opinion_data = {
-                        "status": str(decision.second_opinion.status.value) if hasattr(decision.second_opinion.status, 'value') else str(decision.second_opinion.status),
+                        "status": str(decision.second_opinion.status.value)
+                        if hasattr(decision.second_opinion.status, "value")
+                        else str(decision.second_opinion.status),
                         "reason": decision.second_opinion.reason,
                         "confidence": decision.second_opinion.confidence,
                         "matched_inclusion": decision.second_opinion.matched_inclusion,
@@ -280,7 +282,11 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     }
 
                 # Convert status enum to string value
-                status_value = decision.status.value if hasattr(decision.status, 'value') else str(decision.status)
+                status_value = (
+                    decision.status.value
+                    if hasattr(decision.status, "value")
+                    else str(decision.status)
+                )
 
                 db_decision = ScreeningDecision(
                     workflow_id=workflow_id,
@@ -312,19 +318,26 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
 
             # Get included papers (ScreeningStatus values are lowercase: "include", "exclude", "maybe")
             from arakis.models.screening import ScreeningStatus
+
             included_paper_ids = [
-                pid for pid, dec in screening_decisions
-                if dec.status == ScreeningStatus.INCLUDE or (dec.status == ScreeningStatus.MAYBE and not dec.is_conflict)
+                pid
+                for pid, dec in screening_decisions
+                if dec.status == ScreeningStatus.INCLUDE
+                or (dec.status == ScreeningStatus.MAYBE and not dec.is_conflict)
             ]
             workflow.papers_included = len(included_paper_ids)
             await db.commit()
 
-            print(f"[{workflow_id}] Screening complete: {workflow.papers_included} included, {len(conflicts)} conflicts")
+            print(
+                f"[{workflow_id}] Screening complete: {workflow.papers_included} included, {len(conflicts)} conflicts"
+            )
 
             # If there are conflicts, we could pause here for review
             # For now, continue with conservative approach (MAYBE → exclude)
             if conflicts:
-                print(f"[{workflow_id}] Note: {len(conflicts)} screening conflicts will use conservative resolution")
+                print(
+                    f"[{workflow_id}] Note: {len(conflicts)} screening conflicts will use conservative resolution"
+                )
 
             # ============================================================
             # STAGE 3: Generate PRISMA Flow Data
@@ -338,11 +351,14 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             # Get duplicates removed from search results (paper.PRISMAFlow uses 'duplicates_removed')
             duplicates_removed = 0
             if search_results.prisma_flow:
-                duplicates_removed = getattr(search_results.prisma_flow, 'duplicates_removed', 0)
+                duplicates_removed = getattr(search_results.prisma_flow, "duplicates_removed", 0)
 
             prisma_flow = PRISMAFlow(
                 records_identified_total=workflow.papers_found,
-                records_identified_databases={db: workflow.papers_found // len(workflow_data.databases) for db in workflow_data.databases},
+                records_identified_databases={
+                    db: workflow.papers_found // len(workflow_data.databases)
+                    for db in workflow_data.databases
+                },
                 records_removed_duplicates=duplicates_removed,
                 records_screened=workflow.papers_screened,
                 records_excluded=workflow.papers_screened - workflow.papers_included,
@@ -399,7 +415,11 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     inclusion_criteria=inclusion_list,
                     literature_context=included_papers[:10] if included_papers else None,
                 )
-                intro_text = intro_section.to_markdown() if hasattr(intro_section, 'to_markdown') else str(intro_section.content)
+                intro_text = (
+                    intro_section.to_markdown()
+                    if hasattr(intro_section, "to_markdown")
+                    else str(intro_section.content)
+                )
                 total_cost += 1.0
                 print(f"[{workflow_id}] Introduction written")
             except Exception as e:
@@ -409,7 +429,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             # Write Methods
             methods_text = ""
             try:
-                from arakis.agents.methods_writer import MethodsWriterAgent, MethodsContext
+                from arakis.agents.methods_writer import MethodsContext, MethodsWriterAgent
 
                 methods_writer = MethodsWriterAgent()
                 methods_context = MethodsContext(
@@ -423,7 +443,11 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     context=methods_context,
                     has_meta_analysis=False,  # Will update if we do meta-analysis
                 )
-                methods_text = methods_section.to_markdown() if hasattr(methods_section, 'to_markdown') else str(methods_section.content)
+                methods_text = (
+                    methods_section.to_markdown()
+                    if hasattr(methods_section, "to_markdown")
+                    else str(methods_section.content)
+                )
                 total_cost += 0.5
                 print(f"[{workflow_id}] Methods written")
             except Exception as e:
@@ -436,10 +460,10 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
 **Exclusion criteria:** {workflow_data.exclusion_criteria}
 
 ### Information Sources
-Databases searched: {', '.join(workflow_data.databases)}
+Databases searched: {", ".join(workflow_data.databases)}
 
 ### Selection Process
-Papers were screened using {'dual-review' if dual_review else 'single-review'} methodology with AI assistance.
+Papers were screened using {"dual-review" if dual_review else "single-review"} methodology with AI assistance.
 """
 
             # Write Results
@@ -453,7 +477,11 @@ Papers were screened using {'dual-review' if dual_review else 'single-review'} m
                     included_papers=included_papers[:10],
                     meta_analysis_result=None,
                 )
-                results_text = results_section.to_markdown() if hasattr(results_section, 'to_markdown') else str(results_section.content)
+                results_text = (
+                    results_section.to_markdown()
+                    if hasattr(results_section, "to_markdown")
+                    else str(results_section.content)
+                )
                 total_cost += 0.7
                 print(f"[{workflow_id}] Results written")
             except Exception as e:
@@ -475,6 +503,7 @@ The included studies were published across various journals and years.
                 # Generate discussion using a direct OpenAI call since DiscussionWriterAgent
                 # requires meta-analysis results which we may not have
                 from openai import AsyncOpenAI
+
                 from arakis.config import get_settings
 
                 settings = get_settings()
@@ -502,8 +531,11 @@ Format the output in Markdown with appropriate headers. Total length: 500-700 wo
                 response = await client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
-                        {"role": "system", "content": "You are an expert scientific writer specializing in systematic reviews."},
-                        {"role": "user", "content": discussion_prompt}
+                        {
+                            "role": "system",
+                            "content": "You are an expert scientific writer specializing in systematic reviews.",
+                        },
+                        {"role": "user", "content": discussion_prompt},
                     ],
                     temperature=0.6,
                     max_tokens=2000,
@@ -522,7 +554,7 @@ This systematic review examined {workflow_data.research_question}. A total of {w
 The findings of this review should be considered in the context of existing literature on the topic. Further synthesis with previous systematic reviews would strengthen the evidence base.
 
 ### Limitations
-This review has several limitations that should be considered when interpreting the findings. The search was limited to {', '.join(workflow_data.databases)}, which may have excluded relevant studies from other databases. The screening process, while systematic, may have inadvertently excluded some relevant studies.
+This review has several limitations that should be considered when interpreting the findings. The search was limited to {", ".join(workflow_data.databases)}, which may have excluded relevant studies from other databases. The screening process, while systematic, may have inadvertently excluded some relevant studies.
 
 ### Implications
 The findings of this review have implications for both clinical practice and future research. Further high-quality primary studies are needed to address gaps in the current evidence base.
@@ -550,14 +582,18 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                     structured=True,
                     word_limit=300,
                 )
-                abstract_text = abstract_result.section.content if hasattr(abstract_result, 'section') else str(abstract_result)
+                abstract_text = (
+                    abstract_result.section.content
+                    if hasattr(abstract_result, "section")
+                    else str(abstract_result)
+                )
                 total_cost += 0.2
                 print(f"[{workflow_id}] Abstract written")
             except Exception as e:
                 print(f"[{workflow_id}] Failed to write abstract: {e}")
                 abstract_text = f"""**Background:** {workflow_data.research_question}
 
-**Methods:** We searched {', '.join(workflow_data.databases)} and screened {workflow.papers_screened} papers using predefined inclusion and exclusion criteria.
+**Methods:** We searched {", ".join(workflow_data.databases)} and screened {workflow.papers_screened} papers using predefined inclusion and exclusion criteria.
 
 **Results:** {workflow.papers_included} studies met the inclusion criteria.
 
@@ -573,17 +609,21 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
             for i, paper in enumerate(included_papers[:20], 1):
                 authors_str = ""
                 if paper.authors:
-                    author_names = [a.name if hasattr(a, 'name') else str(a) for a in paper.authors[:3]]
+                    author_names = [
+                        a.name if hasattr(a, "name") else str(a) for a in paper.authors[:3]
+                    ]
                     if len(paper.authors) > 3:
                         author_names.append("et al.")
                     authors_str = ", ".join(author_names)
 
                 citation = f"{authors_str}. {paper.title}. {paper.journal or 'Journal'}. {paper.year or 'n.d.'}."
-                references.append({
-                    "id": f"ref{i}",
-                    "citation": citation,
-                    "doi": paper.doi,
-                })
+                references.append(
+                    {
+                        "id": f"ref{i}",
+                        "citation": citation,
+                        "doi": paper.doi,
+                    }
+                )
 
             # ============================================================
             # STAGE 7: Create Study Characteristics Table
@@ -597,14 +637,22 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                     year = str(paper.year) if paper.year else "N/A"
                     authors_str = ""
                     if paper.authors:
-                        first_author = paper.authors[0].name if hasattr(paper.authors[0], 'name') else str(paper.authors[0])
-                        authors_str = f"{first_author} et al." if len(paper.authors) > 1 else first_author
-                    table_rows.append([
-                        authors_str[:30],
-                        year,
-                        (paper.journal or "N/A")[:25],
-                        paper.source or "N/A",
-                    ])
+                        first_author = (
+                            paper.authors[0].name
+                            if hasattr(paper.authors[0], "name")
+                            else str(paper.authors[0])
+                        )
+                        authors_str = (
+                            f"{first_author} et al." if len(paper.authors) > 1 else first_author
+                        )
+                    table_rows.append(
+                        [
+                            authors_str[:30],
+                            year,
+                            (paper.journal or "N/A")[:25],
+                            paper.source or "N/A",
+                        ]
+                    )
 
                 tables["table1"] = {
                     "id": "table1",
@@ -661,16 +709,22 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
 
             # Extract more useful error info
             if "Semantic Scholar" in full_error:
-                error_msg = "Semantic Scholar rate limit exceeded. Try using only PubMed or OpenAlex."
+                error_msg = (
+                    "Semantic Scholar rate limit exceeded. Try using only PubMed or OpenAlex."
+                )
             elif "OpenAlex" in full_error and "RateLimitError" in full_error:
                 error_msg = "OpenAlex rate limit exceeded. Try using only PubMed."
             elif "PubMed" in full_error and "RateLimitError" in full_error:
                 error_msg = "PubMed rate limit exceeded. Please wait a minute and try again."
             elif "RateLimitError" in error_msg or "RateLimitError" in full_error:
                 if "openai" in full_error.lower():
-                    error_msg = "OpenAI API rate limit exceeded. Please wait a few minutes and try again."
+                    error_msg = (
+                        "OpenAI API rate limit exceeded. Please wait a few minutes and try again."
+                    )
                 else:
-                    error_msg = "API rate limit exceeded. Try using fewer databases or wait a moment."
+                    error_msg = (
+                        "API rate limit exceeded. Try using fewer databases or wait a moment."
+                    )
             elif "APIError" in error_msg or "APIError" in full_error:
                 error_msg = "OpenAI API error. Please check your API key and try again."
             elif "HTTPStatusError" in error_msg or "HTTPStatusError" in full_error:

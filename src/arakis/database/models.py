@@ -33,8 +33,12 @@ class Workflow(Base):
     inclusion_criteria = Column(Text)
     exclusion_criteria = Column(Text)
     databases = Column(JSON)  # ["pubmed", "openalex", ...]
-    status = Column(String(20), default="pending")  # "pending", "running", "needs_review", "completed", "failed"
-    current_stage = Column(String(50), nullable=True)  # "searching", "screening", "analyzing", "writing", "finalizing"
+    status = Column(
+        String(20), default="pending"
+    )  # "pending", "running", "needs_review", "completed", "failed"
+    current_stage = Column(
+        String(50), nullable=True
+    )  # "searching", "screening", "analyzing", "writing", "finalizing"
 
     # Statistics
     papers_found = Column(Integer, default=0)

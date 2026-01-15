@@ -36,9 +36,7 @@ class MethodsContext:
 class MethodsWriterAgent:
     """LLM agent that writes methods section for systematic reviews."""
 
-    def __init__(
-        self, model: str = "gpt-4o", temperature: float = 0.4, max_tokens: int = 4000
-    ):
+    def __init__(self, model: str = "gpt-4o", temperature: float = 0.4, max_tokens: int = 4000):
         """Initialize the methods writer agent.
 
         Args:
@@ -169,9 +167,7 @@ Write only the paragraph text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Eligibility Criteria", content=content)
 
@@ -242,9 +238,7 @@ Write only the paragraph text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Information Sources", content=content)
 
@@ -303,9 +297,7 @@ Write only the paragraph text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Search Strategy", content=content)
 
@@ -365,9 +357,7 @@ Write only the paragraph text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Selection Process", content=content)
 
@@ -436,9 +426,7 @@ Write both subsections in sequence, clearly labeled."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Data Collection Process", content=content)
 
@@ -504,9 +492,7 @@ Write only the paragraph text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(
-            response.usage.prompt_tokens, response.usage.completion_tokens
-        )
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
         section = Section(title="Synthesis Methods", content=content)
 

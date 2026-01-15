@@ -32,9 +32,7 @@ class OpenAlexClient(BaseSearchClient):
         # OpenAlex requests polite email for "polite pool" - faster responses
         # Prefer openalex_email, fall back to unpaywall_email
         self._email = (
-            self.settings.openalex_email
-            or self.settings.unpaywall_email
-            or "research@example.com"
+            self.settings.openalex_email or self.settings.unpaywall_email or "research@example.com"
         )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
