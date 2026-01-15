@@ -80,7 +80,7 @@ export function Sidebar() {
     });
 
     if (w.status === 'completed') {
-      // Load completed workflow with manuscript
+      // Try to load completed workflow with manuscript
       setEditorLoading(true);
       try {
         const manuscript = await api.getManuscript(w.id);
@@ -92,10 +92,14 @@ export function Sidebar() {
           content: `Loaded your review: "${w.research_question}". Found ${w.papers_found} papers, included ${w.papers_included} after screening.`,
         });
       } catch (error) {
+        // Manuscript not available - show info without editor
         console.error('Failed to load manuscript:', error);
+        setManuscript(null);
+        setLayoutMode('chat-fullscreen');
+        setChatStage('complete');
         addMessage({
           role: 'assistant',
-          content: `Failed to load manuscript for "${w.research_question}". Please try again.`,
+          content: `Review: "${w.research_question}"\n\nFound ${w.papers_found} papers, included ${w.papers_included} after screening.\n\n(Manuscript data not available - it may have been deleted from the server)`,
         });
       } finally {
         setEditorLoading(false);
@@ -121,7 +125,12 @@ export function Sidebar() {
     } else {
       // Default: show chat view
       setLayoutMode('chat-fullscreen');
+      setChatStage('complete');
       setManuscript(null);
+      addMessage({
+        role: 'assistant',
+        content: `Review: "${w.research_question}"`,
+      });
     }
   };
 

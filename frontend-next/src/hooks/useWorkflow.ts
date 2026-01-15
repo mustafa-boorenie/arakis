@@ -28,7 +28,7 @@ export function useWorkflow() {
   const { isPolling } = usePolling<WorkflowResponse>(
     () => api.getWorkflow(workflow.current?.id || ''),
     {
-      enabled: workflow.current?.status === 'running' || workflow.current?.status === 'pending',
+      enabled: !!(workflow.current?.id) && (workflow.current?.status === 'running' || workflow.current?.status === 'pending'),
       interval: 5000, // 5 seconds
       shouldStop: (data) =>
         data.status === 'completed' || data.status === 'failed',
@@ -70,6 +70,19 @@ export function useWorkflow() {
           });
           setChatStage('confirm');
         }
+      },
+      onError: (error) => {
+        // Handle 404 errors - workflow no longer exists on server
+        console.error('Polling error:', error);
+        if (workflow.current) {
+          // Mark the workflow as failed in local state
+          updateWorkflow({
+            ...workflow.current,
+            status: 'failed',
+            error_message: 'Workflow no longer exists on server',
+          });
+        }
+        setIsPolling(false);
       },
     }
   );
