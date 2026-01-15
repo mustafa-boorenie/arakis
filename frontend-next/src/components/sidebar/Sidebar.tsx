@@ -28,6 +28,8 @@ export function Sidebar() {
     setChatStage,
     addMessage,
     setEditorLoading,
+    updateFormData,
+    clearMessages,
   } = useStore();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,9 +62,25 @@ export function Sidebar() {
 
   // Handle clicking on a workflow
   const handleWorkflowClick = async (w: WorkflowResponse) => {
+    // Skip if already viewing this workflow
+    if (workflow.current?.id === w.id) return;
+
+    // Clear existing messages when switching workflows
+    clearMessages();
+
+    // Set the current workflow
     setCurrentWorkflow(w);
 
+    // Update form data with workflow info
+    updateFormData({
+      research_question: w.research_question,
+      inclusion_criteria: w.inclusion_criteria || '',
+      exclusion_criteria: w.exclusion_criteria || '',
+      databases: w.databases || ['pubmed'],
+    });
+
     if (w.status === 'completed') {
+      // Load completed workflow with manuscript
       setEditorLoading(true);
       try {
         const manuscript = await api.getManuscript(w.id);
@@ -75,9 +93,35 @@ export function Sidebar() {
         });
       } catch (error) {
         console.error('Failed to load manuscript:', error);
+        addMessage({
+          role: 'assistant',
+          content: `Failed to load manuscript for "${w.research_question}". Please try again.`,
+        });
       } finally {
         setEditorLoading(false);
       }
+    } else if (w.status === 'running' || w.status === 'pending') {
+      // Show in-progress workflow
+      setLayoutMode('chat-fullscreen');
+      setChatStage('creating');
+      setManuscript(null);
+      addMessage({
+        role: 'assistant',
+        content: `Resuming workflow: "${w.research_question}". Current status: ${w.status}.`,
+      });
+    } else if (w.status === 'failed') {
+      // Show failed workflow
+      setLayoutMode('chat-fullscreen');
+      setChatStage('confirm');
+      setManuscript(null);
+      addMessage({
+        role: 'assistant',
+        content: `Workflow "${w.research_question}" failed: ${w.error_message || 'Unknown error'}. You can try starting a new review.`,
+      });
+    } else {
+      // Default: show chat view
+      setLayoutMode('chat-fullscreen');
+      setManuscript(null);
     }
   };
 

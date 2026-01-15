@@ -93,6 +93,7 @@ interface AppState {
   setChatStage: (stage: ChatStage) => void;
   updateFormData: (data: Partial<WorkflowFormData>) => void;
   resetChat: () => void;
+  clearMessages: () => void;
 }
 
 // Generate unique message ID
@@ -321,6 +322,14 @@ export const useStore = create<AppState>()(
               current: null,
               isCreating: false,
               isPolling: false,
+            },
+          })),
+
+        clearMessages: () =>
+          set((state) => ({
+            chat: {
+              ...state.chat,
+              messages: [],
             },
           })),
       }),
