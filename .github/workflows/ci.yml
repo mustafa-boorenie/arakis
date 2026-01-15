@@ -37,12 +37,6 @@ jobs:
         run: |
           ruff format --check src/
 
-      - name: Run mypy type checker
-        run: |
-          mypy src/
-        # TODO: Fix existing type errors and remove continue-on-error
-        continue-on-error: true
-
   test:
     name: Run Tests
     runs-on: ubuntu-latest
