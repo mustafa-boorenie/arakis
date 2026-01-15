@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from arakis.api.routers import manuscripts, workflows
+from arakis.api.routers import manuscripts, settings, workflows
 from arakis.config import get_settings
 from arakis.database.connection import async_engine
 
@@ -104,6 +104,7 @@ app.add_middleware(
 # Include routers
 app.include_router(workflows.router)
 app.include_router(manuscripts.router)
+app.include_router(settings.router)
 
 
 # Root endpoint

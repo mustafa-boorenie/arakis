@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { SettingsDialog } from '@/components/settings';
 import { api } from '@/lib/api/client';
 import type { WorkflowResponse } from '@/types';
 import {
@@ -127,6 +128,7 @@ export function Sidebar() {
           <PenSquare className="w-4 h-4" />
           New review
         </button>
+        <SettingsDialog />
       </div>
 
       {/* Divider */}
