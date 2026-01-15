@@ -6,10 +6,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+import httpx
+
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.arxiv import ArxivSource
-from arakis.retrieval.sources.base import BaseRetrievalSource, RetrievalResult
+from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
+from arakis.retrieval.sources.biorxiv import BiorxivSource
+from arakis.retrieval.sources.core import CORESource
+from arakis.retrieval.sources.crossref import CrossrefSource
+from arakis.retrieval.sources.europe_pmc import EuropePMCSource
 from arakis.retrieval.sources.pmc import PMCSource
+from arakis.retrieval.sources.semantic_scholar import SemanticScholarSource
 from arakis.retrieval.sources.unpaywall import UnpaywallSource
 from arakis.storage import get_storage_client
 
@@ -36,10 +43,19 @@ class PaperFetcher:
     """
     Waterfall fetcher that tries multiple sources to retrieve papers.
 
-    Sources are tried in order of preference:
-    1. Unpaywall - finds legal OA versions
-    2. PMC - free biomedical papers
-    3. arXiv - preprints
+    Sources are tried in order of preference (optimized for speed and reliability):
+    1. bioRxiv/medRxiv - instant DOI check for preprints
+    2. arXiv - fast ID lookup for CS/physics preprints
+    3. PMC - authoritative for biomedical papers
+    4. Europe PMC - broader than US PMC
+    5. Unpaywall - best OA aggregator
+    6. Semantic Scholar - good CS/interdisciplinary coverage
+    7. CORE - large repository (250M+ outputs)
+    8. Crossref - publisher links as last resort
+
+    The fetcher also checks:
+    - Cache (S3/R2) first if configured
+    - Pre-populated pdf_url from search phase
 
     The fetcher stops at the first successful source.
     PDFs can be cached to S3-compatible storage (R2, S3, MinIO).
@@ -51,11 +67,16 @@ class PaperFetcher:
         cache_pdfs: bool = True,
     ):
         if sources is None:
-            # Default waterfall order
+            # Optimized waterfall order: fast/reliable sources first
             self.sources = [
-                UnpaywallSource(),
-                PMCSource(),
-                ArxivSource(),
+                BiorxivSource(),  # Instant DOI check for 10.1101/* DOIs
+                ArxivSource(),  # Fast ID-based lookup
+                PMCSource(),  # Authoritative for biomedical
+                EuropePMCSource(),  # Broader than US PMC
+                UnpaywallSource(),  # Best OA aggregator
+                SemanticScholarSource(),  # Good CS coverage
+                CORESource(),  # Large but slower (requires API key)
+                CrossrefSource(),  # Publisher links as last resort
             ]
         else:
             self.sources = sources
@@ -114,6 +135,44 @@ class PaperFetcher:
                     retrieval_result=cache_retrieval,
                     sources_tried=sources_tried,
                 )
+
+        # Check if paper already has a valid PDF URL from search phase
+        if paper.pdf_url and paper.open_access:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.head(paper.pdf_url, follow_redirects=True)
+                    if response.status_code == 200:
+                        sources_tried.append("pre-populated")
+                        result = RetrievalResult(
+                            success=True,
+                            paper_id=paper.id,
+                            source_name="pre-populated",
+                            content_url=paper.pdf_url,
+                            content_type=ContentType.PDF,
+                        )
+
+                        # Download if requested
+                        if download:
+                            pdf_response = await client.get(paper.pdf_url, follow_redirects=True)
+                            if pdf_response.status_code == 200:
+                                result.content = pdf_response.content
+
+                                # Cache the PDF
+                                if self.cache_pdfs and self.storage.is_configured:
+                                    self._cache_pdf(paper_id, result.content, "pre-populated")
+
+                        # Extract text if requested
+                        if extract_text and download and result.content:
+                            await self._extract_text_from_pdf(paper, result.content)
+
+                        return FetchResult(
+                            success=True,
+                            paper=paper,
+                            retrieval_result=result,
+                            sources_tried=sources_tried,
+                        )
+            except Exception:
+                pass  # URL validation failed, continue to external sources
 
         # Try external sources
         for source in self.sources:

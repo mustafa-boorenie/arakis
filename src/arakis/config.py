@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Get key at: https://www.semanticscholar.org/product/api#api-key
     semantic_scholar_api_key: str = ""
 
+    # CORE API (optional - aggregates 250M+ open access outputs)
+    # Free tier: 10k requests/month. Get key at: https://core.ac.uk/services/api
+    core_api_key: str = ""
+
     # OpenAlex polite pool email (optional - faster responses)
     # Just use any email to get into the "polite pool" with better rate limits
     openalex_email: str = ""
