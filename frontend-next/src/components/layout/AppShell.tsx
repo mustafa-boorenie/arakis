@@ -75,13 +75,14 @@ function SidebarToggle({
     <button
       onClick={onToggle}
       className={cn(
-        'absolute top-3 z-50 p-2 rounded-lg',
+        'absolute z-50 p-2 rounded-lg',
         'bg-background/80 backdrop-blur border border-border',
         'hover:bg-muted transition-colors',
         'text-muted-foreground hover:text-foreground',
         isCollapsed ? 'left-3' : 'left-[270px]'
       )}
       style={{
+        top: 32,
         left: isCollapsed ? 12 : 248,
         transition: 'left 0.2s ease',
       }}
