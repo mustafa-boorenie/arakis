@@ -5,6 +5,7 @@ from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, Retr
 from arakis.retrieval.sources.biorxiv import BiorxivSource
 from arakis.retrieval.sources.core import CORESource
 from arakis.retrieval.sources.crossref import CrossrefSource
+from arakis.retrieval.sources.elsevier import ElsevierSource
 from arakis.retrieval.sources.europe_pmc import EuropePMCSource
 from arakis.retrieval.sources.pmc import PMCSource
 from arakis.retrieval.sources.semantic_scholar import SemanticScholarSource
@@ -18,6 +19,7 @@ __all__ = [
     "BiorxivSource",
     "CORESource",
     "CrossrefSource",
+    "ElsevierSource",
     "EuropePMCSource",
     "PMCSource",
     "SemanticScholarSource",

@@ -14,6 +14,7 @@ from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, Retr
 from arakis.retrieval.sources.biorxiv import BiorxivSource
 from arakis.retrieval.sources.core import CORESource
 from arakis.retrieval.sources.crossref import CrossrefSource
+from arakis.retrieval.sources.elsevier import ElsevierSource
 from arakis.retrieval.sources.europe_pmc import EuropePMCSource
 from arakis.retrieval.sources.pmc import PMCSource
 from arakis.retrieval.sources.semantic_scholar import SemanticScholarSource
@@ -49,9 +50,10 @@ class PaperFetcher:
     3. PMC - authoritative for biomedical papers
     4. Europe PMC - broader than US PMC
     5. Unpaywall - best OA aggregator
-    6. Semantic Scholar - good CS/interdisciplinary coverage
-    7. CORE - large repository (250M+ outputs)
-    8. Crossref - publisher links as last resort
+    6. Elsevier - institutional access to ScienceDirect (requires API key)
+    7. Semantic Scholar - good CS/interdisciplinary coverage
+    8. CORE - large repository (250M+ outputs)
+    9. Crossref - publisher links as last resort
 
     The fetcher also checks:
     - Cache (S3/R2) first if configured
@@ -74,6 +76,7 @@ class PaperFetcher:
                 PMCSource(),  # Authoritative for biomedical
                 EuropePMCSource(),  # Broader than US PMC
                 UnpaywallSource(),  # Best OA aggregator
+                ElsevierSource(),  # Institutional access (requires API key)
                 SemanticScholarSource(),  # Good CS coverage
                 CORESource(),  # Large but slower (requires API key)
                 CrossrefSource(),  # Publisher links as last resort
