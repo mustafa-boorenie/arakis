@@ -6,11 +6,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from arakis.api.routers import manuscripts, settings, workflows
+from arakis.api.routers import manuscripts, workflows
+from arakis.api.routers import settings as settings_router
 from arakis.config import get_settings
 from arakis.database.connection import async_engine
 
-settings = get_settings()
+app_settings = get_settings()
 
 
 def run_migrations():
@@ -45,9 +46,9 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Starting Arakis API...")
     print(
-        f"📊 Database: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'configured'}"
+        f"📊 Database: {app_settings.database_url.split('@')[1] if '@' in app_settings.database_url else 'configured'}"
     )
-    print(f"🔑 Debug mode: {settings.debug}")
+    print(f"🔑 Debug mode: {app_settings.debug}")
 
     # Run migrations
     run_migrations()
@@ -104,7 +105,7 @@ app.add_middleware(
 # Include routers
 app.include_router(workflows.router)
 app.include_router(manuscripts.router)
-app.include_router(settings.router)
+app.include_router(settings_router.router)
 
 
 # Root endpoint
@@ -259,7 +260,7 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "arakis.api.main:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=settings.debug,
+        host=app_settings.api_host,
+        port=app_settings.api_port,
+        reload=app_settings.debug,
     )
