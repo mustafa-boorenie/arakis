@@ -140,12 +140,14 @@ arakis write-results --search search_results.json --screening screening_results.
 # Include meta-analysis results
 arakis write-results --search search.json --screening screening.json --analysis analysis.json --output results.md
 
-# Write introduction section
+# Write introduction section (uses Perplexity API by default for literature)
 arakis write-intro "Effect of antihypertensive therapy on blood pressure" --output intro.md
-# With literature context
-arakis write-intro "Research question" --literature papers.json --output intro.md
-# With RAG for automatic literature retrieval
-arakis write-intro "Research question" --literature papers.json --use-rag --output intro.md
+# Disable Perplexity (use provided literature or RAG instead)
+arakis write-intro "Research question" --no-perplexity --literature papers.json --output intro.md
+# With RAG for automatic literature retrieval (when Perplexity disabled)
+arakis write-intro "Research question" --no-perplexity --literature papers.json --use-rag --output intro.md
+# Don't save separate references file
+arakis write-intro "Research question" --no-references --output intro.md
 
 # Write discussion section
 arakis write-discussion analysis.json --outcome "mortality" --output discussion.md
@@ -296,18 +298,64 @@ arakis version
 - Stores: embeddings, metadata, token counts, creation timestamps
 - Provides statistics: cache size, hit rate, total tokens embedded
 
-**17. IntroductionWriterAgent** (`agents/intro_writer.py`)
+**17. PerplexityClient** (`clients/perplexity.py`)
+- Deep research API client for introduction literature retrieval
+- Uses Perplexity Sonar model for web-grounded research with citations
+- **Purpose**: Fetches background literature SEPARATE from systematic review search
+- Key methods:
+  - `research_topic(topic)` → AI-generated summary with citations
+  - `search_for_papers(query, max_results)` → list of Paper objects
+  - `get_literature_context(question, max_papers)` → (summary, papers) tuple
+- Converts search results to `Paper` objects for ReferenceManager
+- Rate limiting: 1 request/second with tenacity retry
+- Cost: ~$0.01-0.05 per research query
+
+**18. ReferenceManager** (`references/manager.py`)
+- Central coordinator for citation management in manuscripts
+- Collects papers, validates citations, generates reference lists
+- Key methods:
+  - `register_paper(paper)` → stores paper by best_identifier
+  - `validate_citations(section)` → checks all citations have registered papers
+  - `generate_reference_list(section)` → formatted APA 6 citations
+  - `extract_citations_from_section(section)` → paper IDs from text
+- Integrates with `CitationExtractor` for parsing `[Paper ID]` patterns
+- Integrates with `CitationFormatter` for APA 6 formatting
+
+**19. CitationFormatter** (`references/formatter.py`)
+- Formats citations in various styles (default: APA 6)
+- Supported styles: APA_6, APA_7, VANCOUVER, CHICAGO, HARVARD
+- APA 6 features:
+  - Authors: `Last, F. M., Last, F. M., & Last, F. M.`
+  - 8+ authors: First 6, `...`, last author
+  - Title in sentence case, journal italicized
+  - DOI as `https://doi.org/...`
+- Methods: `format_citation(paper)`, `format_in_text(paper)`
+
+**20. CitationExtractor** (`references/extractor.py`)
+- Regex-based extraction of `[Paper ID]` citations from text
+- Validates IDs (filters out `[Figure 1]`, `[Table 2]`, `[1]`, etc.)
+- Supports: DOI, PMID, Semantic Scholar, OpenAlex, Perplexity IDs
+- Methods:
+  - `extract_citations(text)` → list of ExtractedCitation with positions
+  - `extract_unique_paper_ids(text)` → unique IDs in order of appearance
+  - `replace_citations_with_numbers(text, order)` → `[1]`, `[2]` format
+
+**21. IntroductionWriterAgent** (`agents/intro_writer.py`)
 - LLM-powered introduction section writer
 - Generates three subsections:
   - **Background**: Broad context → specific problem (200-250 words)
   - **Rationale**: Gaps in literature, justification for review (100-150 words)
   - **Objectives**: Clear, specific aims (80-120 words)
-- Uses RAG system for literature context retrieval (optional)
-- Follows funnel approach: general → specific
+- **Perplexity Integration** (default): Uses Perplexity API for background literature
+  - Literature is separate from systematic review search results
+  - Papers automatically registered with ReferenceManager
+  - Citations validated against provided papers only
+- Fallback chain: Perplexity → RAG → provided literature
+- Returns `tuple[Section, list[Paper]]` with cited papers for reference section
 - Tool functions: `write_background`, `write_rationale`, `write_objectives`
-- Cost: ~$1.00 per complete introduction
+- Cost: ~$1.00 per complete introduction (+ Perplexity API costs)
 
-**18. DiscussionWriterAgent** (`agents/discussion_writer.py`)
+**22. DiscussionWriterAgent** (`agents/discussion_writer.py`)
 - LLM-powered discussion section writer
 - Generates four subsections:
   - **Summary of Main Findings**: Interpret results (150-200 words)
@@ -319,7 +367,7 @@ arakis version
 - Tool functions: `write_key_findings`, `write_comparison_to_literature`, `write_limitations`, `write_implications`
 - Cost: ~$1.00 per complete discussion
 
-**19. Retry Logic with Exponential Backoff** (`utils.py`)
+**23. Retry Logic with Exponential Backoff** (`utils.py`)
 - `@retry_with_exponential_backoff` decorator for OpenAI API calls
 - Handles rate limits (429) and transient errors (5xx) automatically
 - Exponential backoff with jitter prevents overwhelming the API
@@ -450,7 +498,8 @@ arakis version
 **Settings** (`config.py`)
 - Uses pydantic-settings with `.env` file support
 - Required: `OPENAI_API_KEY`, `UNPAYWALL_EMAIL`
-- Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`
+- Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`, `PERPLEXITY_API_KEY`
+- Perplexity settings: `perplexity_api_key`, `perplexity_model` ("sonar" or "sonar-pro")
 - Rate limits: `pubmed_requests_per_second`, `scholarly_min_delay`, `scholarly_max_delay`
 - Access via: `get_settings()` (cached singleton)
 
@@ -482,6 +531,17 @@ Each client implements `normalize_paper()` to convert raw API responses to the c
 - Uniform deduplication across sources
 - Consistent screening regardless of origin
 - Simplified downstream processing
+
+### Perplexity Integration Pattern
+Introduction writing uses Perplexity for background literature (separate from review search):
+1. `PerplexityClient.get_literature_context(question)` fetches papers
+2. Papers registered with `ReferenceManager.register_paper(paper)`
+3. OpenAI generates text with `[paper_id]` citations
+4. `CitationExtractor` validates citations against registered papers
+5. LLM is restricted to citing ONLY provided papers (no training data citations)
+6. `CitationFormatter` generates APA 6 reference list
+
+**Key Design Decision**: Introduction references come from Perplexity deep research, NOT from the systematic review search results. This ensures proper separation between background context and reviewed papers.
 
 ### Retry Pattern with Exponential Backoff
 OpenAI API calls use `@retry_with_exponential_backoff` decorator:
