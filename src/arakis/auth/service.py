@@ -1,6 +1,6 @@
 """Authentication service for user management and OAuth handling."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, update
@@ -86,7 +86,7 @@ class AuthService:
             self.db.add(user)
 
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(user)
 
@@ -115,7 +115,7 @@ class AuthService:
             user_id=user.id,
             token_hash=token_hash,
             device_info=device_info,
-            expires_at=datetime.utcnow() + timedelta(days=self.settings.refresh_token_expire_days),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days),
         )
         self.db.add(db_refresh_token)
         await self.db.commit()
@@ -161,7 +161,7 @@ class AuthService:
         await self.db.execute(
             update(RefreshToken)
             .where(RefreshToken.token_hash == old_token_hash)
-            .values(revoked_at=datetime.utcnow())
+            .values(revoked_at=datetime.now(timezone.utc))
         )
 
         # Create new tokens
@@ -184,7 +184,7 @@ class AuthService:
                 RefreshToken.token_hash == token_hash,
                 RefreshToken.revoked_at.is_(None),
             )
-            .values(revoked_at=datetime.utcnow())
+            .values(revoked_at=datetime.now(timezone.utc))
         )
         await self.db.commit()
         return result.rowcount > 0
@@ -204,7 +204,7 @@ class AuthService:
             select(RefreshToken).where(
                 RefreshToken.token_hash == token_hash,
                 RefreshToken.revoked_at.is_(None),
-                RefreshToken.expires_at > datetime.utcnow(),
+                RefreshToken.expires_at > datetime.now(timezone.utc),
             )
         )
         return result.scalar_one_or_none() is not None

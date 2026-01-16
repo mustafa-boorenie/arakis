@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
@@ -32,13 +32,13 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.access_token_expire_minutes)
 
-    expire = datetime.utcnow() + expires_delta
+    expire = datetime.now(timezone.utc) + expires_delta
 
     payload = {
         "sub": user_id,
         "email": email,
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(timezone.utc),
         "type": "access",
     }
 
@@ -64,7 +64,7 @@ def create_refresh_token(
     if expires_delta is None:
         expires_delta = timedelta(days=settings.refresh_token_expire_days)
 
-    expire = datetime.utcnow() + expires_delta
+    expire = datetime.now(timezone.utc) + expires_delta
 
     # Generate a unique token ID
     token_id = secrets.token_urlsafe(32)
@@ -73,7 +73,7 @@ def create_refresh_token(
         "sub": user_id,
         "jti": token_id,
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(timezone.utc),
         "type": "refresh",
     }
 

@@ -1,7 +1,7 @@
 """Tests for the authentication module."""
 
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
@@ -102,8 +102,8 @@ class TestJWTCreation:
         token = create_access_token("user-123", "test@example.com", expires_delta=custom_delta)
 
         payload = jwt.decode(token, "test-secret-key", algorithms=["HS256"])
-        exp = datetime.utcfromtimestamp(payload["exp"])
-        iat = datetime.utcfromtimestamp(payload["iat"])
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        iat = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
         # Should be approximately 2 hours
         assert (exp - iat).seconds >= 7100  # Allow some tolerance
 
@@ -141,8 +141,8 @@ class TestJWTCreation:
         token, _ = create_refresh_token("user-123", expires_delta=custom_delta)
 
         payload = jwt.decode(token, "test-secret-key", algorithms=["HS256"])
-        exp = datetime.utcfromtimestamp(payload["exp"])
-        iat = datetime.utcfromtimestamp(payload["iat"])
+        exp = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        iat = datetime.fromtimestamp(payload["iat"], tz=timezone.utc)
         # Should be approximately 7 days
         assert (exp - iat).days >= 6
 

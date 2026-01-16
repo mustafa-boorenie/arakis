@@ -1,9 +1,14 @@
 """Pydantic schemas for authentication."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class TokenData(BaseModel):
@@ -89,4 +94,4 @@ class OAuthState(BaseModel):
 
     state: str
     redirect_url: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=_utc_now)
