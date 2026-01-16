@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 from typing import Any
 
 
@@ -240,7 +245,7 @@ class ExtractedData:
 
     # Metadata
     extraction_quality: float = 1.0  # Overall quality score (0-1)
-    extracted_at: datetime = field(default_factory=datetime.utcnow)
+    extracted_at: datetime = field(default_factory=_utc_now)
     extracted_by: str = "DataExtractionAgent"  # Agent or human identifier
     extraction_time_ms: int = 0  # Time taken to extract
 

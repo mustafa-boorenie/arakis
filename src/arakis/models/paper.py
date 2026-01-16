@@ -3,8 +3,13 @@ from __future__ import annotations
 """Data models for papers and authors."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 from typing import Any
 
 
@@ -75,7 +80,7 @@ class Paper:
     raw_data: dict[str, Any] = field(default_factory=dict)
 
     # Processing metadata
-    retrieved_at: datetime = field(default_factory=datetime.utcnow)
+    retrieved_at: datetime = field(default_factory=_utc_now)
     duplicate_of: str | None = None  # ID of primary if this is a duplicate
 
     def __hash__(self) -> int:

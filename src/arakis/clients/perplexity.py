@@ -17,7 +17,7 @@ import hashlib
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -407,7 +407,7 @@ Return at least 5-10 relevant papers."""
             year=year,
             doi=doi,
             source=PaperSource.OPENALEX,  # Use as placeholder
-            retrieved_at=datetime.utcnow(),
+            retrieved_at=datetime.now(timezone.utc),
         )
 
     def _convert_search_result_to_paper(self, search_result: dict[str, Any]) -> Paper | None:
@@ -451,7 +451,7 @@ Return at least 5-10 relevant papers."""
             source=PaperSource.OPENALEX,
             source_url=url,
             raw_data=search_result,
-            retrieved_at=datetime.utcnow(),
+            retrieved_at=datetime.now(timezone.utc),
         )
 
     async def get_literature_context(

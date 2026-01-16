@@ -3,8 +3,13 @@ from __future__ import annotations
 """Models for paper screening decisions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
+
+
+def _utc_now() -> datetime:
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 
 
 class ScreeningStatus(str, Enum):
@@ -30,7 +35,7 @@ class ScreeningDecision:
 
     # Metadata
     screener: str = "gpt-4o"  # Model or human identifier
-    screened_at: datetime = field(default_factory=datetime.utcnow)
+    screened_at: datetime = field(default_factory=_utc_now)
 
     # For dual-review mode
     is_conflict: bool = False
