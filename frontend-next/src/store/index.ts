@@ -319,7 +319,7 @@ export const useStore = create<AppState>()(
             chat: {
               ...state.chat,
               messages: [
-                ...state.chat.messages,
+                ...(state.chat.messages || []),
                 {
                   ...message,
                   id: generateId(),
@@ -484,7 +484,39 @@ export const useStore = create<AppState>()(
             history: state.workflow.history,
             archived: state.workflow.archived,
           },
+          // Persist chat state so it survives OAuth redirects
+          chat: {
+            stage: state.chat.stage,
+            formData: state.chat.formData,
+            // Don't persist messages - they can be regenerated
+          },
+          // Persist layout mode so view is restored after OAuth
+          layout: {
+            mode: state.layout.mode,
+          },
         }),
+        // Safely merge persisted state with defaults to handle old/corrupted data
+        merge: (persistedState, currentState) => {
+          const persisted = persistedState as Partial<AppState> | undefined;
+          return {
+            ...currentState,
+            workflow: {
+              ...currentState.workflow,
+              history: persisted?.workflow?.history || [],
+              archived: persisted?.workflow?.archived || [],
+            },
+            chat: {
+              ...currentState.chat,
+              messages: [], // Always start with fresh messages
+              stage: persisted?.chat?.stage || 'welcome',
+              formData: persisted?.chat?.formData || currentState.chat.formData,
+            },
+            layout: {
+              ...currentState.layout,
+              mode: persisted?.layout?.mode || 'landing',
+            },
+          };
+        },
       }
     )
   )
