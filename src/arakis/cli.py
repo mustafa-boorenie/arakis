@@ -1217,6 +1217,16 @@ def write_intro(
 
     console.print(intro_table)
 
+    # Validate and display citation status
+    validation = writer.validate_citations(intro_section)
+    if validation["valid"]:
+        console.print(f"\n[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+    else:
+        console.print(f"\n[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
+        if validation['missing_papers']:
+            for missing in validation['missing_papers'][:5]:
+                console.print(f"  [yellow]- {missing}[/yellow]")
+
     # Display cited papers
     if cited_papers:
         console.print(f"\n[bold]References ({len(cited_papers)} papers cited):[/bold]")
@@ -2073,6 +2083,9 @@ def workflow(
         with open(intro_file, "w") as f:
             f.write(intro_section.to_markdown())
 
+        # Validate citations
+        validation = intro_writer.validate_citations(intro_section)
+
         # Save references if any papers were cited
         if cited_papers:
             ref_file = output_path / "6_introduction_references.md"
@@ -2080,7 +2093,15 @@ def workflow(
             with open(ref_file, "w") as f:
                 f.write("# References\n\n")
                 f.write(ref_text)
-            console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
+
+            # Report citation validation status
+            if validation["valid"]:
+                console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
+                console.print(f"[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+            else:
+                console.print(f"[yellow]⚠ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/yellow]")
+                console.print(f"[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
+
             console.print(f"[dim]Saved to {intro_file}[/dim]")
             console.print(f"[dim]References saved to {ref_file}[/dim]\n")
         else:
