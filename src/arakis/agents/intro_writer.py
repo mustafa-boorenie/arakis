@@ -149,13 +149,21 @@ class IntroductionWriterAgent:
 - Avoid over-citing (2-3 key papers per claim)
 - Don't describe methods (that's in Methods section)
 - Don't present results (that's in Results section)
-- IMPORTANT: Use the exact Paper ID from the provided literature for citations
+
+**CRITICAL CITATION RULES:**
+- You may ONLY cite papers from the "Available Literature to Cite" list provided
+- Use the EXACT Paper ID in brackets, e.g., [perplexity_abc123] or [doi:10.1234/example]
+- Do NOT invent citations or use papers from your training data
+- Do NOT cite DOIs or papers that are not in the provided list
+- If you need to make a claim but have no matching paper, state it without a citation
+- Every citation MUST match an ID from the provided literature list
 
 **Avoid:**
 - Speculation beyond what literature supports
 - Excessive jargon or abbreviations
 - Starting sentences with "This review..."
-- Describing what the review "will do" (use present tense for objectives)"""
+- Describing what the review "will do" (use present tense for objectives)
+- Citing papers not in the provided literature list"""
 
     async def write_background(
         self,
@@ -248,13 +256,14 @@ class IntroductionWriterAgent:
 **Research Summary:**
 {perplexity_summary if perplexity_summary else "No additional research summary available."}
 
-**Available Literature to Cite:**
+**Available Literature to Cite (USE ONLY THESE):**
 {json.dumps(relevant_papers, indent=2) if relevant_papers else "No literature context provided."}
 
 **Requirements:**
 - Start broad (disease burden, clinical importance)
 - Narrow to the specific topic
-- Cite relevant papers using their exact ID in brackets, e.g., [doi:10.1234/example]
+- ONLY cite papers from the list above using their exact "id" field in brackets
+- Do NOT use any DOIs or citations not in the list above
 - Length: 200-250 words
 - 2-3 paragraphs
 - Present tense for established facts
@@ -360,14 +369,15 @@ Write only the background text, no headings."""
 **Research Summary:**
 {perplexity_summary if perplexity_summary else "No additional research summary available."}
 
-**Existing Reviews:**
+**Available Literature to Cite (USE ONLY THESE):**
 {json.dumps(review_context, indent=2) if review_context else "No previous reviews identified."}
 
 **Requirements:**
 - Identify gaps in existing literature
 - Explain why a new/updated review is needed
 - Justify the importance of answering this question
-- Cite papers using their exact ID in brackets if referencing specific works
+- ONLY cite papers from the list above using their exact "id" field in brackets
+- Do NOT use any DOIs or citations not in the list above
 - Length: 100-150 words
 - 1-2 paragraphs
 - Be compelling but objective
