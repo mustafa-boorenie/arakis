@@ -53,10 +53,12 @@ class Workflow(Base):
     # Error tracking
     error_message = Column(Text, nullable=True)
 
-    # User (optional - for multi-user support later)
+    # User and trial tracking
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    session_id = Column(String(64), nullable=True, index=True)  # For anonymous trial tracking
 
     # Relationships
+    user = relationship("User", back_populates="workflows")
     papers = relationship("Paper", back_populates="workflow", cascade="all, delete-orphan")
     screening_decisions = relationship(
         "ScreeningDecision", back_populates="workflow", cascade="all, delete-orphan"
@@ -220,15 +222,22 @@ class Manuscript(Base):
 
 
 class User(Base):
-    """User account (for future multi-user support)."""
+    """User account with OAuth support."""
 
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
     email = Column(String(255), unique=True, nullable=False, index=True)
-    hashed_password = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # Nullable for OAuth-only users
     full_name = Column(String(255))
     affiliation = Column(String(500))
+
+    # OAuth fields
+    apple_id = Column(String(255), unique=True, nullable=True, index=True)
+    google_id = Column(String(255), unique=True, nullable=True, index=True)
+    avatar_url = Column(String(1000), nullable=True)
+    email_verified = Column(Boolean, default=False)
+    auth_provider = Column(String(20), default="email")  # "email", "apple", "google"
 
     # Status
     is_active = Column(Boolean, default=True)
@@ -241,3 +250,26 @@ class User(Base):
     # API usage tracking (optional)
     total_workflows = Column(Integer, default=0)
     total_cost = Column(Float, default=0.0)
+
+    # Relationships
+    workflows = relationship("Workflow", back_populates="user")
+    refresh_tokens = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class RefreshToken(Base):
+    """Refresh token for JWT authentication."""
+
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String(64), nullable=False, index=True)
+    device_info = Column(String(255), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    revoked_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="refresh_tokens")

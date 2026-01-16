@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,7 @@ from arakis.api.schemas.workflow import (
     WorkflowList,
     WorkflowResponse,
 )
-from arakis.database.models import Workflow
+from arakis.database.models import User, Workflow
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -23,19 +23,60 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 async def create_workflow(
     workflow_data: WorkflowCreate,
     background_tasks: BackgroundTasks,
+    request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Create a new systematic review workflow and start execution in background.
+
+    Trial Mode:
+    - Anonymous users get ONE free workflow (tracked via session cookie)
+    - Second workflow attempt returns 402 (Payment Required) with X-Auth-Required header
+    - After authentication, trial workflows are automatically claimed
 
     The workflow will run asynchronously and update its status as it progresses:
     - pending → running → completed (or failed)
 
     You can poll GET /api/workflows/{id} to check status.
     """
-    # Create workflow in database
     workflow_id = str(uuid4())
+    user_id = None
+    session_id = None
+
+    if current_user:
+        # Authenticated user - assign workflow to user
+        user_id = current_user.id
+    else:
+        # Anonymous user - check trial quota
+        session_id = request.cookies.get("arakis_session")
+
+        if not session_id:
+            # Generate new session ID for trial tracking
+            session_id = str(uuid4())
+            response.set_cookie(
+                key="arakis_session",
+                value=session_id,
+                max_age=60 * 60 * 24 * 30,  # 30 days
+                httponly=True,
+                samesite="lax",
+            )
+        else:
+            # Check if session already has a workflow (trial limit)
+            result = await db.execute(
+                select(Workflow).where(Workflow.session_id == session_id).limit(1)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Trial limit reached. Please sign in to continue.",
+                    headers={"X-Auth-Required": "true"},
+                )
+
+    # Create workflow in database
     workflow = Workflow(
         id=workflow_id,
         research_question=workflow_data.research_question,
@@ -44,6 +85,8 @@ async def create_workflow(
         databases=workflow_data.databases,
         status="pending",
         created_at=datetime.utcnow(),
+        user_id=user_id,
+        session_id=session_id,
     )
 
     db.add(workflow)
@@ -62,28 +105,44 @@ async def create_workflow(
 
 @router.get("/", response_model=WorkflowList)
 async def list_workflows(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
-    List all workflows with optional filtering.
+    List workflows for the current user.
+
+    - Authenticated users see their own workflows
+    - Anonymous users see their trial workflow (if any)
 
     Query parameters:
     - skip: Number of workflows to skip (for pagination)
     - limit: Maximum number of workflows to return
     - status: Filter by status (pending, running, completed, failed)
     """
+    # Build base query with user isolation
+    if current_user:
+        # Authenticated user - show their workflows
+        base_filter = Workflow.user_id == current_user.id
+    else:
+        # Anonymous user - show workflows for their session
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            # No session - return empty list
+            return WorkflowList(workflows=[], total=0)
+        base_filter = Workflow.session_id == session_id
+
     # Build query
-    query = select(Workflow).order_by(Workflow.created_at.desc())
+    query = select(Workflow).where(base_filter).order_by(Workflow.created_at.desc())
 
     if status:
         query = query.where(Workflow.status == status)
 
     # Get total count
-    count_query = select(Workflow)
+    count_query = select(Workflow).where(base_filter)
     if status:
         count_query = count_query.where(Workflow.status == status)
     result = await db.execute(count_query)
@@ -103,15 +162,33 @@ async def list_workflows(
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
 async def get_workflow(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Get details of a specific workflow by ID.
 
     Returns workflow status, statistics, and metadata.
+    Only returns workflows owned by the current user or session.
     """
-    result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+    # Build query with ownership check
+    query = select(Workflow).where(Workflow.id == workflow_id)
+
+    if current_user:
+        # Authenticated user - verify ownership
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        # Anonymous user - verify session ownership
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
     workflow = result.scalar_one_or_none()
 
     if workflow is None:
@@ -126,15 +203,33 @@ async def get_workflow(
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_workflow(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Delete a workflow and all associated data (papers, screening decisions, etc.).
 
     This is a cascade delete that removes all related records.
+    Only allows deletion of workflows owned by the current user or session.
     """
-    result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+    # Build query with ownership check
+    query = select(Workflow).where(Workflow.id == workflow_id)
+
+    if current_user:
+        # Authenticated user - verify ownership
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        # Anonymous user - verify session ownership
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
     workflow = result.scalar_one_or_none()
 
     if workflow is None:
@@ -145,6 +240,48 @@ async def delete_workflow(
 
     await db.delete(workflow)
     await db.commit()
+
+
+@router.post("/claim/{workflow_id}", response_model=WorkflowResponse)
+async def claim_workflow(
+    workflow_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Claim an orphan workflow (no user_id) for the authenticated user.
+
+    This allows users to claim workflows created before authentication
+    if they have the workflow ID.
+    """
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to claim workflows",
+        )
+
+    # Find workflow with no user
+    result = await db.execute(
+        select(Workflow).where(
+            Workflow.id == workflow_id,
+            Workflow.user_id.is_(None),
+        )
+    )
+    workflow = result.scalar_one_or_none()
+
+    if workflow is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found or already claimed",
+        )
+
+    # Claim the workflow
+    workflow.user_id = current_user.id
+    workflow.session_id = None
+    await db.commit()
+    await db.refresh(workflow)
+
+    return WorkflowResponse.model_validate(workflow)
 
 
 # Background task execution function

@@ -8,8 +8,9 @@ import type {
   ChatMessage,
   ChatStage,
   WorkflowFormData,
+  User,
 } from '@/types';
-import { DEFAULT_WORKFLOW_FORM } from '@/types';
+import { DEFAULT_WORKFLOW_FORM, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/types';
 
 // ============= Layout State =============
 
@@ -52,6 +53,19 @@ interface ChatState {
   formData: WorkflowFormData;
 }
 
+// ============= Auth State =============
+
+interface AuthState {
+  user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+  showLoginDialog: boolean;
+  loginDialogMessage: string | null;
+}
+
 // ============= Combined Store =============
 
 interface AppState {
@@ -60,6 +74,7 @@ interface AppState {
   workflow: WorkflowState;
   editor: EditorState;
   chat: ChatState;
+  auth: AuthState;
 
   // Layout actions
   setLayoutMode: (mode: LayoutMode) => void;
@@ -95,6 +110,16 @@ interface AppState {
   updateFormData: (data: Partial<WorkflowFormData>) => void;
   resetChat: () => void;
   clearMessages: () => void;
+
+  // Auth actions
+  setUser: (user: User | null) => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
+  setAuthLoading: (isLoading: boolean) => void;
+  setAuthError: (error: string | null) => void;
+  logout: () => void;
+  initAuth: () => void;
+  openLoginDialog: (message?: string) => void;
+  closeLoginDialog: () => void;
 }
 
 // Generate unique message ID
@@ -130,6 +155,16 @@ export const useStore = create<AppState>()(
           messages: [],
           stage: 'welcome',
           formData: DEFAULT_WORKFLOW_FORM,
+        },
+        auth: {
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+          isLoading: true,
+          error: null,
+          showLoginDialog: false,
+          loginDialogMessage: null,
         },
 
         // ============= Layout Actions =============
@@ -339,6 +374,105 @@ export const useStore = create<AppState>()(
             chat: {
               ...state.chat,
               messages: [],
+            },
+          })),
+
+        // ============= Auth Actions =============
+        setUser: (user) =>
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              user,
+              isAuthenticated: !!user,
+              isLoading: false,
+            },
+          })),
+
+        setTokens: (accessToken, refreshToken) => {
+          // Store tokens in localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+            localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+          }
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              accessToken,
+              refreshToken,
+            },
+          }));
+        },
+
+        setAuthLoading: (isLoading) =>
+          set((state) => ({
+            auth: { ...state.auth, isLoading },
+          })),
+
+        setAuthError: (error) =>
+          set((state) => ({
+            auth: { ...state.auth, error, isLoading: false },
+          })),
+
+        logout: () => {
+          // Clear tokens from localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+          }
+          set(() => ({
+            auth: {
+              user: null,
+              accessToken: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              isLoading: false,
+              error: null,
+              showLoginDialog: false,
+              loginDialogMessage: null,
+            },
+          }));
+        },
+
+        initAuth: () => {
+          // Initialize auth from localStorage
+          if (typeof window !== 'undefined') {
+            const accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+            const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+            if (accessToken && refreshToken) {
+              set((state) => ({
+                auth: {
+                  ...state.auth,
+                  accessToken,
+                  refreshToken,
+                  isLoading: true, // Will fetch user profile
+                },
+              }));
+            } else {
+              set((state) => ({
+                auth: {
+                  ...state.auth,
+                  isLoading: false,
+                },
+              }));
+            }
+          }
+        },
+
+        openLoginDialog: (message) =>
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              showLoginDialog: true,
+              loginDialogMessage: message || null,
+            },
+          })),
+
+        closeLoginDialog: () =>
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              showLoginDialog: false,
+              loginDialogMessage: null,
             },
           })),
       }),

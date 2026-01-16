@@ -5,6 +5,9 @@ import type {
   WorkflowResponse,
   WorkflowListResponse,
   ManuscriptResponse,
+  User,
+  TokenResponse,
+  OAuthLoginResponse,
 } from '@/types';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
@@ -12,7 +15,8 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost
 export class ApiError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public authRequired: boolean = false
   ) {
     super(message);
     this.name = 'ApiError';
@@ -21,24 +25,76 @@ export class ApiError extends Error {
 
 class ApiClient {
   private baseUrl: string;
+  private onTrialLimitReached?: (message: string) => void;
+  private onAuthRequired?: () => void;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
   }
 
+  setOnTrialLimitReached(callback: (message: string) => void) {
+    this.onTrialLimitReached = callback;
+  }
+
+  setOnAuthRequired(callback: () => void) {
+    this.onAuthRequired = callback;
+  }
+
+  private getAccessToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('arakis-access-token');
+  }
+
+  private getRefreshToken(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('arakis-refresh-token');
+  }
+
   private async request<T>(
     endpoint: string,
-    options?: RequestInit
+    options?: RequestInit & { skipAuth?: boolean }
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    };
+
+    // Add auth token if available and not skipped
+    if (!options?.skipAuth) {
+      const token = this.getAccessToken();
+      if (token) {
+        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+      }
+    }
 
     const response = await fetch(url, {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
+      headers,
     });
+
+    // Handle 401 Unauthorized - try to refresh token
+    if (response.status === 401 && !options?.skipAuth) {
+      const refreshed = await this.tryRefreshToken();
+      if (refreshed) {
+        // Retry the request with new token
+        return this.request(endpoint, options);
+      }
+    }
+
+    // Handle 402 Payment Required (trial limit)
+    if (response.status === 402) {
+      const authRequired = response.headers.get('X-Auth-Required') === 'true';
+      const error = await response.json().catch(() => ({}));
+      const message = error.detail || 'Trial limit reached. Please sign in to continue.';
+
+      // Trigger login dialog if callback is set
+      if (authRequired && this.onTrialLimitReached) {
+        this.onTrialLimitReached(message);
+      }
+
+      throw new ApiError(response.status, message, authRequired);
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -62,6 +118,69 @@ class ApiClient {
     }
     // For file downloads, return blob
     return response.blob() as unknown as T;
+  }
+
+  private async tryRefreshToken(): Promise<boolean> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) return false;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+
+      if (!response.ok) {
+        // Refresh failed, clear tokens
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('arakis-access-token');
+          localStorage.removeItem('arakis-refresh-token');
+        }
+        this.onAuthRequired?.();
+        return false;
+      }
+
+      const data: TokenResponse = await response.json();
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('arakis-access-token', data.access_token);
+        localStorage.setItem('arakis-refresh-token', data.refresh_token);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============= Auth Endpoints =============
+
+  async getGoogleLoginUrl(redirectUrl?: string): Promise<OAuthLoginResponse> {
+    const params = redirectUrl ? `?redirect_url=${encodeURIComponent(redirectUrl)}` : '';
+    return this.request(`/api/auth/google/login${params}`, { skipAuth: true });
+  }
+
+  async getAppleLoginUrl(redirectUrl?: string): Promise<OAuthLoginResponse> {
+    const params = redirectUrl ? `?redirect_url=${encodeURIComponent(redirectUrl)}` : '';
+    return this.request(`/api/auth/apple/login${params}`, { skipAuth: true });
+  }
+
+  async refreshTokens(refreshToken: string): Promise<TokenResponse> {
+    return this.request('/api/auth/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      skipAuth: true,
+    });
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    return this.request('/api/auth/logout', {
+      method: 'POST',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  }
+
+  async getCurrentUser(): Promise<User> {
+    return this.request('/api/auth/me');
   }
 
   // ============= Workflow Endpoints =============

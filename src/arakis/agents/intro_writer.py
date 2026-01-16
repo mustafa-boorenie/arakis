@@ -121,10 +121,9 @@ class IntroductionWriterAgent:
 
 1. **Clarity**: Use clear, accessible language appropriate for medical/scientific journals
 2. **Structure**: Funnel approach - broad context → specific problem → review objectives
-3. **Citations**: Reference relevant literature using the exact Paper ID provided in brackets, e.g., [doi:10.1234/example] or [perplexity_abc123]
-4. **Tense**: Present tense for established facts, past tense for previous research
-5. **Objectivity**: Be objective but compelling; establish the importance of the topic
-6. **Flow**: Smooth transitions between paragraphs
+3. **Tense**: Present tense for established facts, past tense for previous research
+4. **Objectivity**: Be objective but compelling; establish the importance of the topic
+5. **Flow**: Smooth transitions between paragraphs
 
 **Introduction Structure:**
 
@@ -150,20 +149,22 @@ class IntroductionWriterAgent:
 - Don't describe methods (that's in Methods section)
 - Don't present results (that's in Results section)
 
-**CRITICAL CITATION RULES:**
-- You may ONLY cite papers from the "Available Literature to Cite" list provided
-- Use the EXACT Paper ID in brackets, e.g., [perplexity_abc123] or [doi:10.1234/example]
-- Do NOT invent citations or use papers from your training data
-- Do NOT cite DOIs or papers that are not in the provided list
-- If you need to make a claim but have no matching paper, state it without a citation
-- Every citation MUST match an ID from the provided literature list
+**CRITICAL CITATION FORMAT:**
+- Use ONLY numeric citations: [1], [2], [3], etc.
+- ONLY use citation numbers from the provided paper list
+- Do NOT use DOIs, PMIDs, or any other citation format
+- Do NOT invent citation numbers beyond what is provided
+- If only papers [1], [2], [3] are provided, you may ONLY cite [1], [2], or [3]
+- Do NOT cite [4], [5], etc. if they don't exist in the list
+- If you need to make a claim but have no matching paper, state it WITHOUT a citation
+- NEVER use citations from your training data
 
 **Avoid:**
 - Speculation beyond what literature supports
 - Excessive jargon or abbreviations
 - Starting sentences with "This review..."
 - Describing what the review "will do" (use present tense for objectives)
-- Citing papers not in the provided literature list"""
+- Using any citation format other than [1], [2], [3]"""
 
     async def write_background(
         self,
@@ -185,69 +186,38 @@ class IntroductionWriterAgent:
         """
         start_time = time.time()
 
-        relevant_papers = []
+        papers: list[Paper] = []
         perplexity_summary = ""
 
         # Priority: Perplexity > RAG > provided literature
         if use_perplexity and self.perplexity.is_configured:
             # Use Perplexity for deep research
             try:
-                summary, papers = await self.perplexity.get_literature_context(topic, max_papers=5)
+                summary, fetched_papers = await self.perplexity.get_literature_context(
+                    topic, max_papers=5
+                )
                 perplexity_summary = summary
+                papers = fetched_papers
 
                 # Register papers with reference manager
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-
-                relevant_papers = [
-                    {
-                        "id": p.best_identifier,
-                        "title": p.title,
-                        "authors": p.authors_string if p.authors else "Unknown",
-                        "year": p.year,
-                        "abstract": (
-                            p.abstract[:200] + "..."
-                            if p.abstract and len(p.abstract) > 200
-                            else p.abstract
-                        ),
-                    }
-                    for p in papers
-                ]
             except Exception:
                 # Fall back to other methods if Perplexity fails
                 pass
 
-        if not relevant_papers and retriever:
-            # Fallback to RAG
-            results = await retriever.retrieve_simple(topic, top_k=10, diversity=True)
-            paper_ids = list(dict.fromkeys([r.chunk.paper_id for r in results]))
-            for paper_id in paper_ids[:5]:
-                chunk = results[0].chunk
-                relevant_papers.append(
-                    {
-                        "id": paper_id,
-                        "text": chunk.text,
-                        "metadata": chunk.metadata,
-                    }
-                )
-
-        elif not relevant_papers and literature_context:
+        if not papers and literature_context:
             # Use provided papers
-            for p in literature_context[:5]:
+            papers = literature_context[:5]
+            for p in papers:
                 self.reference_manager.register_paper(p)
-            relevant_papers = [
-                {
-                    "id": p.best_identifier,
-                    "title": p.title,
-                    "abstract": (
-                        p.abstract[:200] + "..."
-                        if p.abstract and len(p.abstract) > 200
-                        else p.abstract
-                    ),
-                    "year": p.year,
-                }
-                for p in literature_context[:5]
-            ]
+
+        # Format papers with numeric IDs for the prompt
+        papers_formatted = self._format_papers_for_prompt(papers)
+        max_citation = len(papers)
+        valid_range = (
+            f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
+        )
 
         prompt = f"""Write the "Background" subsection for a systematic review introduction.
 
@@ -256,14 +226,18 @@ class IntroductionWriterAgent:
 **Research Summary:**
 {perplexity_summary if perplexity_summary else "No additional research summary available."}
 
-**Available Literature to Cite (USE ONLY THESE):**
-{json.dumps(relevant_papers, indent=2) if relevant_papers else "No literature context provided."}
+**Available Papers to Cite (use ONLY these numeric citations):**
+{papers_formatted}
+
+**IMPORTANT CITATION RULES:**
+- You may ONLY cite using numbers: {valid_range}
+- Do NOT use any other citation format (no DOIs, no author names in brackets)
+- Do NOT invent citations beyond [{max_citation}]
+- If you cannot support a claim with the provided papers, state it without a citation
 
 **Requirements:**
 - Start broad (disease burden, clinical importance)
 - Narrow to the specific topic
-- ONLY cite papers from the list above using their exact "id" field in brackets
-- Do NOT use any DOIs or citations not in the list above
 - Length: 200-250 words
 - 2-3 paragraphs
 - Present tense for established facts
@@ -275,22 +249,22 @@ Write only the background text, no headings."""
             {"role": "user", "content": prompt},
         ]
 
-        response = await self._call_openai(messages)
-        content = response.choices[0].message.content
+        # Generate with validation, retry, and cleanup
+        content, used_citations = await self._generate_with_validation(
+            messages, papers, max_retries=1
+        )
 
         elapsed_ms = int((time.time() - start_time) * 1000)
-        tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
-        # Create section and extract citations
+        # Create section and extract citations (now using paper IDs)
         section = Section(title="Background", content=content)
         section.citations = self._citation_extractor.extract_unique_paper_ids(content)
 
         return WritingResult(
             section=section,
             generation_time_ms=elapsed_ms,
-            tokens_used=tokens_used,
-            cost_usd=cost,
+            tokens_used=0,  # Can't track across retries easily
+            cost_usd=0.0,
             success=True,
         )
 
@@ -314,53 +288,35 @@ Write only the background text, no headings."""
         """
         start_time = time.time()
 
-        review_context = []
+        papers: list[Paper] = []
         perplexity_summary = ""
 
         # Priority: Perplexity > RAG > provided literature
         if use_perplexity and self.perplexity.is_configured:
             try:
                 query = f"systematic review meta-analysis {research_question}"
-                summary, papers = await self.perplexity.get_literature_context(query, max_papers=3)
+                summary, fetched_papers = await self.perplexity.get_literature_context(
+                    query, max_papers=3
+                )
                 perplexity_summary = summary
+                papers = fetched_papers
 
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-
-                review_context = [
-                    {
-                        "id": p.best_identifier,
-                        "title": p.title,
-                        "year": p.year,
-                    }
-                    for p in papers
-                ]
             except Exception:
                 pass
 
-        if not review_context and retriever:
-            query = f"systematic review meta-analysis {research_question}"
-            results = await retriever.retrieve_simple(query, top_k=5, diversity=True)
-            for result in results:
-                review_context.append(
-                    {
-                        "id": result.chunk.paper_id,
-                        "text": result.chunk.text,
-                        "score": result.score,
-                    }
-                )
-
-        elif not review_context and existing_reviews:
-            for r in existing_reviews[:3]:
+        if not papers and existing_reviews:
+            papers = existing_reviews[:3]
+            for r in papers:
                 self.reference_manager.register_paper(r)
-            review_context = [
-                {
-                    "id": r.best_identifier,
-                    "title": r.title,
-                    "year": r.year,
-                }
-                for r in existing_reviews[:3]
-            ]
+
+        # Format papers with numeric IDs for the prompt
+        papers_formatted = self._format_papers_for_prompt(papers)
+        max_citation = len(papers)
+        valid_range = (
+            f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
+        )
 
         prompt = f"""Write the "Rationale" subsection for a systematic review introduction.
 
@@ -369,15 +325,19 @@ Write only the background text, no headings."""
 **Research Summary:**
 {perplexity_summary if perplexity_summary else "No additional research summary available."}
 
-**Available Literature to Cite (USE ONLY THESE):**
-{json.dumps(review_context, indent=2) if review_context else "No previous reviews identified."}
+**Available Papers to Cite (use ONLY these numeric citations):**
+{papers_formatted}
+
+**IMPORTANT CITATION RULES:**
+- You may ONLY cite using numbers: {valid_range}
+- Do NOT use any other citation format (no DOIs, no author names in brackets)
+- Do NOT invent citations beyond [{max_citation}]
+- If you cannot support a claim with the provided papers, state it without a citation
 
 **Requirements:**
 - Identify gaps in existing literature
 - Explain why a new/updated review is needed
 - Justify the importance of answering this question
-- ONLY cite papers from the list above using their exact "id" field in brackets
-- Do NOT use any DOIs or citations not in the list above
 - Length: 100-150 words
 - 1-2 paragraphs
 - Be compelling but objective
@@ -389,22 +349,22 @@ Write only the rationale text, no headings."""
             {"role": "user", "content": prompt},
         ]
 
-        response = await self._call_openai(messages)
-        content = response.choices[0].message.content
+        # Generate with validation, retry, and cleanup
+        content, used_citations = await self._generate_with_validation(
+            messages, papers, max_retries=1
+        )
 
         elapsed_ms = int((time.time() - start_time) * 1000)
-        tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
 
-        # Create section and extract citations
+        # Create section and extract citations (now using paper IDs)
         section = Section(title="Rationale", content=content)
         section.citations = self._citation_extractor.extract_unique_paper_ids(content)
 
         return WritingResult(
             section=section,
             generation_time_ms=elapsed_ms,
-            tokens_used=tokens_used,
-            cost_usd=cost,
+            tokens_used=0,  # Can't track across retries easily
+            cost_usd=0.0,
             success=True,
         )
 
@@ -582,3 +542,169 @@ Write only the objectives text, no headings."""
         input_cost = (prompt_tokens / 1_000_000) * 2.50
         output_cost = (completion_tokens / 1_000_000) * 10.00
         return input_cost + output_cost
+
+    # ==================== Numeric Citation Helper Methods ====================
+
+    def _create_numeric_paper_mapping(
+        self, papers: list[Paper]
+    ) -> dict[int, Paper]:
+        """Create mapping from numeric IDs to papers.
+
+        Args:
+            papers: List of papers
+
+        Returns:
+            Dict mapping 1, 2, 3... to papers
+        """
+        return {i + 1: paper for i, paper in enumerate(papers)}
+
+    def _format_papers_for_prompt(self, papers: list[Paper]) -> str:
+        """Format papers with numeric IDs for LLM prompt.
+
+        Args:
+            papers: List of papers to format
+
+        Returns:
+            Formatted string listing papers with numeric IDs
+        """
+        if not papers:
+            return "No papers available to cite."
+
+        lines = []
+        for i, paper in enumerate(papers, 1):
+            # Build author string
+            if paper.authors:
+                if len(paper.authors) == 1:
+                    author_str = paper.authors[0]
+                elif len(paper.authors) == 2:
+                    author_str = f"{paper.authors[0]} & {paper.authors[1]}"
+                else:
+                    author_str = f"{paper.authors[0]} et al."
+            else:
+                author_str = "Unknown"
+
+            # Build year string
+            year_str = f"({paper.year})" if paper.year else "(n.d.)"
+
+            # Build abstract snippet
+            abstract_snippet = ""
+            if paper.abstract:
+                abstract_snippet = (
+                    paper.abstract[:150] + "..."
+                    if len(paper.abstract) > 150
+                    else paper.abstract
+                )
+
+            lines.append(
+                f"[{i}] {author_str} {year_str}. {paper.title}"
+                + (f"\n    Abstract: {abstract_snippet}" if abstract_snippet else "")
+            )
+
+        return "\n".join(lines)
+
+    def _get_numeric_id_mapping(self, papers: list[Paper]) -> dict[int, str]:
+        """Get mapping from numeric IDs to paper best_identifier.
+
+        Args:
+            papers: List of papers
+
+        Returns:
+            Dict mapping 1, 2, 3... to paper IDs
+        """
+        return {i + 1: paper.best_identifier for i, paper in enumerate(papers)}
+
+    async def _generate_with_validation(
+        self,
+        messages: list[dict[str, str]],
+        papers: list[Paper],
+        max_retries: int = 1,
+    ) -> tuple[str, list[int]]:
+        """Generate text with citation validation, retry, and cleanup.
+
+        Args:
+            messages: Chat messages for OpenAI
+            papers: Available papers (defines valid citation range)
+            max_retries: Maximum retry attempts if invalid citations found
+
+        Returns:
+            Tuple of (validated_content, used_citation_numbers)
+        """
+        import re
+
+        max_valid = len(papers)
+        num_to_id = self._get_numeric_id_mapping(papers)
+
+        # First attempt
+        response = await self._call_openai(messages)
+        content = response.choices[0].message.content
+
+        # Validate citations
+        valid_citations, invalid_citations = (
+            self._citation_extractor.validate_numeric_citations(content, max_valid)
+        )
+
+        # If invalid citations found and retries available, retry once
+        if invalid_citations and max_retries > 0:
+            # Build retry message
+            valid_range = ", ".join(f"[{i}]" for i in range(1, max_valid + 1))
+            retry_prompt = (
+                f"Your previous response contained invalid citations: "
+                f"{', '.join(f'[{n}]' for n in invalid_citations)}\n\n"
+                f"Only these citations are available: {valid_range}\n\n"
+                f"Please rewrite your response using ONLY valid citation numbers. "
+                f"If a claim cannot be supported by the available papers, "
+                f"state it without a citation."
+            )
+
+            messages_with_retry = messages + [
+                {"role": "assistant", "content": content},
+                {"role": "user", "content": retry_prompt},
+            ]
+
+            response = await self._call_openai(messages_with_retry)
+            content = response.choices[0].message.content
+
+            # Re-validate
+            valid_citations, invalid_citations = (
+                self._citation_extractor.validate_numeric_citations(content, max_valid)
+            )
+
+        # Final cleanup: remove any remaining invalid numeric citations
+        if invalid_citations:
+            content, removed = (
+                self._citation_extractor.remove_invalid_numeric_citations(
+                    content, max_valid
+                )
+            )
+
+        # Convert numeric citations to paper IDs
+        content = self._citation_extractor.convert_numeric_to_paper_ids(
+            content, num_to_id
+        )
+
+        # Final cleanup: remove any DOI-style citations that shouldn't be there
+        # These can come from Perplexity's response content being included
+        # Pattern matches: [10.1234/...], [doi:10.1234/...], DOI with nested brackets
+        doi_patterns = [
+            re.compile(r"\[10\.\d{4,}/[^\]]*\]"),  # [10.1234/...]
+            re.compile(r"\[doi:10\.\d{4,}/[^\]]*\]", re.IGNORECASE),  # [doi:10.1234/...]
+            re.compile(r"10\.\d{4,}/[^\s\[\]]+\[\d+\]"),  # DOI with trailing [1]
+            re.compile(r"10\.\d{4,}/[^\s\[\]]+"),  # Bare DOI without brackets
+        ]
+        for pattern in doi_patterns:
+            content = pattern.sub("", content)
+
+        # Clean up orphaned brackets (left behind after removing citations)
+        content = re.sub(r"\[\s*\]", "", content)  # Empty brackets []
+        content = re.sub(r"\s+\]", "", content)  # Space before closing bracket
+        content = re.sub(r"\[\s+", "", content)  # Opening bracket with only space
+
+        # Clean up any double spaces or spaces before punctuation
+        content = re.sub(r"  +", " ", content)
+        content = re.sub(r" ([.,;:])", r"\1", content)
+        content = re.sub(r"\s+\n", "\n", content)  # Trailing spaces before newlines
+
+        # Return the valid citation numbers that were used
+        used_numbers = [n for n in valid_citations if n in range(1, max_valid + 1)]
+
+        return content, used_numbers

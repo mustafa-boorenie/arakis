@@ -1,8 +1,9 @@
 """Manuscript export endpoints in multiple formats."""
 
 import tempfile
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,24 +15,63 @@ from arakis.api.schemas.manuscript import (
     Table,
     WorkflowMetadata,
 )
-from arakis.database.models import Manuscript, Workflow
+from arakis.database.models import Manuscript, User, Workflow
 
 router = APIRouter(prefix="/api/manuscripts", tags=["manuscripts"])
+
+
+async def _verify_workflow_access(
+    workflow_id: str,
+    request: Request,
+    db: AsyncSession,
+    current_user: Optional[User],
+) -> Workflow:
+    """Verify user has access to the workflow and return it."""
+    query = select(Workflow).where(Workflow.id == workflow_id)
+
+    if current_user:
+        # Authenticated user - verify ownership
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        # Anonymous user - verify session ownership
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
+    workflow = result.scalar_one_or_none()
+
+    if workflow is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found",
+        )
+
+    return workflow
 
 
 @router.get("/{workflow_id}/figures/{figure_id}")
 async def get_figure(
     workflow_id: str,
     figure_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Serve a generated figure image (PRISMA diagram, forest plot, etc.).
 
     Returns the PNG image file for display in the frontend.
+    Only returns figures for workflows owned by the current user.
     """
     import os
+
+    # Verify workflow access
+    await _verify_workflow_access(workflow_id, request, db, current_user)
 
     # Get manuscript to find figure path
     result = await db.execute(select(Manuscript).where(Manuscript.workflow_id == workflow_id))
@@ -77,8 +117,9 @@ async def get_figure(
 @router.get("/{workflow_id}/json", response_model=ManuscriptResponse)
 async def export_manuscript_json(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Export manuscript as structured JSON for frontend display.
@@ -88,16 +129,11 @@ async def export_manuscript_json(
     - All manuscript sections (introduction, methods, results, etc.)
     - Figures and tables
     - References
-    """
-    # Get workflow
-    result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
-    workflow = result.scalar_one_or_none()
 
-    if workflow is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Workflow {workflow_id} not found",
-        )
+    Only returns manuscripts for workflows owned by the current user.
+    """
+    # Verify workflow access and get workflow
+    workflow = await _verify_workflow_access(workflow_id, request, db, current_user)
 
     # Get manuscript
     result = await db.execute(select(Manuscript).where(Manuscript.workflow_id == workflow_id))
@@ -172,16 +208,17 @@ async def export_manuscript_json(
 @router.get("/{workflow_id}/markdown")
 async def export_manuscript_markdown(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Export manuscript as Markdown (.md) file.
 
     Returns a downloadable Markdown file containing the complete manuscript.
     """
-    # Get manuscript JSON data
-    manuscript_data = await export_manuscript_json(workflow_id, db, current_user)
+    # Get manuscript JSON data (access check is done in export_manuscript_json)
+    manuscript_data = await export_manuscript_json(workflow_id, request, db, current_user)
 
     # Build Markdown content
     markdown_content = _build_markdown(manuscript_data)
@@ -197,8 +234,9 @@ async def export_manuscript_markdown(
 @router.get("/{workflow_id}/pdf")
 async def export_manuscript_pdf(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Export manuscript as PDF file.
@@ -206,8 +244,8 @@ async def export_manuscript_pdf(
     Converts Markdown to PDF using pandoc.
     Requires pandoc to be installed on the system.
     """
-    # Get manuscript JSON data
-    manuscript_data = await export_manuscript_json(workflow_id, db, current_user)
+    # Get manuscript JSON data (access check is done in export_manuscript_json)
+    manuscript_data = await export_manuscript_json(workflow_id, request, db, current_user)
 
     # Build Markdown content
     markdown_content = _build_markdown(manuscript_data)
@@ -236,8 +274,9 @@ async def export_manuscript_pdf(
 @router.get("/{workflow_id}/docx")
 async def export_manuscript_docx(
     workflow_id: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user),
 ):
     """
     Export manuscript as Microsoft Word (.docx) file.
@@ -245,8 +284,8 @@ async def export_manuscript_docx(
     Converts Markdown to DOCX using pandoc.
     Requires pandoc to be installed on the system.
     """
-    # Get manuscript JSON data
-    manuscript_data = await export_manuscript_json(workflow_id, db, current_user)
+    # Get manuscript JSON data (access check is done in export_manuscript_json)
+    manuscript_data = await export_manuscript_json(workflow_id, request, db, current_user)
 
     # Build Markdown content
     markdown_content = _build_markdown(manuscript_data)

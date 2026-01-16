@@ -237,3 +237,116 @@ class CitationExtractor:
             paper_id = "arxiv:" + paper_id[6:]
 
         return paper_id
+
+    # ==================== Numeric Citation Methods ====================
+
+    # Pattern for numeric citations [1], [2], etc.
+    NUMERIC_CITATION_PATTERN = re.compile(r"\[(\d+)\]")
+
+    def extract_numeric_citations(self, text: str) -> list[int]:
+        """Extract numeric citations [1], [2], etc. from text.
+
+        Args:
+            text: Generated text containing [1], [2] style citations
+
+        Returns:
+            List of citation numbers in order of appearance
+        """
+        numbers = []
+        for match in self.NUMERIC_CITATION_PATTERN.finditer(text):
+            num = int(match.group(1))
+            numbers.append(num)
+        return numbers
+
+    def extract_unique_numeric_citations(self, text: str) -> list[int]:
+        """Extract unique numeric citations, preserving order of first appearance.
+
+        Args:
+            text: Generated text containing numeric citations
+
+        Returns:
+            List of unique citation numbers in order of appearance
+        """
+        numbers = self.extract_numeric_citations(text)
+        seen = set()
+        unique = []
+        for num in numbers:
+            if num not in seen:
+                seen.add(num)
+                unique.append(num)
+        return unique
+
+    def validate_numeric_citations(
+        self, text: str, max_valid: int
+    ) -> tuple[list[int], list[int]]:
+        """Validate that all numeric citations are in valid range.
+
+        Args:
+            text: Text containing numeric citations
+            max_valid: Maximum valid citation number (e.g., 3 means [1], [2], [3] are valid)
+
+        Returns:
+            Tuple of (valid_citations, invalid_citations)
+        """
+        all_citations = self.extract_unique_numeric_citations(text)
+        valid = []
+        invalid = []
+
+        for num in all_citations:
+            if 1 <= num <= max_valid:
+                valid.append(num)
+            else:
+                invalid.append(num)
+
+        return valid, invalid
+
+    def remove_invalid_numeric_citations(
+        self, text: str, max_valid: int
+    ) -> tuple[str, list[int]]:
+        """Remove invalid numeric citations from text.
+
+        Args:
+            text: Text containing numeric citations
+            max_valid: Maximum valid citation number
+
+        Returns:
+            Tuple of (cleaned_text, removed_citations)
+        """
+        removed = []
+
+        def replacer(match: re.Match) -> str:
+            num = int(match.group(1))
+            if 1 <= num <= max_valid:
+                return match.group(0)  # Keep valid citations
+            removed.append(num)
+            return ""  # Remove invalid citations
+
+        cleaned = self.NUMERIC_CITATION_PATTERN.sub(replacer, text)
+
+        # Clean up any double spaces left by removed citations
+        cleaned = re.sub(r"  +", " ", cleaned)
+        # Clean up spaces before punctuation
+        cleaned = re.sub(r" ([.,;:])", r"\1", cleaned)
+
+        return cleaned, removed
+
+    def convert_numeric_to_paper_ids(
+        self, text: str, mapping: dict[int, str]
+    ) -> str:
+        """Convert numeric citations [1], [2] to paper ID citations [paper_id].
+
+        Args:
+            text: Text with numeric citations
+            mapping: Dict mapping numbers to paper IDs, e.g., {1: "perplexity_abc123"}
+
+        Returns:
+            Text with paper ID citations
+        """
+
+        def replacer(match: re.Match) -> str:
+            num = int(match.group(1))
+            if num in mapping:
+                return f"[{mapping[num]}]"
+            return match.group(0)  # Keep as-is if not in mapping
+
+        return self.NUMERIC_CITATION_PATTERN.sub(replacer, text)
