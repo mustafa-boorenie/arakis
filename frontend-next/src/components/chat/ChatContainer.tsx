@@ -53,13 +53,23 @@ export function ChatContainer() {
     openLoginDialog,
   } = useStore();
   const { createWorkflow, isCreating } = useWorkflow();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
 
-  // Initialize with welcome message (only if not in landing mode)
+  // Initialize or restore chat state
   useEffect(() => {
     // Skip initialization if we're in landing mode - LandingView handles the first step
     if (layout.mode === 'landing') return;
 
+    // If returning from OAuth with form data but no messages, restore the confirm view
+    if (chat.messages.length === 0 && chat.stage === 'confirm' && chat.formData.research_question) {
+      addMessage({
+        role: 'assistant',
+        content: "Welcome back! Here's your review summary. Click 'Start Review' to begin.",
+      });
+      return;
+    }
+
+    // Normal initialization for fresh start
     if (chat.messages.length === 0 && chat.stage === 'welcome') {
       addMessage({
         role: 'assistant',
@@ -67,7 +77,7 @@ export function ChatContainer() {
       });
       setChatStage('question');
     }
-  }, [chat.messages.length, chat.stage, addMessage, setChatStage, layout.mode]);
+  }, [chat.messages.length, chat.stage, chat.formData.research_question, addMessage, setChatStage, layout.mode]);
 
   // Auto-scroll to bottom on new messages or stage changes
   useLayoutEffect(() => {
@@ -113,11 +123,21 @@ export function ChatContainer() {
     setChatStage('confirm');
   };
 
+  // Check if user can start review (authenticated or auth still loading with tokens)
+  const canStartReview = isAuthenticated || user !== null;
+
   const handleStartReview = async () => {
     // Check if user is authenticated before starting the review
-    if (!isAuthenticated) {
+    // Also allow if auth is still loading (user just logged in, profile being fetched)
+    if (!canStartReview && !isAuthLoading) {
       openLoginDialog('Sign in to start your systematic review. Your progress has been saved.');
       return;
+    }
+
+    // If auth is loading, wait for it to complete
+    if (isAuthLoading) {
+      // User just logged in, give it a moment
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
     setChatStage('creating');
@@ -204,10 +224,15 @@ export function ChatContainer() {
               </div>
               <Button
                 onClick={handleStartReview}
-                disabled={isCreating}
+                disabled={isCreating || isAuthLoading}
                 className="w-full gap-2"
               >
-                {isAuthenticated ? (
+                {isAuthLoading ? (
+                  <>
+                    <Sparkles className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : canStartReview ? (
                   <>
                     <Sparkles className="w-4 h-4" />
                     {isCreating ? 'Creating...' : 'Start Review'}
@@ -219,7 +244,7 @@ export function ChatContainer() {
                   </>
                 )}
               </Button>
-              {!isAuthenticated && (
+              {!canStartReview && !isAuthLoading && (
                 <p className="text-xs text-center text-muted-foreground">
                   Create a free account to run your systematic review
                 </p>
