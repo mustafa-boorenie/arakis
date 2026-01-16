@@ -6,7 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from arakis.api.routers import manuscripts, workflows
+from arakis.api.ratelimit import get_rate_limiter, shutdown_rate_limiter
+from arakis.api.routers import auth, manuscripts, workflows
 from arakis.api.routers import settings as settings_router
 from arakis.config import get_settings
 from arakis.database.connection import async_engine
@@ -53,10 +54,14 @@ async def lifespan(app: FastAPI):
     # Run migrations
     run_migrations()
 
+    # Initialize rate limiter
+    await get_rate_limiter()
+
     yield
 
     # Shutdown
     print("🛑 Shutting down Arakis API...")
+    await shutdown_rate_limiter()
     await async_engine.dispose()
     print("✅ Database connections closed")
 
@@ -85,7 +90,8 @@ app = FastAPI(
 
     ## Authentication
 
-    Currently in development mode - authentication will be added in production.
+    OAuth authentication with Google and Apple Sign In.
+    One free trial workflow is allowed before authentication is required.
     """,
     version="0.2.0",
     docs_url="/docs",
@@ -103,6 +109,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router)
 app.include_router(workflows.router)
 app.include_router(manuscripts.router)
 app.include_router(settings_router.router)
@@ -120,6 +127,7 @@ async def root():
         "status": "running",
         "docs": "/docs",
         "endpoints": {
+            "auth": "/api/auth",
             "workflows": "/api/workflows",
             "manuscripts": "/api/manuscripts",
         },

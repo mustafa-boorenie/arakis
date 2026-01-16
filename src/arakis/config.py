@@ -79,6 +79,29 @@ class Settings(BaseSettings):
     secret_key: str = ""  # For JWT - generate with: openssl rand -hex 32
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
+
+    # Apple OAuth
+    apple_client_id: str = ""  # Service ID (e.g., com.example.app.signin)
+    apple_team_id: str = ""  # 10-character Team ID
+    apple_key_id: str = ""  # Key ID from Apple Developer Portal
+    apple_private_key: str = ""  # Contents of .p8 file (newlines as \n)
+
+    # Frontend URLs for OAuth redirects
+    frontend_url: str = "http://localhost:3000"
+    oauth_success_redirect: str = "/auth/success"
+    oauth_error_redirect: str = "/auth/error"
+
+    # Rate Limiting
+    rate_limit_auth_requests: int = 10  # Auth endpoints per minute
+    rate_limit_login_requests: int = 5  # Login attempts per minute
+    rate_limit_oauth_requests: int = 10  # OAuth attempts per 5 minutes
+    rate_limit_token_refresh_requests: int = 10  # Token refreshes per minute
 
     # Debug mode
     debug: bool = False
