@@ -1132,11 +1132,19 @@ def write_intro(
     use_rag: bool = typer.Option(
         False, "--use-rag", help="Use RAG system to retrieve literature context"
     ),
+    use_perplexity: bool = typer.Option(
+        True, "--use-perplexity/--no-perplexity", help="Use Perplexity API for deep research (default: enabled)"
+    ),
+    save_references: bool = typer.Option(
+        True, "--save-references/--no-references", help="Save references to separate file"
+    ),
 ):
     """
     Write introduction section for a systematic review.
 
     Generates background, rationale, and objectives subsections.
+    Uses Perplexity API by default to fetch relevant background literature
+    (separate from systematic review search results).
     """
     import json
 
@@ -1145,6 +1153,18 @@ def write_intro(
     from arakis.rag import Retriever
 
     console.print("[bold]Writing Introduction Section...[/bold]\n")
+
+    # Check Perplexity configuration
+    writer = IntroductionWriterAgent()
+    if use_perplexity:
+        if writer.perplexity.is_configured:
+            console.print("[cyan]Using Perplexity API for literature research[/cyan]\n")
+        else:
+            console.print(
+                "[yellow]Warning: Perplexity API key not configured. "
+                "Set PERPLEXITY_API_KEY in your environment.[/yellow]\n"
+            )
+            use_perplexity = False
 
     # Load literature context if provided
     papers = None
@@ -1168,19 +1188,18 @@ def write_intro(
             console.print("[green]✓ Papers indexed[/green]\n")
 
     # Write introduction
-    writer = IntroductionWriterAgent()
-
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
         progress.add_task("Generating introduction...", total=None)
-        intro_section = _run_async(
+        intro_section, cited_papers = _run_async(
             writer.write_complete_introduction(
                 research_question=research_question,
                 literature_context=papers,
                 retriever=retriever,
+                use_perplexity=use_perplexity,
             )
         )
 
@@ -1198,6 +1217,13 @@ def write_intro(
 
     console.print(intro_table)
 
+    # Display cited papers
+    if cited_papers:
+        console.print(f"\n[bold]References ({len(cited_papers)} papers cited):[/bold]")
+        for i, paper in enumerate(cited_papers, 1):
+            year_str = f" ({paper.year})" if paper.year else ""
+            console.print(f"  {i}. {paper.title[:70]}{'...' if len(paper.title) > 70 else ''}{year_str}")
+
     # Display preview
     console.print("\n[bold]Preview:[/bold]")
     preview_lines = intro_section.to_markdown().split("\n")[:25]
@@ -1210,6 +1236,15 @@ def write_intro(
         with open(output, "w") as f:
             f.write(intro_section.to_markdown())
         console.print(f"\n[dim]✓ Introduction saved to {output}[/dim]")
+
+        # Save references to separate file
+        if save_references and cited_papers:
+            ref_output = output.replace(".md", "_references.md") if output.endswith(".md") else f"{output}_references.md"
+            ref_text = writer.generate_reference_list(intro_section)
+            with open(ref_output, "w") as f:
+                f.write("# References\n\n")
+                f.write(ref_text)
+            console.print(f"[dim]✓ References saved to {ref_output}[/dim]")
 
 
 @app.command()
@@ -2012,17 +2047,25 @@ def workflow(
 
         intro_writer = IntroductionWriterAgent()
 
+        # Check if Perplexity is configured
+        use_perplexity = intro_writer.perplexity.is_configured
+        if use_perplexity:
+            console.print("[cyan]Using Perplexity API for literature research[/cyan]")
+        else:
+            console.print("[dim]Perplexity API not configured - using provided context[/dim]")
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
             task = progress.add_task("Writing introduction...", total=None)
-            intro_section = _run_async(
+            intro_section, cited_papers = _run_async(
                 intro_writer.write_complete_introduction(
                     research_question=research_question,
                     literature_context=None,
                     retriever=None,
+                    use_perplexity=use_perplexity,
                 )
             )
 
@@ -2030,11 +2073,23 @@ def workflow(
         with open(intro_file, "w") as f:
             f.write(intro_section.to_markdown())
 
-        console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]")
-        console.print(f"[dim]Saved to {intro_file}[/dim]\n")
+        # Save references if any papers were cited
+        if cited_papers:
+            ref_file = output_path / "6_introduction_references.md"
+            ref_text = intro_writer.generate_reference_list(intro_section)
+            with open(ref_file, "w") as f:
+                f.write("# References\n\n")
+                f.write(ref_text)
+            console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
+            console.print(f"[dim]Saved to {intro_file}[/dim]")
+            console.print(f"[dim]References saved to {ref_file}[/dim]\n")
+        else:
+            console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]")
+            console.print(f"[dim]Saved to {intro_file}[/dim]\n")
 
         workflow_results["stages"]["introduction"] = {
             "word_count": intro_section.total_word_count,
+            "references_count": len(cited_papers) if cited_papers else 0,
             "file": str(intro_file),
         }
         workflow_results["total_cost"] += 1.0  # Estimate
