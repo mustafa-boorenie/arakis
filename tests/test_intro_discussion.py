@@ -152,9 +152,11 @@ class TestIntroductionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.side_effect = mock_responses
 
-            section = await writer.write_complete_introduction(
+            # write_complete_introduction now returns (Section, list[Paper])
+            section, cited_papers = await writer.write_complete_introduction(
                 research_question="Effect of antihypertensive therapy",
                 literature_context=sample_papers,
+                use_perplexity=False,  # Don't use Perplexity in test
             )
 
             assert section.title == "Introduction"
@@ -163,6 +165,8 @@ class TestIntroductionWriter:
             assert section.subsections[1].title == "Rationale"
             assert section.subsections[2].title == "Objectives"
             assert mock_create.call_count == 3
+            # cited_papers is a list (may be empty in mock test)
+            assert isinstance(cited_papers, list)
 
     def test_cost_estimation(self):
         """Test cost estimation."""

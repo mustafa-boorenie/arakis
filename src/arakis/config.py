@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     # SerpAPI (optional - alternative to scholarly for Google Scholar)
     serpapi_key: str = ""
 
+    # Perplexity API (for introduction literature research)
+    # Used to fetch background literature for introductions (separate from review search)
+    # Get key at: https://www.perplexity.ai/settings/api
+    perplexity_api_key: str = ""
+    perplexity_model: str = "sonar"  # "sonar" or "sonar-pro"
+
     # Rate limiting
     pubmed_requests_per_second: float = 3.0  # 10 with API key
     scholarly_min_delay: float = 5.0  # Seconds between Google Scholar requests

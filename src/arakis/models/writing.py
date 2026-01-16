@@ -4,10 +4,13 @@ Models for sections, manuscripts, and writing results.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from arakis.models.paper import Paper
 from arakis.models.visualization import Figure, Table
+
+if TYPE_CHECKING:
+    from arakis.references import CitationFormatter
 
 
 @dataclass
@@ -114,6 +117,9 @@ class Manuscript:
     # References
     references: list[Paper] = field(default_factory=list)
 
+    # Citation style (default: APA 6)
+    citation_style: str = "apa6"
+
     # Figures and tables
     figures: dict[str, Figure] = field(default_factory=dict)  # figure_id -> Figure
     tables: dict[str, Table] = field(default_factory=dict)  # table_id -> Table
@@ -125,6 +131,9 @@ class Manuscript:
     funding: str = ""
     conflicts_of_interest: str = ""
     acknowledgments: str = ""
+
+    # Internal formatter (lazy initialized)
+    _formatter: Optional["CitationFormatter"] = field(default=None, repr=False)
 
     @property
     def word_count(self) -> int:
@@ -182,6 +191,37 @@ class Manuscript:
         """
         if paper not in self.references:
             self.references.append(paper)
+
+    def add_references(self, papers: list[Paper]) -> None:
+        """Add multiple references.
+
+        Args:
+            papers: Papers to add to references
+        """
+        for paper in papers:
+            self.add_reference(paper)
+
+    def get_all_citations(self) -> list[str]:
+        """Get all paper IDs cited across all sections.
+
+        Returns:
+            List of unique paper IDs in order of appearance
+        """
+        all_citations: list[str] = []
+        seen: set[str] = set()
+
+        def collect_from_section(section: Section) -> None:
+            for citation in section.citations:
+                if citation not in seen:
+                    seen.add(citation)
+                    all_citations.append(citation)
+            for subsection in section.subsections:
+                collect_from_section(subsection)
+
+        for section in self.sections:
+            collect_from_section(section)
+
+        return all_citations
 
     def to_markdown(self) -> str:
         """Convert manuscript to markdown format.
@@ -259,35 +299,48 @@ class Manuscript:
 
         return "\n".join(lines)
 
+    def _get_formatter(self) -> "CitationFormatter":
+        """Get or create the citation formatter.
+
+        Returns:
+            CitationFormatter instance
+        """
+        if self._formatter is None:
+            from arakis.references import CitationFormatter, CitationStyle
+
+            # Map string style to enum
+            style_map = {
+                "apa6": CitationStyle.APA_6,
+                "apa7": CitationStyle.APA_7,
+                "vancouver": CitationStyle.VANCOUVER,
+                "chicago": CitationStyle.CHICAGO,
+                "harvard": CitationStyle.HARVARD,
+            }
+            style = style_map.get(self.citation_style.lower(), CitationStyle.APA_6)
+            self._formatter = CitationFormatter(style)
+        return self._formatter
+
+    def set_citation_style(self, style: str) -> None:
+        """Set the citation style for the manuscript.
+
+        Args:
+            style: Citation style ("apa6", "apa7", "vancouver", "chicago", "harvard")
+        """
+        self.citation_style = style.lower()
+        self._formatter = None  # Reset formatter to use new style
+
     def _format_citation(self, paper: Paper, number: int) -> str:
-        """Format a paper citation.
+        """Format a paper citation using the configured style.
 
         Args:
             paper: Paper to cite
-            number: Citation number
+            number: Citation number (unused, kept for API compatibility)
 
         Returns:
             Formatted citation string
         """
-        # Authors
-        authors_str = ""
-        if paper.authors:
-            if len(paper.authors) > 3:
-                authors_str = f"{paper.authors[0].name} et al."
-            else:
-                authors_str = ", ".join(a.name for a in paper.authors)
-
-        # Title
-        title_str = paper.title
-
-        # Journal and year
-        journal_str = paper.journal or "Journal"
-        year_str = str(paper.year) if paper.year else "n.d."
-
-        # DOI if available
-        doi_str = f" doi:{paper.doi}" if paper.doi else ""
-
-        return f"{authors_str} {title_str}. {journal_str}. {year_str}.{doi_str}"
+        formatter = self._get_formatter()
+        return formatter.format_citation(paper)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert manuscript to dictionary for JSON serialization."""
