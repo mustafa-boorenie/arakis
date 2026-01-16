@@ -76,6 +76,7 @@ interface AppState {
   setCurrentWorkflow: (workflow: WorkflowResponse | null) => void;
   updateWorkflow: (workflow: WorkflowResponse) => void;
   addToHistory: (workflow: WorkflowResponse) => void;
+  setHistory: (workflows: WorkflowResponse[]) => void;
   setIsCreating: (isCreating: boolean) => void;
   setIsPolling: (isPolling: boolean) => void;
   removeFromHistory: (id: string) => void;
@@ -205,6 +206,14 @@ export const useStore = create<AppState>()(
               },
             };
           }),
+
+        setHistory: (workflows) =>
+          set((state) => ({
+            workflow: {
+              ...state.workflow,
+              history: workflows,
+            },
+          })),
 
         setIsCreating: (isCreating) =>
           set((state) => ({

@@ -230,14 +230,14 @@ export function AppShell({ sidebar, editor, chat, landing }: AppShellProps) {
               <AnimatePresence mode="wait">
                 {layout.mobileView === 'sidebar' ? (
                   <motion.div
-                    key="mobile-sidebar"
+                    key="mobile-chat"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.2 }}
                     className="h-full"
                   >
-                    {sidebar}
+                    {chat}
                   </motion.div>
                 ) : (
                   <motion.div

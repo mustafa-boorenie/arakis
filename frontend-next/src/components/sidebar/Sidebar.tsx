@@ -19,7 +19,7 @@ export function Sidebar() {
   const {
     resetChat,
     workflow,
-    addToHistory,
+    setHistory,
     archiveWorkflow,
     unarchiveWorkflow,
     setCurrentWorkflow,
@@ -48,9 +48,8 @@ export function Sidebar() {
       setIsLoading(true);
       try {
         const response = await api.listWorkflows();
-        for (const w of response.workflows) {
-          addToHistory(w);
-        }
+        // Replace local history with server data for proper sync
+        setHistory(response.workflows);
       } catch (error) {
         console.error('Failed to load history:', error);
       } finally {
@@ -58,7 +57,7 @@ export function Sidebar() {
       }
     };
     loadHistory();
-  }, [addToHistory]);
+  }, [setHistory]);
 
   // Handle clicking on a workflow
   const handleWorkflowClick = async (w: WorkflowResponse) => {
@@ -188,12 +187,12 @@ export function Sidebar() {
       <div className="my-3 border-t border-sidebar-border" />
 
       {/* Active Reviews */}
-      <div className="flex-1 min-h-0 flex flex-col">
-        <div className="px-4 py-2">
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="px-4 py-2 flex-shrink-0">
           <span className="text-xs text-muted-foreground font-medium">Your reviews</span>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           <div className="px-2 space-y-0.5">
             {isLoading ? (
               <div className="px-3 py-2 text-sm text-muted-foreground">
@@ -211,7 +210,7 @@ export function Sidebar() {
                   onMouseEnter={() => setHoveredId(w.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   className={`
-                    group flex items-center justify-between gap-2 px-3 py-2
+                    group flex items-center gap-2 px-3 py-2
                     rounded-lg cursor-pointer transition-colors
                     ${workflow.current?.id === w.id
                       ? 'bg-sidebar-accent'
@@ -219,18 +218,18 @@ export function Sidebar() {
                     }
                   `}
                 >
-                  <span className="text-sm truncate flex-1">
+                  <span className="text-sm truncate flex-1 min-w-0">
                     {truncate(w.research_question, 30)}
                   </span>
-                  {hoveredId === w.id && (
-                    <button
-                      onClick={(e) => handleArchive(e, w.id)}
-                      className="p-1 hover:bg-muted rounded transition-colors flex-shrink-0"
-                      title="Archive"
-                    >
-                      <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                    </button>
-                  )}
+                  <button
+                    onClick={(e) => handleArchive(e, w.id)}
+                    className={`p-1 mr-1 hover:bg-muted rounded transition-all flex-shrink-0 ${
+                      hoveredId === w.id ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    title="Archive"
+                  >
+                    <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                  </button>
                 </div>
               ))
             )}
@@ -262,25 +261,23 @@ export function Sidebar() {
                         onMouseEnter={() => setHoveredId(w.id)}
                         onMouseLeave={() => setHoveredId(null)}
                         className={`
-                          group flex items-center justify-between gap-2 px-3 py-2
+                          group flex items-center gap-2 px-3 py-2
                           rounded-lg cursor-pointer transition-colors
                           hover:bg-sidebar-accent hover:opacity-100
                         `}
                       >
-                        <span className="text-sm truncate flex-1">
+                        <span className="text-sm truncate flex-1 min-w-0">
                           {truncate(w.research_question, 30)}
                         </span>
-                        {hoveredId === w.id && (
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              onClick={(e) => handleRestore(e, w.id)}
-                              className="p-1 hover:bg-muted rounded transition-colors"
-                              title="Restore"
-                            >
-                              <ArchiveRestore className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                            </button>
-                          </div>
-                        )}
+                        <button
+                          onClick={(e) => handleRestore(e, w.id)}
+                          className={`p-1 mr-1 hover:bg-muted rounded transition-all flex-shrink-0 ${
+                            hoveredId === w.id ? 'opacity-100' : 'opacity-0'
+                          }`}
+                          title="Restore"
+                        >
+                          <ArchiveRestore className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
                       </div>
                     ))}
                   </div>
