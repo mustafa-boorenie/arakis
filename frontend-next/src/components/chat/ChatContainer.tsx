@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useLayoutEffect } from 'react';
 import { useStore } from '@/store';
-import { useWorkflow } from '@/hooks';
+import { useWorkflow, useAuth } from '@/hooks';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { DatabaseSelector } from './DatabaseSelector';
 import { WorkflowProgress } from './WorkflowProgress';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, LogIn } from 'lucide-react';
 import type { WorkflowCreateRequest } from '@/types';
 
 const CHAT_PROMPTS = {
@@ -50,8 +50,10 @@ export function ChatContainer() {
     updateFormData,
     workflow,
     layout,
+    openLoginDialog,
   } = useStore();
   const { createWorkflow, isCreating } = useWorkflow();
+  const { isAuthenticated } = useAuth();
 
   // Initialize with welcome message (only if not in landing mode)
   useEffect(() => {
@@ -112,6 +114,12 @@ export function ChatContainer() {
   };
 
   const handleStartReview = async () => {
+    // Check if user is authenticated before starting the review
+    if (!isAuthenticated) {
+      openLoginDialog('Sign in to start your systematic review. Your progress has been saved.');
+      return;
+    }
+
     setChatStage('creating');
     addMessage({
       role: 'assistant',
@@ -199,9 +207,23 @@ export function ChatContainer() {
                 disabled={isCreating}
                 className="w-full gap-2"
               >
-                <Sparkles className="w-4 h-4" />
-                {isCreating ? 'Creating...' : 'Start Review'}
+                {isAuthenticated ? (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    {isCreating ? 'Creating...' : 'Start Review'}
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    Sign in to Start Review
+                  </>
+                )}
               </Button>
+              {!isAuthenticated && (
+                <p className="text-xs text-center text-muted-foreground">
+                  Create a free account to run your systematic review
+                </p>
+              )}
             </Card>
           )}
 
