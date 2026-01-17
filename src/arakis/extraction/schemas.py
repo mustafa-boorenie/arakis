@@ -698,7 +698,7 @@ def detect_schema(text: str) -> tuple[str, float]:
         return ("rct", 0.3)
 
     # Get the winning schema
-    best_schema = max(scores, key=scores.get)
+    best_schema = max(scores, key=lambda k: scores[k])
 
     # Calculate confidence based on score and margin over second-best
     sorted_scores = sorted(scores.values(), reverse=True)
