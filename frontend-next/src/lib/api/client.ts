@@ -9,6 +9,7 @@ import type {
   TokenResponse,
   OAuthLoginResponse,
 } from '@/types';
+import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/types';
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
 
@@ -42,12 +43,12 @@ class ApiClient {
 
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('arakis-access-token');
+    return localStorage.getItem(ACCESS_TOKEN_KEY);
   }
 
   private getRefreshToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('arakis-refresh-token');
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
   }
 
   private async request<T>(
@@ -134,8 +135,8 @@ class ApiClient {
       if (!response.ok) {
         // Refresh failed, clear tokens
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('arakis-access-token');
-          localStorage.removeItem('arakis-refresh-token');
+          localStorage.removeItem(ACCESS_TOKEN_KEY);
+          localStorage.removeItem(REFRESH_TOKEN_KEY);
         }
         this.onAuthRequired?.();
         return false;
@@ -143,8 +144,8 @@ class ApiClient {
 
       const data: TokenResponse = await response.json();
       if (typeof window !== 'undefined') {
-        localStorage.setItem('arakis-access-token', data.access_token);
-        localStorage.setItem('arakis-refresh-token', data.refresh_token);
+        localStorage.setItem(ACCESS_TOKEN_KEY, data.access_token);
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
       }
       return true;
     } catch {

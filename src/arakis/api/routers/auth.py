@@ -124,8 +124,9 @@ async def google_callback(
         tokens = await auth_service.create_tokens(user, device_info)
 
         # Redirect to frontend with tokens
-        redirect_url = state_data.get("redirect_url") or settings.oauth_success_redirect
-        return _redirect_with_tokens(tokens, redirect_url, settings)
+        # Pass original redirect_url as return_to for post-auth redirect
+        return_to = state_data.get("redirect_url")
+        return _redirect_with_tokens(tokens, return_to, settings)
 
     except OAuthError as e:
         return _redirect_with_error(str(e), settings)
@@ -217,8 +218,9 @@ async def apple_callback(
         tokens = await auth_service.create_tokens(db_user, device_info)
 
         # Redirect to frontend with tokens
-        redirect_url = state_data.get("redirect_url") or settings.oauth_success_redirect
-        return _redirect_with_tokens(tokens, redirect_url, settings)
+        # Pass original redirect_url as return_to for post-auth redirect
+        return_to = state_data.get("redirect_url")
+        return _redirect_with_tokens(tokens, return_to, settings)
 
     except OAuthError as e:
         return _redirect_with_error(str(e), settings)
@@ -341,17 +343,27 @@ async def get_current_user_profile(
 # ============================================================
 
 
-def _redirect_with_tokens(tokens: TokenResponse, redirect_path: str, settings) -> RedirectResponse:
-    """Create redirect response with tokens in URL fragment."""
-    params = {
+def _redirect_with_tokens(tokens: TokenResponse, return_to: str | None, settings) -> RedirectResponse:
+    """Create redirect response with tokens in URL fragment.
+
+    Always redirects to /auth/success page which handles token extraction.
+    The original redirect destination is passed as return_to query param.
+    """
+    token_params = {
         "access_token": tokens.access_token,
         "refresh_token": tokens.refresh_token,
         "token_type": tokens.token_type,
         "expires_in": str(tokens.expires_in),
     }
 
+    # Always redirect to /auth/success - it's the only page with token extraction logic
+    # Pass original destination as return_to query param
+    success_path = settings.oauth_success_redirect
+    if return_to and return_to != success_path:
+        success_path = f"{success_path}?return_to={return_to}"
+
     # Use fragment (#) for tokens to avoid them being logged in server logs
-    redirect_url = f"{settings.frontend_url}{redirect_path}#{urlencode(params)}"
+    redirect_url = f"{settings.frontend_url}{success_path}#{urlencode(token_params)}"
 
     response = RedirectResponse(url=redirect_url, status_code=status.HTTP_302_FOUND)
 
