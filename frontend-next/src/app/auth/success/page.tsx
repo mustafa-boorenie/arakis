@@ -31,9 +31,9 @@ function AuthSuccessContent() {
             throw new Error('Missing authentication tokens');
           }
 
-          await handleOAuthCallback(queryAccessToken, queryRefreshToken);
+          handleOAuthCallback(queryAccessToken, queryRefreshToken);
         } else {
-          await handleOAuthCallback(accessToken, refreshToken);
+          handleOAuthCallback(accessToken, refreshToken);
         }
 
         setStatus('success');

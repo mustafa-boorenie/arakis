@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useLayoutEffect } from 'react';
 import { useStore } from '@/store';
-import { useWorkflow, useAuth } from '@/hooks';
+import { useWorkflow } from '@/hooks';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { DatabaseSelector } from './DatabaseSelector';
@@ -43,17 +43,20 @@ const EXAMPLE_PROMPTS: Record<string, string[]> = {
 export function ChatContainer() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const {
-    chat,
-    addMessage,
-    setChatStage,
-    updateFormData,
-    workflow,
-    layout,
-    openLoginDialog,
-  } = useStore();
+  const chat = useStore((state) => state.chat);
+  const addMessage = useStore((state) => state.addMessage);
+  const setChatStage = useStore((state) => state.setChatStage);
+  const updateFormData = useStore((state) => state.updateFormData);
+  const workflow = useStore((state) => state.workflow);
+  const layout = useStore((state) => state.layout);
+  const openLoginDialog = useStore((state) => state.openLoginDialog);
+
+  // Use individual selectors for auth to ensure re-renders on changes
+  const isAuthenticated = useStore((state) => state.auth.isAuthenticated);
+  const isAuthLoading = useStore((state) => state.auth.isLoading);
+  const user = useStore((state) => state.auth.user);
+
   const { createWorkflow, isCreating } = useWorkflow();
-  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
 
   // Initialize or restore chat state
   useEffect(() => {
