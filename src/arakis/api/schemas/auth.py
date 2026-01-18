@@ -27,6 +27,8 @@ class UserProfileResponse(BaseModel):
     id: str
     email: str
     full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    affiliation: Optional[str] = None
     avatar_url: Optional[str] = None
     auth_provider: str
     email_verified: bool
@@ -38,6 +40,14 @@ class UserProfileResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class UpdateUserRequest(BaseModel):
+    """Request to update user profile."""
+
+    full_name: Optional[str] = Field(None, max_length=255)
+    phone_number: Optional[str] = Field(None, max_length=20)
+    affiliation: Optional[str] = Field(None, max_length=500)
 
 
 class OAuthLoginResponse(BaseModel):

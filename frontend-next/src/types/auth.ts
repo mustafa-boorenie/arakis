@@ -4,6 +4,8 @@ export interface User {
   id: string;
   email: string;
   full_name: string | null;
+  phone_number: string | null;
+  affiliation: string | null;
   avatar_url: string | null;
   auth_provider: 'google' | 'apple' | 'email';
   email_verified: boolean;
@@ -12,6 +14,12 @@ export interface User {
   last_login: string | null;
   total_workflows: number;
   total_cost: number;
+}
+
+export interface UpdateUserRequest {
+  full_name?: string;
+  phone_number?: string;
+  affiliation?: string;
 }
 
 export interface TokenResponse {

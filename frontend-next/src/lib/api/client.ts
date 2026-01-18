@@ -184,6 +184,13 @@ class ApiClient {
     return this.request('/api/auth/me');
   }
 
+  async updateUser(data: { full_name?: string; phone_number?: string; affiliation?: string }): Promise<User> {
+    return this.request('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   // ============= Workflow Endpoints =============
 
   async createWorkflow(data: WorkflowCreateRequest): Promise<WorkflowResponse> {

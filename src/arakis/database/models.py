@@ -230,6 +230,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=True)  # Nullable for OAuth-only users
     full_name = Column(String(255))
+    phone_number = Column(String(20), nullable=True)
     affiliation = Column(String(500))
 
     # OAuth fields

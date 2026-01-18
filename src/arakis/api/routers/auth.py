@@ -17,6 +17,7 @@ from arakis.api.schemas.auth import (
     OAuthLoginResponse,
     RefreshTokenRequest,
     TokenResponse,
+    UpdateUserRequest,
     UserProfileResponse,
 )
 from arakis.auth.exceptions import (
@@ -334,6 +335,36 @@ async def get_current_user_profile(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
+
+    return UserProfileResponse.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserProfileResponse)
+@rate_limit(requests=10, window_seconds=60, error_message="Too many profile update requests.")
+async def update_current_user_profile(
+    request: Request,
+    body: UpdateUserRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update current authenticated user's profile.
+
+    Requires valid access token.
+    """
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    # Update only provided fields
+    update_data = body.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+
+    await db.commit()
+    await db.refresh(current_user)
 
     return UserProfileResponse.model_validate(current_user)
 
