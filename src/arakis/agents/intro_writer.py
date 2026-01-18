@@ -419,6 +419,9 @@ Write only the objectives text, no headings."""
         response = await self._call_openai(messages)
         content = response.choices[0].message.content
 
+        # Normalize paragraph breaks for consistent formatting
+        content = self._normalize_paragraph_breaks(content)
+
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
         cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
@@ -704,7 +707,55 @@ Write only the objectives text, no headings."""
         content = re.sub(r" ([.,;:])", r"\1", content)
         content = re.sub(r"\s+\n", "\n", content)  # Trailing spaces before newlines
 
+        # Normalize paragraph breaks for proper markdown formatting
+        # Single newlines between paragraphs should become double newlines
+        content = self._normalize_paragraph_breaks(content)
+
         # Return the valid citation numbers that were used
         used_numbers = [n for n in valid_citations if n in range(1, max_valid + 1)]
 
         return content, used_numbers
+
+    def _normalize_paragraph_breaks(self, content: str) -> str:
+        """Normalize paragraph breaks for markdown formatting.
+
+        Converts single newlines between paragraphs to double newlines,
+        which is required for proper paragraph separation in markdown.
+
+        Args:
+            content: Text content that may have single newlines between paragraphs
+
+        Returns:
+            Content with proper paragraph breaks (double newlines)
+        """
+        import re
+
+        # First, normalize any existing multiple newlines to exactly two
+        content = re.sub(r"\n{3,}", "\n\n", content)
+
+        # Split into lines
+        lines = content.split("\n")
+        result_lines = []
+
+        for i, line in enumerate(lines):
+            result_lines.append(line)
+
+            # If this line ends a paragraph (non-empty, ends with sentence-ending punctuation)
+            # and the next line starts a new paragraph (non-empty, starts with capital letter)
+            # then we need a blank line between them
+            if i < len(lines) - 1:
+                current_line = line.strip()
+                next_line = lines[i + 1].strip()
+
+                # Check if we're between two paragraphs
+                if (
+                    current_line
+                    and next_line
+                    and current_line[-1] in ".!?])"
+                    and next_line[0].isupper()
+                ):
+                    # Add blank line if not already present
+                    if result_lines and result_lines[-1] != "":
+                        result_lines.append("")
+
+        return "\n".join(result_lines)

@@ -81,6 +81,82 @@ class PerplexityResponse:
     usage: dict[str, int] = field(default_factory=dict)
 
 
+def _strip_markdown(text: str) -> str:
+    """Strip markdown formatting from text.
+
+    Args:
+        text: Text potentially containing markdown
+
+    Returns:
+        Clean text with markdown removed
+    """
+    if not text:
+        return text
+
+    # Remove bold/italic markers (paired)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)  # **bold**
+    text = re.sub(r"__([^_]+)__", r"\1", text)  # __bold__
+    # Handle paired single markers after removing double
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)  # *italic* (not part of **)
+    text = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"\1", text)  # _italic_ (not part of __)
+
+    # Remove orphaned/unpaired bold/italic markers (leftover ** or * at start/end)
+    text = re.sub(r"^\*{1,2}\s*", "", text)  # Leading * or **
+    text = re.sub(r"\s*\*{1,2}$", "", text)  # Trailing * or **
+    text = re.sub(r"^_{1,2}\s*", "", text)  # Leading _ or __
+    text = re.sub(r"\s*_{1,2}$", "", text)  # Trailing _ or __
+
+    # Remove leading bullets, dashes, and list markers (including * as bullet)
+    text = re.sub(r"^[\s]*[-•]\s*", "", text)  # - bullet, • bullet
+    text = re.sub(r"^[\s]*\*\s+", "", text)  # * bullet (asterisk followed by space)
+    text = re.sub(r"^[\s]*\d+\.\s*", "", text)  # 1. numbered list
+
+    # Remove markdown headers
+    text = re.sub(r"^#{1,6}\s*", "", text)  # # headers
+
+    # Remove markdown links but keep text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)  # [text](url)
+
+    # Remove backticks
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+
+    # Clean up extra whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    return text
+
+
+def _clean_paper_title(title: str) -> str:
+    """Clean a paper title by removing common artifacts.
+
+    Args:
+        title: Raw paper title
+
+    Returns:
+        Cleaned title
+    """
+    if not title:
+        return title
+
+    # Strip markdown first
+    title = _strip_markdown(title)
+
+    # Remove source suffixes like "- PubMed", "- JAMA Network", "- ScienceDirect", "- NIH"
+    title = re.sub(r"\s*-\s*(?:PubMed|JAMA\s*Network|ScienceDirect|Frontiers|Wiley|Springer|Nature|BMJ|Lancet|NEJM|Cochrane|Google\s*Scholar|NIH|NCBI|PMC|ResearchGate|Academia|Oxford\s*Academic|Cambridge).*$", "", title, flags=re.IGNORECASE)
+
+    # Remove "Title:" prefix if present
+    title = re.sub(r"^Title:\s*", "", title, flags=re.IGNORECASE)
+
+    # Remove trailing ellipsis or incomplete markers
+    title = re.sub(r"\s*\.{3,}$", "", title)
+    title = re.sub(r"\s*…$", "", title)
+
+    # Clean up quotes
+    title = title.strip('"\'')
+
+    return title.strip()
+
+
 class PerplexityClient:
     """Perplexity API client for literature research.
 
@@ -355,48 +431,77 @@ Return at least 5-10 relevant papers."""
         if not entry or len(entry) < 20:
             return None
 
-        # Extract title
+        # Extract title - look for explicit "Title:" field first
         title_match = re.search(
-            r"(?:Title:|^[\d.]+\s*)?[\"']?([^\"'\n]+?)[\"']?(?:\n|$|Authors:|Journal:)",
+            r"Title:\s*([^\n]+?)(?:\n|Authors:|Journal:|Year:|DOI:|$)",
             entry,
             re.IGNORECASE,
         )
         if not title_match:
+            # Fall back to first substantial text that looks like a title
+            title_match = re.search(
+                r"^[\s\d.*-]*([A-Z][^.\n]{15,}?)(?:\n|Authors:|Journal:|Year:|DOI:|$)",
+                entry,
+                re.MULTILINE,
+            )
+        if not title_match:
             return None
 
         title = title_match.group(1).strip()
+        title = _clean_paper_title(title)
+
         if len(title) < 10:
             return None
 
+        # Skip entries that look like headers or descriptions rather than paper titles
+        skip_patterns = [
+            r"^#",  # Markdown headers
+            r"^\*\*Key Finding",  # Bold key findings
+            r"^Academic Papers",  # Section headers
+            r"^Recent",  # Section headers
+            r"^Summary",  # Section headers
+        ]
+        for pattern in skip_patterns:
+            if re.match(pattern, title, re.IGNORECASE):
+                return None
+
         # Extract authors
         authors_match = re.search(
-            r"Authors?:?\s*([^\n]+?)(?:\n|Journal:|Year:|DOI:)",
+            r"Authors?:?\s*([^\n]+?)(?:\n|Journal:|Year:|DOI:|$)",
             entry,
             re.IGNORECASE,
         )
         authors = []
         if authors_match:
-            author_str = authors_match.group(1).strip()
+            author_str = _strip_markdown(authors_match.group(1).strip())
             # Parse comma-separated or "and" separated authors
             author_names = re.split(r",\s*(?:and\s+)?|\s+and\s+", author_str)
             for name in author_names:
                 name = name.strip().strip(".")
+                # Skip empty or too short names
                 if name and len(name) > 2:
                     authors.append(Author(name=name))
 
         # Extract journal
         journal_match = re.search(r"Journal:?\s*([^\n]+?)(?:\n|Year:|DOI:|$)", entry, re.IGNORECASE)
-        journal = journal_match.group(1).strip() if journal_match else None
+        journal = None
+        if journal_match:
+            journal = _strip_markdown(journal_match.group(1).strip())
 
         # Extract year
         year_match = re.search(r"(?:Year:?\s*)?(\d{4})", entry)
         year = int(year_match.group(1)) if year_match else None
 
-        # Extract DOI
-        doi_match = re.search(r"(?:DOI:?\s*)?(10\.\d{4,}/[^\s\n]+)", entry, re.IGNORECASE)
-        doi = doi_match.group(1).strip() if doi_match else None
+        # Extract DOI - be careful to exclude trailing citation markers like [1], [2]
+        doi_match = re.search(r"(?:DOI:?\s*)?(10\.\d{4,}/[^\s\n\[\]]+)", entry, re.IGNORECASE)
+        doi = None
+        if doi_match:
+            doi = doi_match.group(1).strip()
+            # Remove trailing punctuation and citation markers
+            doi = re.sub(r"[\[\]\(\)]+$", "", doi)
+            doi = doi.rstrip(".,;:")
 
-        # Generate unique ID
+        # Generate unique ID from cleaned title
         paper_id = f"perplexity_{hashlib.md5(title.encode()).hexdigest()[:12]}"
 
         return Paper(
@@ -426,13 +531,21 @@ Return at least 5-10 relevant papers."""
         if not title or len(title) < 10:
             return None
 
-        # Generate unique ID from URL
-        paper_id = f"perplexity_{hashlib.md5(url.encode()).hexdigest()[:12]}"
+        # Clean the title
+        title = _clean_paper_title(title)
+
+        if len(title) < 10:
+            return None
+
+        # Generate unique ID from cleaned title (not URL, for consistency)
+        paper_id = f"perplexity_{hashlib.md5(title.encode()).hexdigest()[:12]}"
 
         # Try to extract DOI from URL
         doi = None
         if "doi.org/" in url:
             doi = url.split("doi.org/")[-1].split("?")[0]
+            # Clean up DOI
+            doi = doi.rstrip("/.,;:")
 
         # Try to extract year from date or snippet
         year = None
@@ -441,6 +554,12 @@ Return at least 5-10 relevant papers."""
             year_match = re.search(r"(\d{4})", date_str)
             if year_match:
                 year = int(year_match.group(1))
+
+        # If no year from date, try to get it from snippet
+        if not year and snippet:
+            year_match = re.search(r"\b(19|20)\d{2}\b", snippet)
+            if year_match:
+                year = int(year_match.group(0))
 
         return Paper(
             id=paper_id,
