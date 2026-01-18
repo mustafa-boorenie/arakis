@@ -1,6 +1,11 @@
 """Database models for Arakis systematic review platform."""
 
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def utc_now():
+    """Return current UTC time as timezone-aware datetime."""
+    return datetime.now(timezone.utc)
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -47,7 +52,7 @@ class Workflow(Base):
     total_cost = Column(Float, default=0.0)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
     completed_at = Column(DateTime, nullable=True)
 
     # Error tracking
@@ -110,7 +115,7 @@ class Paper(Base):
     # Source
     source = Column(String(50))  # "pubmed", "openalex", etc.
     source_url = Column(String(1000))
-    retrieved_at = Column(DateTime, default=datetime.utcnow)
+    retrieved_at = Column(DateTime, default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="papers")
@@ -146,7 +151,7 @@ class ScreeningDecision(Base):
     human_decision = Column(String(20), nullable=True)  # Human override
     overridden = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="screening_decisions")
@@ -179,7 +184,7 @@ class Extraction(Base):
     reviewer_decisions = Column(JSON)  # List of individual reviewer decisions (for triple-review)
     low_confidence_fields = Column(JSON)  # List of fields below confidence threshold
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="extractions")
@@ -214,8 +219,8 @@ class Manuscript(Base):
     meta = Column(JSON)  # {authors, affiliations, keywords, funding, etc.}
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, onupdate=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="manuscript")
@@ -245,7 +250,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     last_login = Column(DateTime, nullable=True)
 
     # API usage tracking (optional)
@@ -269,7 +274,7 @@ class RefreshToken(Base):
     token_hash = Column(String(64), nullable=False, index=True)
     device_info = Column(String(255), nullable=True)
     expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     revoked_at = Column(DateTime, nullable=True)
 
     # Relationships

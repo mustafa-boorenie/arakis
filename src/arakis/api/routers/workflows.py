@@ -1,6 +1,6 @@
 """Workflow CRUD and execution endpoints."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -84,7 +84,7 @@ async def create_workflow(
         exclusion_criteria=workflow_data.exclusion_criteria,
         databases=workflow_data.databases,
         status="pending",
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         user_id=user_id,
         session_id=session_id,
     )
@@ -365,7 +365,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     open_access=paper.open_access,
                     source=paper.source,
                     source_url=paper.source_url,
-                    retrieved_at=paper.retrieved_at or datetime.utcnow(),
+                    retrieved_at=paper.retrieved_at or datetime.now(timezone.utc),
                 )
                 db.add(db_paper)
                 paper_map[unique_paper_id] = paper
@@ -435,7 +435,7 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                     matched_exclusion=decision.matched_exclusion,
                     is_conflict=decision.is_conflict,
                     second_opinion=second_opinion_data,
-                    created_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
                 )
                 db.add(db_decision)
                 screening_decisions.append((unique_paper_id, decision))
@@ -824,16 +824,16 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                     "papers_found": workflow.papers_found,
                     "papers_screened": workflow.papers_screened,
                     "papers_included": workflow.papers_included,
-                    "generated_at": datetime.utcnow().isoformat(),
+                    "generated_at": datetime.now(timezone.utc).isoformat(),
                 },
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             db.add(manuscript)
 
             # Mark workflow as completed
             workflow.status = "completed"
             workflow.current_stage = "completed"
-            workflow.completed_at = datetime.utcnow()
+            workflow.completed_at = datetime.now(timezone.utc)
             workflow.total_cost = total_cost
             await db.commit()
 
@@ -879,7 +879,7 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                 workflow = result.scalar_one()
                 workflow.status = "failed"
                 workflow.error_message = error_msg
-                workflow.completed_at = datetime.utcnow()
+                workflow.completed_at = datetime.now(timezone.utc)
                 await db.commit()
             except Exception:
                 pass

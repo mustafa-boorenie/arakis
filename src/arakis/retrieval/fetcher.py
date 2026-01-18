@@ -3,7 +3,7 @@ from __future__ import annotations
 """Waterfall paper fetcher that tries multiple sources."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -30,7 +30,7 @@ class FetchResult:
     paper: Paper
     retrieval_result: RetrievalResult | None = None
     sources_tried: list[str] = field(default_factory=list)
-    fetched_at: datetime = field(default_factory=datetime.utcnow)
+    fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     @property
     def pdf_url(self) -> str | None:
@@ -292,7 +292,7 @@ class PaperFetcher:
 
             if result.success and result.text:
                 paper.full_text = result.text
-                paper.full_text_extracted_at = datetime.utcnow()
+                paper.full_text_extracted_at = datetime.now(timezone.utc)
                 paper.text_extraction_method = result.extraction_method
                 paper.text_quality_score = result.quality_score
         except Exception:

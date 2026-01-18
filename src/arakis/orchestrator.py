@@ -3,7 +3,7 @@ from __future__ import annotations
 """Search orchestrator - coordinates multi-database searches."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from arakis.agents.query_generator import QueryGeneratorAgent
@@ -30,7 +30,7 @@ class ComprehensiveSearchResult:
 
     # Search metadata
     databases_searched: list[str] = field(default_factory=list)
-    search_started: datetime = field(default_factory=datetime.utcnow)
+    search_started: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     search_completed: datetime | None = None
     total_execution_time_ms: int = 0
 
@@ -104,7 +104,7 @@ class SearchOrchestrator:
         Returns:
             ComprehensiveSearchResult with papers and metadata
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         # Default databases (excluding Google Scholar due to rate limits)
         if databases is None:
@@ -208,7 +208,7 @@ class SearchOrchestrator:
         )
 
         # Calculate execution time
-        end_time = datetime.utcnow()
+        end_time = datetime.now(timezone.utc)
         execution_time = int((end_time - start_time).total_seconds() * 1000)
 
         result = ComprehensiveSearchResult(

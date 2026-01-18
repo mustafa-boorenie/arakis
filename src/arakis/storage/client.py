@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, BinaryIO
 
@@ -299,7 +299,7 @@ class StorageClient:
         # Add paper_id to metadata
         meta = metadata or {}
         meta["paper_id"] = paper_id
-        meta["uploaded_at"] = datetime.utcnow().isoformat()
+        meta["uploaded_at"] = datetime.now(timezone.utc).isoformat()
 
         return self.upload_bytes(
             data=pdf_content,
