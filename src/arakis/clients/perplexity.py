@@ -184,17 +184,19 @@ class PerplexityClient:
 
     BASE_URL = "https://api.perplexity.ai"
 
-    def __init__(self, model: str = "sonar"):
+    def __init__(self, model: str = "sonar", debug: bool = False):
         """Initialize Perplexity client.
 
         Args:
             model: Model to use. Options:
                 - "sonar": Standard research model (default)
                 - "sonar-pro": More thorough research (higher cost)
+            debug: If True, print detailed request/response info for debugging
         """
         self.settings = get_settings()
         self.api_key = self.settings.perplexity_api_key
         self.model = model
+        self.debug = debug or self.settings.debug
         self._last_request_time = 0.0
         self._min_interval = 1.0  # 1 request per second to be safe
         self._lock: asyncio.Lock | None = None
@@ -220,13 +222,20 @@ class PerplexityClient:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=4, max=30))
     async def _request(
-        self, messages: list[dict[str, str]], system_prompt: str | None = None
+        self,
+        messages: list[dict[str, str]],
+        system_prompt: str | None = None,
+        search_mode: str = "auto",
     ) -> dict[str, Any]:
         """Make a request to the Perplexity API.
 
         Args:
             messages: Chat messages
             system_prompt: Optional system prompt
+            search_mode: Search mode for web search. Options:
+                - "auto": Let model decide (default)
+                - "web": Force web search
+                - "off": No web search (use training data only)
 
         Returns:
             API response as dictionary
@@ -253,10 +262,20 @@ class PerplexityClient:
         if system_prompt:
             full_messages = [{"role": "system", "content": system_prompt}] + messages
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
             "messages": full_messages,
         }
+
+        # Add search_mode parameter for Sonar models
+        # This enables web search and returns search_results in response
+        if search_mode and search_mode != "off":
+            payload["search_mode"] = search_mode
+
+        if self.debug:
+            print(f"[Perplexity Debug] POST {self.BASE_URL}/chat/completions")
+            print(f"[Perplexity Debug] Model: {self.model}, search_mode: {search_mode}")
+            print(f"[Perplexity Debug] Messages: {len(full_messages)} messages")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             try:
@@ -266,18 +285,54 @@ class PerplexityClient:
                     json=payload,
                 )
 
+                if self.debug:
+                    print(f"[Perplexity Debug] Response status: {response.status_code}")
+
                 if response.status_code == 429:
                     raise PerplexityRateLimitError("Perplexity rate limit exceeded")
 
                 if response.status_code == 401:
                     raise PerplexityClientError("Invalid Perplexity API key")
 
+                if response.status_code >= 400:
+                    # Get detailed error message from response
+                    try:
+                        error_data = response.json()
+                        error_msg = error_data.get("error", {}).get(
+                            "message", response.text
+                        )
+                    except Exception:
+                        error_msg = response.text
+                    if self.debug:
+                        print(f"[Perplexity Debug] Error response: {response.text}")
+                    raise PerplexityClientError(
+                        f"Perplexity API error (status {response.status_code}): {error_msg}"
+                    )
+
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+
+                if self.debug:
+                    print(f"[Perplexity Debug] Response keys: {list(data.keys())}")
+                    if "choices" in data:
+                        content = data["choices"][0].get("message", {}).get("content", "")
+                        print(f"[Perplexity Debug] Content length: {len(content)} chars")
+                    if "search_results" in data:
+                        print(f"[Perplexity Debug] Search results: {len(data['search_results'])}")
+                    if "citations" in data:
+                        print(f"[Perplexity Debug] Citations: {len(data['citations'])}")
+                    if "usage" in data:
+                        print(f"[Perplexity Debug] Usage: {data['usage']}")
+
+                return data
 
             except httpx.HTTPStatusError as e:
+                if self.debug:
+                    print(f"[Perplexity Debug] HTTP Status Error: {e}")
                 raise PerplexityClientError(f"Perplexity API error: {e}")
             except httpx.TimeoutException:
+                if self.debug:
+                    print("[Perplexity Debug] Request timed out")
                 raise PerplexityClientError("Perplexity API request timed out")
 
     async def research_topic(self, topic: str, context: str | None = None) -> PerplexityResponse:
@@ -312,7 +367,8 @@ Mention the DOI when available."""
 
         messages = [{"role": "user", "content": user_message}]
 
-        data = await self._request(messages, system_prompt)
+        # Use "web" search mode to ensure we get search results with citations
+        data = await self._request(messages, system_prompt, search_mode="web")
 
         # Parse response
         choice = data.get("choices", [{}])[0]
@@ -375,7 +431,8 @@ Return at least 5-10 relevant papers."""
 
         messages = [{"role": "user", "content": f"Find academic papers about: {query}"}]
 
-        response_data = await self._request(messages, system_prompt)
+        # Use "web" search mode to ensure we get search results
+        response_data = await self._request(messages, system_prompt, search_mode="web")
 
         papers = []
 
