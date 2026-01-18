@@ -52,8 +52,8 @@ class Workflow(Base):
     total_cost = Column(Float, default=0.0)
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now, nullable=False)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     # Error tracking
     error_message = Column(Text, nullable=True)
@@ -103,7 +103,7 @@ class Paper(Base):
 
     # Full text
     full_text = Column(Text, nullable=True)
-    full_text_extracted_at = Column(DateTime, nullable=True)
+    full_text_extracted_at = Column(DateTime(timezone=True), nullable=True)
     text_extraction_method = Column(String(20))  # "pymupdf", "pdfplumber", "ocr"
     text_quality_score = Column(Float)
 
@@ -115,7 +115,7 @@ class Paper(Base):
     # Source
     source = Column(String(50))  # "pubmed", "openalex", etc.
     source_url = Column(String(1000))
-    retrieved_at = Column(DateTime, default=utc_now)
+    retrieved_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="papers")
@@ -151,7 +151,7 @@ class ScreeningDecision(Base):
     human_decision = Column(String(20), nullable=True)  # Human override
     overridden = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="screening_decisions")
@@ -184,7 +184,7 @@ class Extraction(Base):
     reviewer_decisions = Column(JSON)  # List of individual reviewer decisions (for triple-review)
     low_confidence_fields = Column(JSON)  # List of fields below confidence threshold
 
-    created_at = Column(DateTime, default=utc_now)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="extractions")
@@ -219,8 +219,8 @@ class Manuscript(Base):
     meta = Column(JSON)  # {authors, affiliations, keywords, funding, etc.}
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, onupdate=utc_now)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    updated_at = Column(DateTime(timezone=True), onupdate=utc_now)
 
     # Relationships
     workflow = relationship("Workflow", back_populates="manuscript")
@@ -250,8 +250,8 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
 
     # Timestamps
-    created_at = Column(DateTime, default=utc_now)
-    last_login = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
     # API usage tracking (optional)
     total_workflows = Column(Integer, default=0)
@@ -273,9 +273,9 @@ class RefreshToken(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token_hash = Column(String(64), nullable=False, index=True)
     device_info = Column(String(255), nullable=True)
-    expires_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, default=utc_now)
-    revoked_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="refresh_tokens")
