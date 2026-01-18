@@ -134,10 +134,27 @@ export function ChatContainer() {
       return;
     }
 
-    // If auth is loading, wait for it to complete
+    // If auth is loading, wait for it to complete (max 10 seconds with polling)
     if (isAuthLoading) {
-      // User just logged in, give it a moment
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const maxWaitTime = 10000;
+      const pollInterval = 100;
+      const startTime = Date.now();
+
+      while (Date.now() - startTime < maxWaitTime) {
+        // Get fresh state from store
+        const { auth } = useStore.getState();
+        if (!auth.isLoading) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+      }
+
+      // Re-check auth state after waiting
+      const { auth } = useStore.getState();
+      if (!auth.isAuthenticated && !auth.user) {
+        openLoginDialog('Sign in to start your systematic review. Your progress has been saved.');
+        return;
+      }
     }
 
     setChatStage('creating');
