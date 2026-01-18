@@ -95,6 +95,11 @@ class ReferenceManager:
         key = paper.best_identifier
         self.papers[key] = paper
 
+        # Also register by paper.id for flexible matching
+        # This is important for Perplexity papers with IDs like 'perplexity_abc123'
+        if paper.id and paper.id != key:
+            self.papers[paper.id] = paper
+
         # Also register by alternative identifiers for flexible matching
         if paper.doi and paper.doi != key:
             self.papers[paper.doi] = paper

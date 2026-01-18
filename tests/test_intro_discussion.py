@@ -75,17 +75,19 @@ class TestIntroductionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = mock_response
 
-            result = await writer.write_background(
-                topic="Antihypertensive therapy",
-                literature_context=sample_papers,
-            )
+            # Mock the rate limiter to avoid delays
+            with patch.object(writer.rate_limiter, "wait", new_callable=AsyncMock):
+                result = await writer.write_background(
+                    topic="Antihypertensive therapy",
+                    literature_context=sample_papers,
+                )
 
-            assert result.success
-            assert result.section.title == "Background"
-            assert result.section.content == "Background content"
-            # Note: tokens_used is 0 when using validation+retry flow
-            assert result.tokens_used >= 0
-            mock_create.assert_called()
+                assert result.success
+                assert result.section.title == "Background"
+                assert result.section.content == "Background content"
+                # Note: tokens_used is 0 when using validation+retry flow
+                assert result.tokens_used >= 0
+                mock_create.assert_called()
 
     @pytest.mark.asyncio
     async def test_write_rationale(self):
@@ -100,16 +102,18 @@ class TestIntroductionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = mock_response
 
-            result = await writer.write_rationale(
-                research_question="Effect of antihypertensive therapy on blood pressure"
-            )
+            # Mock the rate limiter to avoid delays
+            with patch.object(writer.rate_limiter, "wait", new_callable=AsyncMock):
+                result = await writer.write_rationale(
+                    research_question="Effect of antihypertensive therapy on blood pressure"
+                )
 
-            assert result.success
-            assert result.section.title == "Rationale"
-            assert result.section.content == "Rationale content"
-            # Note: tokens_used is 0 when using validation+retry flow
-            assert result.tokens_used >= 0
-            mock_create.assert_called()
+                assert result.success
+                assert result.section.title == "Rationale"
+                assert result.section.content == "Rationale content"
+                # Note: tokens_used is 0 when using validation+retry flow
+                assert result.tokens_used >= 0
+                mock_create.assert_called()
 
     @pytest.mark.asyncio
     async def test_write_objectives(self):
@@ -124,17 +128,19 @@ class TestIntroductionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = mock_response
 
-            result = await writer.write_objectives(
-                research_question="Effect of antihypertensive therapy on blood pressure",
-                inclusion_criteria=["RCTs", "Adult patients"],
-                primary_outcome="Systolic blood pressure",
-            )
+            # Mock the rate limiter to avoid delays
+            with patch.object(writer.rate_limiter, "wait", new_callable=AsyncMock):
+                result = await writer.write_objectives(
+                    research_question="Effect of antihypertensive therapy on blood pressure",
+                    inclusion_criteria=["RCTs", "Adult patients"],
+                    primary_outcome="Systolic blood pressure",
+                )
 
-            assert result.success
-            assert result.section.title == "Objectives"
-            assert result.section.content == "Objectives content"
-            assert result.tokens_used == 60
-            mock_create.assert_called_once()
+                assert result.success
+                assert result.section.title == "Objectives"
+                assert result.section.content == "Objectives content"
+                assert result.tokens_used == 60
+                mock_create.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_write_complete_introduction(self, sample_papers):
@@ -153,21 +159,23 @@ class TestIntroductionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.side_effect = mock_responses
 
-            # write_complete_introduction now returns (Section, list[Paper])
-            section, cited_papers = await writer.write_complete_introduction(
-                research_question="Effect of antihypertensive therapy",
-                literature_context=sample_papers,
-                use_perplexity=False,  # Don't use Perplexity in test
-            )
+            # Mock the rate limiter to avoid delays
+            with patch.object(writer.rate_limiter, "wait", new_callable=AsyncMock):
+                # write_complete_introduction now returns (Section, list[Paper])
+                section, cited_papers = await writer.write_complete_introduction(
+                    research_question="Effect of antihypertensive therapy",
+                    literature_context=sample_papers,
+                    use_perplexity=False,  # Don't use Perplexity in test
+                )
 
-            assert section.title == "Introduction"
-            assert len(section.subsections) == 3
-            assert section.subsections[0].title == "Background"
-            assert section.subsections[1].title == "Rationale"
-            assert section.subsections[2].title == "Objectives"
-            assert mock_create.call_count == 3
-            # cited_papers is a list (may be empty in mock test)
-            assert isinstance(cited_papers, list)
+                assert section.title == "Introduction"
+                assert len(section.subsections) == 3
+                assert section.subsections[0].title == "Background"
+                assert section.subsections[1].title == "Rationale"
+                assert section.subsections[2].title == "Objectives"
+                assert mock_create.call_count == 3
+                # cited_papers is a list (may be empty in mock test)
+                assert isinstance(cited_papers, list)
 
     def test_cost_estimation(self):
         """Test cost estimation."""

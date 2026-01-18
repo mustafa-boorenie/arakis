@@ -213,6 +213,11 @@ class CitationExtractor:
         if "doi" in text.lower():
             return True
 
+        # Accept alphanumeric IDs that are at least 4 chars and start with a letter
+        # This handles paper IDs from various sources that passed the invalid check
+        if len(text) >= 4 and text[0].isalpha() and text.replace("_", "").replace("-", "").isalnum():
+            return True
+
         return False
 
     def _normalize_paper_id(self, paper_id: str) -> str:
