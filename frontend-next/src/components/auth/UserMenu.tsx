@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +14,7 @@ import {
 import { User, LogOut, Settings, CreditCard } from 'lucide-react';
 
 export function UserMenu() {
+  const router = useRouter();
   const { user, logout } = useAuth();
 
   if (!user) return null;
@@ -60,7 +62,7 @@ export function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={() => router.push('/settings')}>
           <User className="w-4 h-4 mr-2" />
           Profile
         </DropdownMenuItem>
@@ -73,7 +75,7 @@ export function UserMenu() {
             </span>
           </div>
         </DropdownMenuItem>
-        <DropdownMenuItem disabled>
+        <DropdownMenuItem onClick={() => router.push('/settings')}>
           <Settings className="w-4 h-4 mr-2" />
           Settings
         </DropdownMenuItem>

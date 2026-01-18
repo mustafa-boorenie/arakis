@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStore } from '@/store';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { SettingsDialog } from '@/components/settings';
@@ -13,9 +14,11 @@ import {
   ArchiveRestore,
   ChevronDown,
   ChevronRight,
+  Settings,
 } from 'lucide-react';
 
 export function Sidebar() {
+  const router = useRouter();
   const {
     resetChat,
     workflow,
@@ -31,9 +34,24 @@ export function Sidebar() {
     updateFormData,
     clearMessages,
   } = useStore();
+  const user = useStore((state) => state.auth.user);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+
+  // Get user initials
+  const getUserInitials = () => {
+    if (!user) return 'U';
+    if (user.full_name) {
+      return user.full_name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    return user.email[0].toUpperCase();
+  };
 
   // Safe access to archived array (handles undefined from old localStorage)
   const archivedIds = workflow.archived || [];
@@ -290,13 +308,19 @@ export function Sidebar() {
 
       {/* User Profile */}
       <div className="p-2 border-t border-sidebar-border">
-        <button className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sidebar-accent rounded-lg transition-colors">
+        <button
+          onClick={() => router.push('/settings')}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sidebar-accent rounded-lg transition-colors"
+        >
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-xs font-medium">
-            U
+            {getUserInitials()}
           </div>
-          <div className="flex-1 text-left">
-            <span className="text-sm">User</span>
+          <div className="flex-1 text-left min-w-0">
+            <span className="text-sm truncate block">
+              {user?.full_name || user?.email || 'Guest'}
+            </span>
           </div>
+          <Settings className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>
     </div>
