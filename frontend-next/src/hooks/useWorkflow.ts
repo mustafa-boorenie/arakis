@@ -18,6 +18,7 @@ export function useWorkflow() {
     setManuscript,
     setEditorLoading,
     setLayoutMode,
+    setViewMode,
     startTransition,
     endTransition,
     setChatStage,
@@ -25,10 +26,19 @@ export function useWorkflow() {
   } = useStore();
 
   // Poll for workflow status when pending or running
+  const workflowId = workflow.current?.id;
+  const workflowStatus = workflow.current?.status;
+  const shouldPoll = !!(workflowId) && (workflowStatus === 'running' || workflowStatus === 'pending');
+
   const { isPolling } = usePolling<WorkflowResponse>(
-    () => api.getWorkflow(workflow.current?.id || ''),
+    async () => {
+      if (!workflowId) {
+        throw new Error('No workflow ID');
+      }
+      return api.getWorkflow(workflowId);
+    },
     {
-      enabled: !!(workflow.current?.id) && (workflow.current?.status === 'running' || workflow.current?.status === 'pending'),
+      enabled: shouldPoll,
       interval: 5000, // 5 seconds
       shouldStop: (data) =>
         data.status === 'completed' || data.status === 'failed',
@@ -95,12 +105,14 @@ export function useWorkflow() {
         setCurrentWorkflow(response);
         addToHistory(response);
         setIsPolling(true);
+        // Switch to workflow detail view to show progress
+        setViewMode('viewing-workflow');
         return response;
       } finally {
         setIsCreating(false);
       }
     },
-    [setIsCreating, setCurrentWorkflow, addToHistory, setIsPolling]
+    [setIsCreating, setCurrentWorkflow, addToHistory, setIsPolling, setViewMode]
   );
 
   const loadWorkflow = useCallback(

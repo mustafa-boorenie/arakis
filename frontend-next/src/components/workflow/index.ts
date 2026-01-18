@@ -1,0 +1,1 @@
+export { WorkflowDetailView } from './WorkflowDetailView';

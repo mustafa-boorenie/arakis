@@ -56,6 +56,8 @@ class ApiClient {
     options?: RequestInit & { skipAuth?: boolean }
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    console.log(`[API] ${options?.method || 'GET'} ${url}`);
+
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options?.headers,
@@ -69,10 +71,16 @@ class ApiClient {
       }
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+      });
+    } catch (fetchError) {
+      console.error(`[API] Network error fetching ${endpoint}:`, fetchError);
+      throw new Error(`Network error: ${fetchError instanceof Error ? fetchError.message : 'Failed to fetch'}`);
+    }
 
     // Handle 401 Unauthorized - try to refresh token
     if (response.status === 401 && !options?.skipAuth) {

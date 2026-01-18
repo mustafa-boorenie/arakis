@@ -16,9 +16,11 @@ import { DEFAULT_WORKFLOW_FORM, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/ty
 
 export type LayoutMode = 'landing' | 'chat-fullscreen' | 'split-view';
 export type MobileView = 'sidebar' | 'editor';
+export type ViewMode = 'new-review' | 'viewing-workflow';
 
 interface LayoutState {
   mode: LayoutMode;
+  viewMode: ViewMode; // Distinguishes new review form vs viewing existing workflow
   sidebarWidth: number;
   isTransitioning: boolean;
   mobileView: MobileView;
@@ -78,6 +80,7 @@ interface AppState {
 
   // Layout actions
   setLayoutMode: (mode: LayoutMode) => void;
+  setViewMode: (viewMode: ViewMode) => void;
   setSidebarWidth: (width: number) => void;
   startTransition: () => void;
   endTransition: () => void;
@@ -132,6 +135,7 @@ export const useStore = create<AppState>()(
         // ============= Initial State =============
         layout: {
           mode: 'landing',
+          viewMode: 'new-review',
           sidebarWidth: 260,
           isTransitioning: false,
           mobileView: 'editor',
@@ -171,6 +175,11 @@ export const useStore = create<AppState>()(
         setLayoutMode: (mode) =>
           set((state) => ({
             layout: { ...state.layout, mode },
+          })),
+
+        setViewMode: (viewMode) =>
+          set((state) => ({
+            layout: { ...state.layout, viewMode },
           })),
 
         setSidebarWidth: (width) =>
@@ -352,6 +361,7 @@ export const useStore = create<AppState>()(
             layout: {
               ...state.layout,
               mode: 'landing',
+              viewMode: 'new-review',
               mobileView: 'editor',
               isMobileSidebarOpen: false,
             },
@@ -514,6 +524,7 @@ export const useStore = create<AppState>()(
             layout: {
               ...currentState.layout,
               mode: persisted?.layout?.mode || 'landing',
+              viewMode: 'new-review', // Always start fresh on page load
             },
           };
         },

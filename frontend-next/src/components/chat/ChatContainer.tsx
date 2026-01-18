@@ -6,7 +6,6 @@ import { useWorkflow } from '@/hooks';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { DatabaseSelector } from './DatabaseSelector';
-import { WorkflowProgress } from './WorkflowProgress';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Sparkles, LogIn } from 'lucide-react';
@@ -47,7 +46,6 @@ export function ChatContainer() {
   const addMessage = useStore((state) => state.addMessage);
   const setChatStage = useStore((state) => state.setChatStage);
   const updateFormData = useStore((state) => state.updateFormData);
-  const workflow = useStore((state) => state.workflow);
   const layout = useStore((state) => state.layout);
   const openLoginDialog = useStore((state) => state.openLoginDialog);
 
@@ -161,11 +159,6 @@ export function ChatContainer() {
     }
 
     setChatStage('creating');
-    addMessage({
-      role: 'assistant',
-      content: CHAT_PROMPTS.creating,
-      metadata: { isLoading: true },
-    });
 
     try {
       const request: WorkflowCreateRequest = {
@@ -176,12 +169,8 @@ export function ChatContainer() {
         max_results_per_query: chat.formData.max_results_per_query,
         fast_mode: chat.formData.fast_mode,
       };
+      // createWorkflow will automatically switch to viewing-workflow mode
       await createWorkflow(request);
-      addMessage({
-        role: 'assistant',
-        content:
-          'Workflow created! I\'ll keep you updated on the progress below.',
-      });
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
@@ -271,12 +260,6 @@ export function ChatContainer() {
               )}
             </Card>
           )}
-
-          {/* Workflow progress */}
-          {(chat.stage === 'creating' || workflow.current) &&
-            workflow.current?.status !== 'completed' && (
-              <WorkflowProgress />
-            )}
 
           {/* Invisible element at bottom for auto-scroll */}
           <div ref={bottomRef} className="h-1" />

@@ -5,6 +5,7 @@ import { AppShell } from '@/components/layout';
 import { Sidebar } from '@/components/sidebar';
 import { ManuscriptEditor } from '@/components/editor';
 import { ChatContainer, LandingView } from '@/components/chat';
+import { WorkflowDetailView } from '@/components/workflow';
 import { useStore } from '@/store';
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/types';
 
@@ -63,6 +64,7 @@ export default function Home() {
       editor={<ManuscriptEditor />}
       chat={<ChatContainer />}
       landing={<LandingWrapper />}
+      workflowDetail={<WorkflowDetailView />}
     />
   );
 }

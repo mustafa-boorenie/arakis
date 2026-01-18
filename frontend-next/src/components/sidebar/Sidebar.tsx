@@ -28,8 +28,8 @@ export function Sidebar() {
     setCurrentWorkflow,
     setManuscript,
     setLayoutMode,
+    setViewMode,
     setChatStage,
-    addMessage,
     setEditorLoading,
     updateFormData,
     clearMessages,
@@ -103,51 +103,36 @@ export function Sidebar() {
         const manuscript = await api.getManuscript(w.id);
         setManuscript(manuscript);
         setLayoutMode('split-view');
+        setViewMode('viewing-workflow');
         setChatStage('complete');
-        addMessage({
-          role: 'assistant',
-          content: `Loaded your review: "${w.research_question}". Found ${w.papers_found} papers, included ${w.papers_included} after screening.`,
-        });
       } catch (error) {
-        // Manuscript not available - show info without editor
+        // Manuscript not available - show workflow detail view
         console.error('Failed to load manuscript:', error);
         setManuscript(null);
         setLayoutMode('chat-fullscreen');
+        setViewMode('viewing-workflow');
         setChatStage('complete');
-        addMessage({
-          role: 'assistant',
-          content: `Review: "${w.research_question}"\n\nFound ${w.papers_found} papers, included ${w.papers_included} after screening.\n\n(Manuscript data not available - it may have been deleted from the server)`,
-        });
       } finally {
         setEditorLoading(false);
       }
     } else if (w.status === 'running' || w.status === 'pending') {
-      // Show in-progress workflow
+      // Show in-progress workflow in the dedicated detail view
       setLayoutMode('chat-fullscreen');
+      setViewMode('viewing-workflow');
       setChatStage('creating');
       setManuscript(null);
-      addMessage({
-        role: 'assistant',
-        content: `Resuming workflow: "${w.research_question}". Current status: ${w.status}.`,
-      });
     } else if (w.status === 'failed') {
-      // Show failed workflow
+      // Show failed workflow in the dedicated detail view
       setLayoutMode('chat-fullscreen');
+      setViewMode('viewing-workflow');
       setChatStage('confirm');
       setManuscript(null);
-      addMessage({
-        role: 'assistant',
-        content: `Workflow "${w.research_question}" failed: ${w.error_message || 'Unknown error'}. You can try starting a new review.`,
-      });
     } else {
-      // Default: show chat view
+      // Default: show workflow detail view
       setLayoutMode('chat-fullscreen');
+      setViewMode('viewing-workflow');
       setChatStage('complete');
       setManuscript(null);
-      addMessage({
-        role: 'assistant',
-        content: `Review: "${w.research_question}"`,
-      });
     }
   };
 

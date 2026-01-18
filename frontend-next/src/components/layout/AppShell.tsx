@@ -17,6 +17,7 @@ interface AppShellProps {
   editor: React.ReactNode;
   chat: React.ReactNode;
   landing?: React.ReactNode;
+  workflowDetail?: React.ReactNode;
 }
 
 // Hook to detect mobile screen
@@ -97,7 +98,7 @@ function SidebarToggle({
   );
 }
 
-export function AppShell({ sidebar, editor, chat, landing }: AppShellProps) {
+export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: AppShellProps) {
   const { layout, setMobileView, setMobileSidebarOpen, toggleSidebarCollapsed } = useStore();
   const isMobile = useIsMobile();
 
@@ -162,27 +163,50 @@ export function AppShell({ sidebar, editor, chat, landing }: AppShellProps) {
           )
         ) : layout.mode === 'chat-fullscreen' ? (
           // Chat mode with persistent sidebar
-          isMobile ? (
-            // Mobile: full-screen chat
-            <motion.div
-              key="chat-fullscreen-mobile"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full flex flex-col min-h-0 overflow-hidden"
-            >
-              {chat}
-            </motion.div>
+          // Distinguish between new review form and viewing existing workflow
+          layout.viewMode === 'viewing-workflow' && workflowDetail ? (
+            // Viewing existing workflow - show detail view
+            isMobile ? (
+              <motion.div
+                key="workflow-detail-mobile"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="h-full w-full flex flex-col min-h-0 overflow-hidden"
+              >
+                {workflowDetail}
+              </motion.div>
+            ) : (
+              renderDesktopWithSidebar(
+                <div className="flex-1 h-full overflow-hidden">
+                  {workflowDetail}
+                </div>,
+                'workflow-detail-desktop'
+              )
+            )
           ) : (
-            // Desktop: sidebar + chat (full width, full height for scrolling)
-            renderDesktopWithSidebar(
-              <div className="flex-1 h-full overflow-hidden">
-                <div className="w-full h-full flex flex-col min-h-0">
-                  {chat}
-                </div>
-              </div>,
-              'chat-fullscreen-desktop'
+            // New review - show chat form flow
+            isMobile ? (
+              <motion.div
+                key="chat-fullscreen-mobile"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="h-full w-full flex flex-col min-h-0 overflow-hidden"
+              >
+                {chat}
+              </motion.div>
+            ) : (
+              renderDesktopWithSidebar(
+                <div className="flex-1 h-full overflow-hidden">
+                  <div className="w-full h-full flex flex-col min-h-0">
+                    {chat}
+                  </div>
+                </div>,
+                'chat-fullscreen-desktop'
+              )
             )
           )
         ) : isMobile ? (
