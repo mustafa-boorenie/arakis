@@ -1,0 +1,12 @@
+export { MarketingLandingPage } from './MarketingLandingPage';
+export { LandingHeader } from './LandingHeader';
+export { Hero } from './Hero';
+export { SocialProof } from './SocialProof';
+export { WhyArakis } from './WhyArakis';
+export { Capabilities } from './Capabilities';
+export { HowItWorks } from './HowItWorks';
+export { Pricing } from './Pricing';
+export { Testimonials } from './Testimonials';
+export { FAQ } from './FAQ';
+export { FinalCTA } from './FinalCTA';
+export { LandingFooter } from './LandingFooter';

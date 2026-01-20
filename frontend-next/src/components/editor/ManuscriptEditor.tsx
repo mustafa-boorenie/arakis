@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -17,11 +17,30 @@ import {
 import { $createHeadingNode } from '@lexical/rich-text';
 import { useStore } from '@/store';
 import { editorConfig } from '@/lib/editor/config';
-import { EditorToolbar } from './EditorToolbar';
-import { FigureRenderer } from './FigureRenderer';
-import { TableRenderer } from './TableRenderer';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { FileText, Loader2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  Sparkles,
+  Share2,
+  Bold,
+  Italic,
+  Underline,
+  Link2,
+  Image,
+  Table,
+  ChevronDown,
+  Copy,
+  Download,
+  MessageSquare,
+  BarChart3,
+  BookOpen,
+  FileText,
+  Loader2,
+  Send,
+} from 'lucide-react';
 
 // Plugin to load manuscript content
 function ManuscriptLoaderPlugin() {
@@ -53,7 +72,6 @@ function ManuscriptLoaderPlugin() {
         // Parse content and add paragraphs
         const paragraphs = content.split('\n\n').filter(Boolean);
         paragraphs.forEach((text) => {
-          // Check if it's a subheading (starts with ## or ###)
           if (text.startsWith('### ')) {
             const subheading = $createHeadingNode('h4');
             subheading.append($createTextNode(text.replace('### ', '')));
@@ -64,11 +82,10 @@ function ManuscriptLoaderPlugin() {
             root.append(subheading);
           } else {
             const para = $createParagraphNode();
-            // Handle basic markdown formatting
             const cleanText = text
-              .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markers (we lose formatting, but it's readable)
-              .replace(/\*(.*?)\*/g, '$1') // Remove italic markers
-              .replace(/^[-*] /gm, '• ') // Convert list items
+              .replace(/\*\*(.*?)\*\*/g, '$1')
+              .replace(/\*(.*?)\*/g, '$1')
+              .replace(/^[-*] /gm, '• ')
               .trim();
             para.append($createTextNode(cleanText));
             root.append(para);
@@ -109,10 +126,10 @@ function EditorSkeleton() {
 // Empty state
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <FileText className="w-16 h-16 text-muted-foreground mb-4" />
-      <h2 className="text-xl font-semibold mb-2">No Manuscript Yet</h2>
-      <p className="text-muted-foreground max-w-md">
+    <div className="flex flex-col items-center justify-center h-full text-center p-8 bg-gray-50">
+      <FileText className="w-16 h-16 text-gray-300 mb-4" />
+      <h2 className="text-xl font-semibold text-gray-900 mb-2">No Manuscript Yet</h2>
+      <p className="text-gray-500 max-w-md">
         Create a systematic review using the chat on the left. Once complete,
         your manuscript will appear here for editing and export.
       </p>
@@ -120,26 +137,107 @@ function EmptyState() {
   );
 }
 
+// Toolbar component
+function EditorToolbarNew() {
+  const [activeTab, setActiveTab] = useState('chat');
+
+  const formatButtons = [
+    { icon: Bold, label: 'Bold' },
+    { icon: Italic, label: 'Italic' },
+    { icon: Underline, label: 'Underline' },
+    { icon: Link2, label: 'Link' },
+    { icon: Image, label: 'Image' },
+    { icon: Table, label: 'Table' },
+  ];
+
+  const actionTabs = [
+    { id: 'copy', label: 'Copy', icon: Copy },
+    { id: 'export', label: 'Export', icon: Download },
+    { id: 'chat', label: 'Chat', icon: MessageSquare },
+    { id: 'analysis', label: 'Analysis', icon: BarChart3 },
+    { id: 'library', label: 'Library', icon: BookOpen },
+  ];
+
+  return (
+    <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200">
+      {/* Format Toolbar */}
+      <div className="flex items-center gap-1">
+        {/* Heading Dropdown */}
+        <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">
+          H1
+          <ChevronDown className="w-3 h-3" />
+        </button>
+
+        <div className="w-px h-6 bg-gray-200 mx-2" />
+
+        {formatButtons.map((btn) => (
+          <button
+            key={btn.label}
+            className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+            title={btn.label}
+          >
+            <btn.icon className="w-4 h-4" />
+          </button>
+        ))}
+
+        <div className="w-px h-6 bg-gray-200 mx-2" />
+
+        {/* ADA Dropdown */}
+        <button className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 rounded">
+          ADA
+          <ChevronDown className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Action Tabs */}
+      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+        {actionTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md transition-colors
+              ${activeTab === tab.id
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'
+              }
+            `}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ManuscriptEditor() {
-  const { editor: editorStore, setEditorDirty } = useStore();
+  const { editor: editorStore, setEditorDirty, setLayoutMode, setViewMode } = useStore();
   const { manuscript, isLoading } = editorStore;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [wordCount] = useState(340);
+  const [aiPrompt, setAiPrompt] = useState('');
 
   const handleChange = useCallback(
     () => {
-      // Mark as dirty when content changes
       setEditorDirty(true);
     },
     [setEditorDirty]
   );
 
+  const handleBack = () => {
+    setLayoutMode('chat-fullscreen');
+    setViewMode('viewing-workflow');
+  };
+
   // Show loading state
   if (isLoading) {
     return (
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col bg-white">
         <div className="p-4 border-b flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
-          <span className="text-sm text-muted-foreground">Loading manuscript...</span>
+          <span className="text-sm text-gray-500">Loading manuscript...</span>
         </div>
         <EditorSkeleton />
       </div>
@@ -151,74 +249,125 @@ export function ManuscriptEditor() {
     return <EmptyState />;
   }
 
+  const documentTitle = manuscript.manuscript.title || 'New Document';
+
   return (
-    <div className="h-full flex flex-col min-h-0">
-      <LexicalComposer initialConfig={editorConfig}>
-        <EditorToolbar />
-        <div className="flex-1 min-h-0 overflow-y-auto" ref={scrollRef}>
-          <div className="max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto p-6 md:p-8 lg:p-10 xl:p-12">
-            <RichTextPlugin
-              contentEditable={
-                <ContentEditable className="editor-content outline-none min-h-[500px]" />
-              }
-              placeholder={
-                <div className="text-muted-foreground absolute top-0 left-0 pointer-events-none">
-                  Start writing your manuscript...
-                </div>
-              }
-              ErrorBoundary={LexicalErrorBoundary}
-            />
-            <ManuscriptLoaderPlugin />
-            <HistoryPlugin />
-            <ListPlugin />
-            <OnChangePlugin onChange={handleChange} />
+    <div className="h-full flex flex-col bg-white">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleBack}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
 
-            {/* Figures */}
-            {manuscript.figures.length > 0 && (
-              <div className="mt-10 pt-8 border-t">
-                <h2 className="text-2xl font-sans font-semibold mb-6">Figures</h2>
-                {manuscript.figures.map((figure) => (
-                  <FigureRenderer key={figure.id} figure={figure} />
-                ))}
-              </div>
-            )}
-
-            {/* Tables */}
-            {manuscript.tables.length > 0 && (
-              <div className="mt-10 pt-8 border-t">
-                <h2 className="text-2xl font-sans font-semibold mb-6">Tables</h2>
-                {manuscript.tables.map((table) => (
-                  <TableRenderer key={table.id} table={table} />
-                ))}
-              </div>
-            )}
-
-            {/* References */}
-            {manuscript.references.length > 0 && (
-              <div className="mt-10 pt-8 border-t">
-                <h2 className="text-2xl font-sans font-semibold mb-6">References</h2>
-                <ol className="list-decimal list-inside space-y-2 text-sm">
-                  {manuscript.references.map((ref, index) => (
-                    <li key={ref.id || index} className="text-muted-foreground">
-                      {ref.citation}
-                      {ref.doi && (
-                        <a
-                          href={`https://doi.org/${ref.doi}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-2 text-primary hover:underline"
-                        >
-                          [{ref.doi}]
-                        </a>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
+          <div>
+            <h1 className="text-sm font-medium text-gray-900">{documentTitle}</h1>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{wordCount} words</span>
+              <span className="flex items-center gap-1 text-green-600">
+                <Check className="w-3 h-3" />
+                Saved
+              </span>
+            </div>
           </div>
         </div>
-      </LexicalComposer>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2">
+            <Sparkles className="w-4 h-4 text-purple-600" />
+            AI Generate
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2">
+            <Share2 className="w-4 h-4" />
+            Share
+          </Button>
+        </div>
+      </header>
+
+      {/* Toolbar */}
+      <EditorToolbarNew />
+
+      {/* Editor Content */}
+      <div className="flex-1 min-h-0 overflow-hidden flex">
+        <div className="flex-1 overflow-y-auto" ref={scrollRef}>
+          <LexicalComposer initialConfig={editorConfig}>
+            <div className="max-w-3xl mx-auto p-8">
+              {/* Section Headers */}
+              <div className="space-y-8">
+                <div>
+                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                    Title and Abstract
+                  </h2>
+                  <div className="bg-gray-50 rounded-lg p-4 min-h-[100px]">
+                    <RichTextPlugin
+                      contentEditable={
+                        <ContentEditable className="editor-content outline-none min-h-[80px] text-gray-700" />
+                      }
+                      placeholder={
+                        <div className="text-gray-400 absolute top-0 left-0 pointer-events-none">
+                          Enter your title and abstract...
+                        </div>
+                      }
+                      ErrorBoundary={LexicalErrorBoundary}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                    Introduction
+                  </h2>
+                  <div className="bg-gray-50 rounded-lg p-4 min-h-[100px]">
+                    <div className="text-gray-400 text-sm">
+                      Click to add introduction content...
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
+                    Methods
+                  </h2>
+                  <div className="bg-gray-50 rounded-lg p-4 min-h-[100px]">
+                    <div className="text-gray-400 text-sm">
+                      Click to add methods content...
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <ManuscriptLoaderPlugin />
+              <HistoryPlugin />
+              <ListPlugin />
+              <OnChangePlugin onChange={handleChange} />
+            </div>
+          </LexicalComposer>
+        </div>
+      </div>
+
+      {/* AI Chat Input */}
+      <div className="border-t border-gray-200 p-4 bg-white">
+        <div className="max-w-3xl mx-auto">
+          <div className="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-4 py-2">
+            <Input
+              type="text"
+              placeholder="Ask AI for Help"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+            />
+            <button
+              className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+              disabled={!aiPrompt.trim()}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

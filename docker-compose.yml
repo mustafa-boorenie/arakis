@@ -108,6 +108,7 @@ services:
       NCBI_API_KEY: ${NCBI_API_KEY:-}
       ELSEVIER_API_KEY: ${ELSEVIER_API_KEY:-}
       SERPAPI_KEY: ${SERPAPI_KEY:-}
+      PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
 
       # API Settings
       API_HOST: 0.0.0.0

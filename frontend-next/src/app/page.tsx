@@ -4,36 +4,21 @@ import { useEffect } from 'react';
 import { AppShell } from '@/components/layout';
 import { Sidebar } from '@/components/sidebar';
 import { ManuscriptEditor } from '@/components/editor';
-import { ChatContainer, LandingView } from '@/components/chat';
+import { ChatContainer } from '@/components/chat';
 import { WorkflowDetailView } from '@/components/workflow';
+import { MarketingLandingPage } from '@/components/landing';
+import { Dashboard } from '@/components/dashboard';
+import { DocumentsList } from '@/components/documents';
 import { useStore } from '@/store';
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/types';
-
-function LandingWrapper() {
-  const { addMessage, setChatStage, updateFormData, setLayoutMode } = useStore();
-
-  const handleSubmit = (question: string) => {
-    // Set the research question
-    updateFormData({ research_question: question });
-    // Add user message
-    addMessage({ role: 'user', content: question });
-    // Add assistant response
-    addMessage({
-      role: 'assistant',
-      content: "Great question! Now, what are your inclusion criteria? Enter them as comma-separated values (e.g., 'Adult patients, RCTs, English language').",
-    });
-    // Move to inclusion stage
-    setChatStage('inclusion');
-    // Switch to chat-fullscreen mode for the rest of the flow
-    setLayoutMode('chat-fullscreen');
-  };
-
-  return <LandingView onSubmit={handleSubmit} />;
-}
 
 export default function Home() {
   const setTokens = useStore((state) => state.setTokens);
   const setAuthLoading = useStore((state) => state.setAuthLoading);
+  const layoutMode = useStore((state) => state.layout.mode);
+  const currentView = useStore((state) => state.layout.currentView);
+  const chatStage = useStore((state) => state.chat.stage);
+  const { setLayoutMode } = useStore();
 
   // Handle OAuth tokens in URL hash (fallback if redirected to / instead of /auth/success)
   useEffect(() => {
@@ -58,12 +43,40 @@ export default function Home() {
     }
   }, [setTokens, setAuthLoading]);
 
+  const handleStartTrial = () => {
+    // Switch to chat-fullscreen mode for the app
+    setLayoutMode('chat-fullscreen');
+  };
+
+  // Show marketing landing page full-screen (no sidebar) when in landing mode
+  if (layoutMode === 'landing') {
+    return <MarketingLandingPage onStartTrial={handleStartTrial} />;
+  }
+
+  // Determine which main content to show based on currentView and chatStage
+  const getMainContent = () => {
+    // If viewing AI Writer documents list
+    if (currentView === 'ai-writer') {
+      return <DocumentsList />;
+    }
+
+    // For dashboard view, show Dashboard when at welcome/question stage
+    // Otherwise show ChatContainer for the workflow creation flow
+    if (currentView === 'dashboard') {
+      const showDashboard = chatStage === 'welcome' || chatStage === 'question';
+      return showDashboard ? <Dashboard /> : <ChatContainer />;
+    }
+
+    // Default to Dashboard for other views (placeholder)
+    return <Dashboard />;
+  };
+
+  // Show app with sidebar for all other modes
   return (
     <AppShell
       sidebar={<Sidebar />}
       editor={<ManuscriptEditor />}
-      chat={<ChatContainer />}
-      landing={<LandingWrapper />}
+      chat={getMainContent()}
       workflowDetail={<WorkflowDetailView />}
     />
   );

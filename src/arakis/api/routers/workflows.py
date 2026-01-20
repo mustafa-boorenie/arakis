@@ -540,27 +540,34 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             included_papers = [paper_map.get(pid) for pid in included_paper_ids if pid in paper_map]
             included_papers = [p for p in included_papers if p is not None]
 
-            # Write Introduction
+            # Write Introduction using Perplexity for literature research
             intro_text = ""
+            intro_references = []
             try:
                 from arakis.agents.intro_writer import IntroductionWriterAgent
 
                 intro_writer = IntroductionWriterAgent()
                 inclusion_list = [c.strip() for c in workflow_data.inclusion_criteria.split(",")]
-                intro_section = await intro_writer.write_complete_introduction(
+
+                # write_complete_introduction returns (Section, list[Paper])
+                intro_section, intro_cited_papers = await intro_writer.write_complete_introduction(
                     research_question=workflow_data.research_question,
                     inclusion_criteria=inclusion_list,
-                    literature_context=included_papers[:10] if included_papers else None,
+                    use_perplexity=True,  # Use Perplexity for background literature
                 )
-                intro_text = (
-                    intro_section.to_markdown()
-                    if hasattr(intro_section, "to_markdown")
-                    else str(intro_section.content)
-                )
+
+                # Convert section to markdown
+                intro_text = intro_section.to_markdown()
+
+                # Store references for later use
+                intro_references = intro_cited_papers
+
                 total_cost += 1.0
-                print(f"[{workflow_id}] Introduction written")
+                print(f"[{workflow_id}] Introduction written: {intro_section.total_word_count} words, {len(intro_cited_papers)} references")
             except Exception as e:
                 print(f"[{workflow_id}] Failed to write introduction: {e}")
+                import traceback
+                traceback.print_exc()
                 intro_text = f"## Introduction\n\nThis systematic review investigates: {workflow_data.research_question}\n\n"
 
             # Write Methods

@@ -1,311 +1,165 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { useStore } from '@/store';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { SettingsDialog } from '@/components/settings';
-import { api } from '@/lib/api/client';
-import type { WorkflowResponse } from '@/types';
+import { useAuth } from '@/hooks';
 import {
-  PenSquare,
+  PlusCircle,
+  PenTool,
+  FolderOpen,
+  BarChart3,
+  Users,
+  Puzzle,
   FileText,
-  Archive,
-  ArchiveRestore,
-  ChevronDown,
-  ChevronRight,
   Settings,
+  LogOut,
+  Sun,
+  Moon,
 } from 'lucide-react';
+
+type NavItem = {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  href?: string;
+  action?: () => void;
+};
 
 export function Sidebar() {
   const router = useRouter();
-  const {
-    resetChat,
-    workflow,
-    setHistory,
-    archiveWorkflow,
-    unarchiveWorkflow,
-    setCurrentWorkflow,
-    setManuscript,
-    setLayoutMode,
-    setViewMode,
-    setChatStage,
-    setEditorLoading,
-    updateFormData,
-    clearMessages,
-  } = useStore();
-  const user = useStore((state) => state.auth.user);
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showArchived, setShowArchived] = useState(false);
+  const pathname = usePathname();
+  const { logout } = useAuth();
+  const { resetChat, setLayoutMode, setViewMode, setCurrentView } = useStore();
+  const currentView = useStore((state) => state.layout.currentView);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Get user initials
-  const getUserInitials = () => {
-    if (!user) return 'U';
-    if (user.full_name) {
-      return user.full_name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    return user.email[0].toUpperCase();
-  };
-
-  // Safe access to archived array (handles undefined from old localStorage)
-  const archivedIds = workflow.archived || [];
-
-  // Filter active and archived workflows
-  const activeWorkflows = workflow.history.filter((w) => !archivedIds.includes(w.id));
-  const archivedWorkflows = workflow.history.filter((w) => archivedIds.includes(w.id));
-
-  // Load workflow history on mount
-  useEffect(() => {
-    const loadHistory = async () => {
-      setIsLoading(true);
-      try {
-        const response = await api.listWorkflows();
-        // Replace local history with server data for proper sync
-        setHistory(response.workflows);
-      } catch (error) {
-        console.error('Failed to load history:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    loadHistory();
-  }, [setHistory]);
-
-  // Handle clicking on a workflow
-  const handleWorkflowClick = async (w: WorkflowResponse) => {
-    // Skip if already viewing this workflow
-    if (workflow.current?.id === w.id) return;
-
-    // Clear existing messages when switching workflows
-    clearMessages();
-
-    // Set the current workflow
-    setCurrentWorkflow(w);
-
-    // Update form data with workflow info
-    updateFormData({
-      research_question: w.research_question,
-      inclusion_criteria: w.inclusion_criteria || '',
-      exclusion_criteria: w.exclusion_criteria || '',
-      databases: w.databases || ['pubmed'],
-    });
-
-    if (w.status === 'completed') {
-      // Try to load completed workflow with manuscript
-      setEditorLoading(true);
-      try {
-        const manuscript = await api.getManuscript(w.id);
-        setManuscript(manuscript);
-        setLayoutMode('split-view');
-        setViewMode('viewing-workflow');
-        setChatStage('complete');
-      } catch (error) {
-        // Manuscript not available - show workflow detail view
-        console.error('Failed to load manuscript:', error);
-        setManuscript(null);
-        setLayoutMode('chat-fullscreen');
-        setViewMode('viewing-workflow');
-        setChatStage('complete');
-      } finally {
-        setEditorLoading(false);
-      }
-    } else if (w.status === 'running' || w.status === 'pending') {
-      // Show in-progress workflow in the dedicated detail view
-      setLayoutMode('chat-fullscreen');
-      setViewMode('viewing-workflow');
-      setChatStage('creating');
-      setManuscript(null);
-    } else if (w.status === 'failed') {
-      // Show failed workflow in the dedicated detail view
-      setLayoutMode('chat-fullscreen');
-      setViewMode('viewing-workflow');
-      setChatStage('confirm');
-      setManuscript(null);
-    } else {
-      // Default: show workflow detail view
-      setLayoutMode('chat-fullscreen');
-      setViewMode('viewing-workflow');
-      setChatStage('complete');
-      setManuscript(null);
+  const handleNewReview = () => {
+    resetChat();
+    setLayoutMode('chat-fullscreen');
+    setViewMode('new-review');
+    setCurrentView('dashboard');
+    // Navigate to home if not already there
+    if (window.location.pathname !== '/') {
+      router.push('/');
     }
   };
 
-  // Handle archive
-  const handleArchive = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    archiveWorkflow(id);
+  const handleNavClick = (item: NavItem) => {
+    if (item.action) {
+      item.action();
+    } else if (item.href) {
+      router.push(item.href);
+    }
   };
 
-  // Handle restore from archive
-  const handleRestore = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    unarchiveWorkflow(id);
-  };
+  const navItems: NavItem[] = [
+    { id: 'dashboard', label: 'New Review', icon: PlusCircle, action: handleNewReview },
+    { id: 'ai-writer', label: 'AI Writer', icon: PenTool, action: () => setCurrentView('ai-writer') },
+    { id: 'project', label: 'Project', icon: FolderOpen, action: () => setCurrentView('project') },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, action: () => setCurrentView('analytics') },
+    { id: 'teams', label: 'Teams', icon: Users, action: () => setCurrentView('teams') },
+    { id: 'integrations', label: 'Integrations', icon: Puzzle, action: () => setCurrentView('integrations') },
+    { id: 'docs', label: 'Documentations', icon: FileText, action: () => setCurrentView('docs') },
+    { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
+  ];
 
-  // Truncate text
-  const truncate = (text: string, length: number) => {
-    if (text.length <= length) return text;
-    return text.slice(0, length) + '...';
+  const toggleDarkMode = () => {
+    setIsDarkMode(!isDarkMode);
+    // TODO: Implement actual dark mode toggle
   };
 
   return (
-    <div className="h-full flex flex-col bg-sidebar text-sidebar-foreground">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full bg-foreground/10 flex items-center justify-center">
-            <FileText className="w-4 h-4" />
-          </div>
-          <span className="font-semibold text-sm">Arakis</span>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+    <div className="h-full w-[72px] flex flex-col bg-gradient-to-b from-purple-700 to-purple-900 text-white">
+      {/* Logo */}
+      <div className="flex items-center justify-center py-5">
+        <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center backdrop-blur">
+          <span className="text-white font-bold text-lg">A</span>
         </div>
-        <button
-          onClick={resetChat}
-          className="p-2 hover:bg-sidebar-accent rounded-lg transition-colors"
-          title="New Review"
-        >
-          <PenSquare className="w-5 h-5" />
-        </button>
       </div>
 
-      {/* Menu Items */}
-      <div className="px-2 space-y-1">
-        <button
-          onClick={resetChat}
-          className="w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-sidebar-accent rounded-lg transition-colors text-left"
-        >
-          <PenSquare className="w-4 h-4" />
-          New review
-        </button>
-        <SettingsDialog />
-      </div>
+      {/* Navigation */}
+      <nav className="flex-1 flex flex-col items-center py-4 space-y-1">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentView === item.id || (item.id === 'settings' && pathname === '/settings');
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleNavClick(item)}
+              className={`
+                group relative w-12 h-12 flex items-center justify-center rounded-xl
+                transition-all duration-200
+                ${isActive
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/60 hover:text-white hover:bg-white/10'
+                }
+              `}
+              title={item.label}
+            >
+              <Icon className="w-5 h-5" />
 
-      {/* Divider */}
-      <div className="my-3 border-t border-sidebar-border" />
-
-      {/* Active Reviews */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div className="px-4 py-2 flex-shrink-0">
-          <span className="text-xs text-muted-foreground font-medium">Your reviews</span>
-        </div>
-
-        <ScrollArea className="flex-1 min-h-0">
-          <div className="px-2 space-y-0.5">
-            {isLoading ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                Loading...
+              {/* Tooltip */}
+              <div className="
+                absolute left-full ml-3 px-3 py-1.5
+                bg-gray-900 text-white text-sm rounded-lg
+                opacity-0 group-hover:opacity-100
+                pointer-events-none transition-opacity
+                whitespace-nowrap z-50
+              ">
+                {item.label}
               </div>
-            ) : activeWorkflows.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">
-                No reviews yet
-              </div>
-            ) : (
-              activeWorkflows.map((w) => (
-                <div
-                  key={w.id}
-                  onClick={() => handleWorkflowClick(w)}
-                  onMouseEnter={() => setHoveredId(w.id)}
-                  onMouseLeave={() => setHoveredId(null)}
-                  className={`
-                    group flex items-center gap-2 px-3 py-2
-                    rounded-lg cursor-pointer transition-colors
-                    ${workflow.current?.id === w.id
-                      ? 'bg-sidebar-accent'
-                      : 'hover:bg-sidebar-accent'
-                    }
-                  `}
-                >
-                  <span className="text-sm truncate flex-1 min-w-0">
-                    {truncate(w.research_question, 30)}
-                  </span>
-                  <button
-                    onClick={(e) => handleArchive(e, w.id)}
-                    className={`p-1 mr-1 hover:bg-muted rounded transition-all flex-shrink-0 ${
-                      hoveredId === w.id ? 'opacity-100' : 'opacity-0'
-                    }`}
-                    title="Archive"
-                  >
-                    <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                  </button>
-                </div>
-              ))
-            )}
 
-            {/* Archived Section */}
-            {archivedWorkflows.length > 0 && (
-              <>
-                <div className="mt-4 mb-1">
-                  <button
-                    onClick={() => setShowArchived(!showArchived)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showArchived ? (
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    )}
-                    <Archive className="w-3.5 h-3.5" />
-                    <span>Archived ({archivedWorkflows.length})</span>
-                  </button>
-                </div>
+              {/* Active indicator */}
+              {isActive && (
+                <div className="absolute left-0 w-1 h-6 bg-white rounded-r-full" />
+              )}
+            </button>
+          );
+        })}
+      </nav>
 
-                {showArchived && (
-                  <div className="space-y-0.5 opacity-60">
-                    {archivedWorkflows.map((w) => (
-                      <div
-                        key={w.id}
-                        onClick={() => handleWorkflowClick(w)}
-                        onMouseEnter={() => setHoveredId(w.id)}
-                        onMouseLeave={() => setHoveredId(null)}
-                        className={`
-                          group flex items-center gap-2 px-3 py-2
-                          rounded-lg cursor-pointer transition-colors
-                          hover:bg-sidebar-accent hover:opacity-100
-                        `}
-                      >
-                        <span className="text-sm truncate flex-1 min-w-0">
-                          {truncate(w.research_question, 30)}
-                        </span>
-                        <button
-                          onClick={(e) => handleRestore(e, w.id)}
-                          className={`p-1 mr-1 hover:bg-muted rounded transition-all flex-shrink-0 ${
-                            hoveredId === w.id ? 'opacity-100' : 'opacity-0'
-                          }`}
-                          title="Restore"
-                        >
-                          <ArchiveRestore className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </ScrollArea>
-      </div>
-
-      {/* User Profile */}
-      <div className="p-2 border-t border-sidebar-border">
+      {/* Bottom Section */}
+      <div className="flex flex-col items-center py-4 space-y-2 border-t border-white/10">
+        {/* Dark Mode Toggle */}
         <button
-          onClick={() => router.push('/settings')}
-          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-sidebar-accent rounded-lg transition-colors"
+          onClick={toggleDarkMode}
+          className="w-12 h-12 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
+          title={isDarkMode ? 'Light Mode' : 'Dark Mode'}
         >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-xs font-medium">
-            {getUserInitials()}
+          <div className="relative w-10 h-5 bg-white/20 rounded-full p-0.5">
+            <div className={`
+              w-4 h-4 rounded-full bg-white flex items-center justify-center
+              transition-transform duration-200
+              ${isDarkMode ? 'translate-x-5' : 'translate-x-0'}
+            `}>
+              {isDarkMode ? (
+                <Moon className="w-2.5 h-2.5 text-purple-700" />
+              ) : (
+                <Sun className="w-2.5 h-2.5 text-purple-700" />
+              )}
+            </div>
           </div>
-          <div className="flex-1 text-left min-w-0">
-            <span className="text-sm truncate block">
-              {user?.full_name || user?.email || 'Guest'}
-            </span>
+        </button>
+
+        {/* Logout */}
+        <button
+          onClick={logout}
+          className="group relative w-12 h-12 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-all"
+          title="Log out"
+        >
+          <LogOut className="w-5 h-5" />
+
+          {/* Tooltip */}
+          <div className="
+            absolute left-full ml-3 px-3 py-1.5
+            bg-gray-900 text-white text-sm rounded-lg
+            opacity-0 group-hover:opacity-100
+            pointer-events-none transition-opacity
+            whitespace-nowrap z-50
+          ">
+            Log out
           </div>
-          <Settings className="w-4 h-4 text-muted-foreground" />
         </button>
       </div>
     </div>

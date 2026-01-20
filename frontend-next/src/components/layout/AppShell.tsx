@@ -3,20 +3,16 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
   MessageSquare,
   FileText,
-  PanelLeftClose,
-  PanelLeft,
 } from 'lucide-react';
 
 interface AppShellProps {
   sidebar: React.ReactNode;
   editor: React.ReactNode;
   chat: React.ReactNode;
-  landing?: React.ReactNode;
   workflowDetail?: React.ReactNode;
 }
 
@@ -34,72 +30,8 @@ function useIsMobile() {
   return isMobile;
 }
 
-// Collapsible Sidebar wrapper
-function CollapsibleSidebar({
-  children,
-  isCollapsed,
-  width,
-}: {
-  children: React.ReactNode;
-  isCollapsed: boolean;
-  width: number;
-}) {
-  return (
-    <motion.div
-      initial={false}
-      animate={{
-        width: isCollapsed ? 0 : width,
-        opacity: isCollapsed ? 0 : 1,
-      }}
-      transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-      className={cn(
-        'h-full flex-shrink-0 border-r border-border bg-sidebar overflow-hidden',
-        isCollapsed && 'border-r-0'
-      )}
-    >
-      <div style={{ width }} className="h-full">
-        {children}
-      </div>
-    </motion.div>
-  );
-}
-
-// Sidebar toggle button
-function SidebarToggle({
-  isCollapsed,
-  onToggle,
-}: {
-  isCollapsed: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      onClick={onToggle}
-      className={cn(
-        'absolute z-50 p-2 rounded-lg',
-        'bg-background/80 backdrop-blur border border-border',
-        'hover:bg-muted transition-colors',
-        'text-muted-foreground hover:text-foreground',
-        isCollapsed ? 'left-3' : 'left-[270px]'
-      )}
-      style={{
-        top: 32,
-        left: isCollapsed ? 12 : 248,
-        transition: 'left 0.2s ease',
-      }}
-      title={isCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-    >
-      {isCollapsed ? (
-        <PanelLeft className="w-4 h-4" />
-      ) : (
-        <PanelLeftClose className="w-4 h-4" />
-      )}
-    </button>
-  );
-}
-
-export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: AppShellProps) {
-  const { layout, setMobileView, setMobileSidebarOpen, toggleSidebarCollapsed } = useStore();
+export function AppShell({ sidebar, editor, chat, workflowDetail }: AppShellProps) {
+  const { layout, setMobileView, setMobileSidebarOpen } = useStore();
   const isMobile = useIsMobile();
 
   // Close mobile sidebar when switching to desktop
@@ -117,24 +49,15 @@ export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: App
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className="h-full w-full flex relative"
+      className="h-full w-full flex"
     >
-      {/* Sidebar Toggle Button */}
-      <SidebarToggle
-        isCollapsed={layout.isSidebarCollapsed}
-        onToggle={toggleSidebarCollapsed}
-      />
-
-      {/* Collapsible Sidebar */}
-      <CollapsibleSidebar
-        isCollapsed={layout.isSidebarCollapsed}
-        width={layout.sidebarWidth}
-      >
+      {/* Fixed Sidebar */}
+      <div className="h-full flex-shrink-0">
         {sidebar}
-      </CollapsibleSidebar>
+      </div>
 
       {/* Main Content */}
-      <div className="flex-1 h-full overflow-hidden min-w-0 min-h-0 flex flex-col">
+      <div className="flex-1 h-full overflow-hidden min-w-0 min-h-0 flex flex-col bg-gray-50">
         {content}
       </div>
     </motion.div>
@@ -143,25 +66,7 @@ export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: App
   return (
     <div className="h-screen w-full overflow-hidden bg-background">
       <AnimatePresence mode="wait">
-        {layout.mode === 'landing' ? (
-          // Landing mode with sidebar + centered input (ChatGPT style)
-          isMobile ? (
-            // Mobile: just show landing view full screen
-            <motion.div
-              key="landing-mobile"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="h-full w-full flex flex-col"
-            >
-              {landing || chat}
-            </motion.div>
-          ) : (
-            // Desktop: sidebar + landing view
-            renderDesktopWithSidebar(landing || chat, 'landing-desktop')
-          )
-        ) : layout.mode === 'chat-fullscreen' ? (
+        {layout.mode === 'chat-fullscreen' ? (
           // Chat mode with persistent sidebar
           // Distinguish between new review form and viewing existing workflow
           layout.viewMode === 'viewing-workflow' && workflowDetail ? (
@@ -222,7 +127,9 @@ export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: App
             {/* Mobile Header */}
             <div className="flex-shrink-0 h-12 border-b bg-background flex items-center justify-between px-2 gap-2">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
+                <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-purple-800 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">A</span>
+                </div>
                 <span className="font-semibold text-sm">Arakis</span>
               </div>
 
@@ -286,28 +193,19 @@ export function AppShell({ sidebar, editor, chat, landing, workflowDetail }: App
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="h-full w-full flex relative"
+            className="h-full w-full flex"
           >
-            {/* Sidebar Toggle Button */}
-            <SidebarToggle
-              isCollapsed={layout.isSidebarCollapsed}
-              onToggle={toggleSidebarCollapsed}
-            />
-
-            {/* Collapsible Sidebar */}
-            <CollapsibleSidebar
-              isCollapsed={layout.isSidebarCollapsed}
-              width={layout.sidebarWidth}
-            >
+            {/* Fixed Sidebar */}
+            <div className="h-full flex-shrink-0">
               {sidebar}
-            </CollapsibleSidebar>
+            </div>
 
             {/* Editor */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.4, delay: 0.1, ease: [0.32, 0.72, 0, 1] }}
-              className="flex-1 h-full overflow-hidden min-w-0"
+              className="flex-1 h-full overflow-hidden min-w-0 bg-gray-50"
             >
               {editor}
             </motion.div>

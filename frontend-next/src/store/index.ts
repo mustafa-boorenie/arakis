@@ -17,10 +17,12 @@ import { DEFAULT_WORKFLOW_FORM, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/ty
 export type LayoutMode = 'landing' | 'chat-fullscreen' | 'split-view';
 export type MobileView = 'sidebar' | 'editor';
 export type ViewMode = 'new-review' | 'viewing-workflow';
+export type AppView = 'dashboard' | 'ai-writer' | 'project' | 'analytics' | 'teams' | 'integrations' | 'docs' | 'settings';
 
 interface LayoutState {
   mode: LayoutMode;
   viewMode: ViewMode; // Distinguishes new review form vs viewing existing workflow
+  currentView: AppView; // Which sidebar item is active
   sidebarWidth: number;
   isTransitioning: boolean;
   mobileView: MobileView;
@@ -81,6 +83,7 @@ interface AppState {
   // Layout actions
   setLayoutMode: (mode: LayoutMode) => void;
   setViewMode: (viewMode: ViewMode) => void;
+  setCurrentView: (view: AppView) => void;
   setSidebarWidth: (width: number) => void;
   startTransition: () => void;
   endTransition: () => void;
@@ -136,6 +139,7 @@ export const useStore = create<AppState>()(
         layout: {
           mode: 'landing',
           viewMode: 'new-review',
+          currentView: 'dashboard',
           sidebarWidth: 260,
           isTransitioning: false,
           mobileView: 'editor',
@@ -180,6 +184,11 @@ export const useStore = create<AppState>()(
         setViewMode: (viewMode) =>
           set((state) => ({
             layout: { ...state.layout, viewMode },
+          })),
+
+        setCurrentView: (currentView) =>
+          set((state) => ({
+            layout: { ...state.layout, currentView },
           })),
 
         setSidebarWidth: (width) =>
