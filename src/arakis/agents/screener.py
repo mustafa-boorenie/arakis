@@ -8,6 +8,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
+from arakis.models.audit import AuditEventType
 from arakis.models.paper import Paper
 from arakis.models.screening import ScreeningCriteria, ScreeningDecision, ScreeningStatus
 from arakis.utils import retry_with_exponential_backoff
@@ -242,32 +243,132 @@ For each paper, call the screen_paper function with your decision."""
         Returns:
             ScreeningDecision with status, reason, and confidence
         """
+        # Ensure paper has audit trail
+        trail = paper.ensure_audit_trail()
+
+        # Record screening started
+        trail.add_event(
+            event_type=AuditEventType.SCREENING_STARTED,
+            description="Screening process started",
+            actor="ScreeningAgent",
+            details={
+                "dual_review": dual_review,
+                "human_review": human_review,
+                "model": self.model,
+            },
+            stage="screening",
+        )
+
         # Dual-review mode (default) - human_review is ignored in this mode
         if dual_review:
             # First pass
             decision1 = await self._single_screen(paper, criteria)
+            trail.add_event(
+                event_type=AuditEventType.SCREENING_PASS_1,
+                description=f"First pass: {decision1.status.value}",
+                actor="ScreeningAgent",
+                details={
+                    "decision": decision1.status.value,
+                    "confidence": decision1.confidence,
+                    "reason": decision1.reason,
+                    "matched_inclusion": decision1.matched_inclusion,
+                    "matched_exclusion": decision1.matched_exclusion,
+                },
+                stage="screening",
+                model_used=self.model,
+                temperature=0.3,
+            )
 
             # Second pass with different temperature
             decision2 = await self._single_screen(paper, criteria, temperature=0.7)
+            trail.add_event(
+                event_type=AuditEventType.SCREENING_PASS_2,
+                description=f"Second pass: {decision2.status.value}",
+                actor="ScreeningAgent",
+                details={
+                    "decision": decision2.status.value,
+                    "confidence": decision2.confidence,
+                    "reason": decision2.reason,
+                    "matched_inclusion": decision2.matched_inclusion,
+                    "matched_exclusion": decision2.matched_exclusion,
+                },
+                stage="screening",
+                model_used=self.model,
+                temperature=0.7,
+            )
 
             # Check for conflict
             if decision1.status != decision2.status:
                 decision1.is_conflict = True
                 decision1.second_opinion = decision2
+
+                trail.add_event(
+                    event_type=AuditEventType.SCREENING_CONFLICT,
+                    description=f"Conflict detected: {decision1.status.value} vs {decision2.status.value}",
+                    actor="ScreeningAgent",
+                    details={
+                        "pass_1_decision": decision1.status.value,
+                        "pass_2_decision": decision2.status.value,
+                    },
+                    stage="screening",
+                )
+
                 # When in conflict, default to MAYBE
+                original_status = decision1.status
                 if decision1.status != ScreeningStatus.MAYBE:
                     decision1.status = ScreeningStatus.MAYBE
                     decision1.reason = (
-                        f"CONFLICT: First pass: {decision1.status.value}, "
+                        f"CONFLICT: First pass: {original_status.value}, "
                         f"Second pass: {decision2.status.value}. "
                         f"Original reason: {decision1.reason}"
                     )
                     decision1.confidence = min(decision1.confidence, decision2.confidence) * 0.5
 
+                trail.add_event(
+                    event_type=AuditEventType.SCREENING_RESOLVED,
+                    description=f"Conflict resolved to {decision1.status.value}",
+                    actor="ScreeningAgent",
+                    details={
+                        "resolution": "defaulted_to_maybe",
+                        "final_decision": decision1.status.value,
+                        "final_confidence": decision1.confidence,
+                    },
+                    stage="screening",
+                )
+
+            # Record final screening decision
+            trail.add_event(
+                event_type=AuditEventType.SCREENING_COMPLETED,
+                description=f"Screening completed: {decision1.status.value}",
+                actor="ScreeningAgent",
+                details={
+                    "final_decision": decision1.status.value,
+                    "final_confidence": decision1.confidence,
+                    "had_conflict": decision1.is_conflict,
+                },
+                stage="screening",
+            )
+
             return decision1
 
         # Single-review mode (dual_review=False)
         decision = await self._single_screen(paper, criteria)
+
+        trail.add_event(
+            event_type=AuditEventType.SCREENING_PASS_1,
+            description=f"Single-pass screening: {decision.status.value}",
+            actor="ScreeningAgent",
+            details={
+                "decision": decision.status.value,
+                "confidence": decision.confidence,
+                "reason": decision.reason,
+                "matched_inclusion": decision.matched_inclusion,
+                "matched_exclusion": decision.matched_exclusion,
+            },
+            stage="screening",
+            model_used=self.model,
+            temperature=0.3,
+        )
 
         # Human-in-the-loop review (only in single-review mode)
         if human_review:
@@ -278,6 +379,18 @@ For each paper, call the screen_paper function with your decision."""
             # Prompt human for review
             human_status, human_reason = self._prompt_human_review(paper, decision, criteria)
 
+            trail.add_event(
+                event_type=AuditEventType.SCREENING_HUMAN_REVIEW,
+                description="Human review completed",
+                actor="human",
+                details={
+                    "ai_decision": decision.ai_decision.value,
+                    "human_decision": human_status.value,
+                    "agrees_with_ai": human_status == decision.ai_decision,
+                },
+                stage="screening",
+            )
+
             # Check if human overrode AI decision
             if human_status != decision.status:
                 decision.overridden = True
@@ -285,6 +398,18 @@ For each paper, call the screen_paper function with your decision."""
                 decision.human_reason = human_reason
                 decision.status = human_status
                 decision.screener = f"{decision.screener} (overridden by human)"
+
+                trail.add_event(
+                    event_type=AuditEventType.SCREENING_HUMAN_OVERRIDE,
+                    description=f"Human overrode AI decision: {decision.ai_decision.value} → {human_status.value}",
+                    actor="human",
+                    details={
+                        "original_decision": decision.ai_decision.value,
+                        "new_decision": human_status.value,
+                        "human_reason": human_reason,
+                    },
+                    stage="screening",
+                )
 
                 # Update reason to include both AI and human reasoning
                 if human_reason:
@@ -295,6 +420,20 @@ For each paper, call the screen_paper function with your decision."""
                     decision.reason = f"Human overrode AI decision from {decision.ai_decision.value} to {human_status.value}. Original AI reasoning: {decision.reason}"
 
             decision.human_reviewed = True
+
+        # Record final screening decision
+        trail.add_event(
+            event_type=AuditEventType.SCREENING_COMPLETED,
+            description=f"Screening completed: {decision.status.value}",
+            actor="ScreeningAgent",
+            details={
+                "final_decision": decision.status.value,
+                "final_confidence": decision.confidence,
+                "human_reviewed": decision.human_reviewed,
+                "overridden": decision.overridden,
+            },
+            stage="screening",
+        )
 
         return decision
 

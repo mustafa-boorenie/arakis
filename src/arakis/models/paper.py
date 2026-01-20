@@ -5,12 +5,16 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import TYPE_CHECKING, Any
 
 
 def _utc_now() -> datetime:
     """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
-from typing import Any
+
+
+if TYPE_CHECKING:
+    from arakis.models.audit import AuditTrail
 
 
 class PaperSource(str, Enum):
@@ -83,6 +87,9 @@ class Paper:
     retrieved_at: datetime = field(default_factory=_utc_now)
     duplicate_of: str | None = None  # ID of primary if this is a duplicate
 
+    # Audit trail for tracking all processing events
+    audit_trail: AuditTrail | None = None
+
     def __hash__(self) -> int:
         return hash(self.id)
 
@@ -115,6 +122,79 @@ class Paper:
     def text_length(self) -> int:
         """Return character count of full text."""
         return len(self.full_text) if self.full_text else 0
+
+    def ensure_audit_trail(self) -> AuditTrail:
+        """Ensure paper has an audit trail, creating one if needed.
+
+        Returns:
+            The paper's audit trail
+        """
+        if self.audit_trail is None:
+            from arakis.models.audit import create_audit_trail
+
+            self.audit_trail = create_audit_trail(
+                paper_id=self.id,
+                source=self.source.value if self.source else "unknown",
+            )
+        return self.audit_trail
+
+    def record_event(
+        self,
+        event_type: str,
+        description: str = "",
+        actor: str = "system",
+        details: dict[str, Any] | None = None,
+        stage: str | None = None,
+        **kwargs,
+    ) -> None:
+        """Record an event in the paper's audit trail.
+
+        Args:
+            event_type: Type of event (string that maps to AuditEventType)
+            description: Human-readable description
+            actor: Who/what triggered the event
+            details: Additional structured details
+            stage: Pipeline stage
+            **kwargs: Additional arguments passed to add_event
+        """
+        from arakis.models.audit import AuditEventType
+
+        trail = self.ensure_audit_trail()
+        trail.add_event(
+            event_type=AuditEventType(event_type),
+            description=description,
+            actor=actor,
+            details=details,
+            stage=stage,
+            **kwargs,
+        )
+
+    def record_field_change(
+        self,
+        field_name: str,
+        before: Any,
+        after: Any,
+        actor: str = "system",
+        description: str = "",
+    ) -> None:
+        """Record a field change in the audit trail.
+
+        Args:
+            field_name: Name of the field that changed
+            before: Value before the change
+            after: Value after the change
+            actor: Who/what made the change
+            description: Optional description
+        """
+        trail = self.ensure_audit_trail()
+        trail.add_field_change(field_name, before, after, actor, description)
+
+    @property
+    def audit_summary(self) -> dict[str, Any] | None:
+        """Get a summary of the audit trail."""
+        if self.audit_trail is None:
+            return None
+        return self.audit_trail.to_dict().get("summary")
 
 
 @dataclass

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz
 
+from arakis.models.audit import AuditEventType
 from arakis.models.paper import Paper
 
 
@@ -68,11 +69,34 @@ class Deduplicator:
             if match_id:
                 # This is a duplicate - merge into canonical
                 canonical_paper = canonical[match_id]
+
+                # Record duplicate detection in both papers' audit trails
+                paper.ensure_audit_trail().add_event(
+                    event_type=AuditEventType.DUPLICATE_DETECTED,
+                    description=f"Detected as duplicate of {match_id}",
+                    actor="Deduplicator",
+                    details={
+                        "canonical_id": match_id,
+                        "match_strategy": self._get_match_strategy(paper, canonical_paper),
+                    },
+                    stage="search",
+                )
+                paper.duplicate_of = match_id
+
+                canonical_paper.ensure_audit_trail().add_event(
+                    event_type=AuditEventType.METADATA_MERGED,
+                    description=f"Merged metadata from duplicate {paper.id}",
+                    actor="Deduplicator",
+                    details={"duplicate_id": paper.id, "source": paper.source.value},
+                    stage="search",
+                )
+
                 self._merge_papers(canonical_paper, paper)
                 duplicate_groups[match_id].append(paper.id)
             else:
                 # This is a new unique paper
                 canonical[paper.id] = paper
+                paper.ensure_audit_trail()  # Ensure audit trail exists
 
                 # Index for future matching
                 if paper.doi:
@@ -146,6 +170,28 @@ class Deduplicator:
                         return canonical_id
 
         return None
+
+    def _get_match_strategy(self, paper: Paper, canonical: Paper) -> str:
+        """Determine which strategy matched the papers."""
+        # Check DOI match
+        if paper.doi and canonical.doi:
+            if self._normalize_doi(paper.doi) == self._normalize_doi(canonical.doi):
+                return "doi"
+
+        # Check PMID match
+        if paper.pmid and canonical.pmid and paper.pmid == canonical.pmid:
+            return "pmid"
+
+        # Check title similarity
+        norm_paper = self._normalize_title(paper.title)
+        norm_canonical = self._normalize_title(canonical.title)
+        if norm_paper and norm_canonical:
+            similarity = fuzz.ratio(norm_paper, norm_canonical) / 100
+            if similarity >= self.title_threshold:
+                return "title_fuzzy"
+
+        # Must be author+year+title prefix
+        return "author_year_title"
 
     def _normalize_doi(self, doi: str) -> str:
         """Normalize DOI for matching."""

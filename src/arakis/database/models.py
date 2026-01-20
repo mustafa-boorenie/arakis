@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 def utc_now():
     """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
+
+
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -116,6 +118,9 @@ class Paper(Base):
     source = Column(String(50))  # "pubmed", "openalex", etc.
     source_url = Column(String(1000))
     retrieved_at = Column(DateTime(timezone=True), default=utc_now)
+
+    # Audit trail for tracking all processing events
+    audit_trail = Column(JSON, nullable=True)  # Serialized AuditTrail
 
     # Relationships
     workflow = relationship("Workflow", back_populates="papers")

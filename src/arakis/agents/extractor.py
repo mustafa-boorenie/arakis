@@ -9,6 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
+from arakis.models.audit import AuditEventType
 from arakis.models.extraction import (
     ExtractedData,
     ExtractionMethod,
@@ -424,10 +425,27 @@ Use the extract_data function."""
         """
         start_time = time.time()
 
+        # Ensure paper has audit trail
+        trail = paper.ensure_audit_trail()
+
         # Check cache
         cache_key = f"{paper.id}_{schema.name}_{schema.version}_{use_full_text}"
         if cache_key in self._extraction_cache:
             return self._extraction_cache[cache_key]
+
+        # Record extraction started
+        trail.add_event(
+            event_type=AuditEventType.EXTRACTION_STARTED,
+            description="Data extraction process started",
+            actor="DataExtractionAgent",
+            details={
+                "schema": schema.name,
+                "triple_review": triple_review,
+                "use_full_text": use_full_text,
+                "model": self.model,
+            },
+            stage="extraction",
+        )
 
         # Determine extraction method
         if triple_review:
@@ -454,8 +472,49 @@ Use the extract_data function."""
             all_decisions.append(decisions)
             all_reviewer_decisions.extend(decisions)
 
+            # Record each extraction pass
+            trail.add_event(
+                event_type=AuditEventType.EXTRACTION_PASS,
+                description=f"Extraction pass by {reviewer_id}",
+                actor="DataExtractionAgent",
+                details={
+                    "reviewer_id": reviewer_id,
+                    "fields_extracted": len(decisions),
+                    "avg_confidence": (
+                        sum(d.confidence for d in decisions) / len(decisions) if decisions else 0
+                    ),
+                },
+                stage="extraction",
+                model_used=self.model,
+                temperature=temp,
+            )
+
         # Resolve conflicts and get final data
         final_data, confidence_scores, conflicts = self._resolve_conflicts(all_decisions, schema)
+
+        # Record conflicts if any
+        if conflicts:
+            trail.add_event(
+                event_type=AuditEventType.EXTRACTION_CONFLICT,
+                description=f"{len(conflicts)} field(s) with conflicts detected",
+                actor="DataExtractionAgent",
+                details={
+                    "conflict_count": len(conflicts),
+                    "conflict_fields": conflicts,
+                },
+                stage="extraction",
+            )
+
+            trail.add_event(
+                event_type=AuditEventType.EXTRACTION_RESOLVED,
+                description="Conflicts resolved via majority voting",
+                actor="DataExtractionAgent",
+                details={
+                    "resolution_method": "majority_voting",
+                    "resolved_fields": list(final_data.keys()),
+                },
+                stage="extraction",
+            )
 
         # Calculate quality metrics
         extraction_quality = 1.0
@@ -492,6 +551,38 @@ Use the extract_data function."""
             extraction_time_ms=extraction_time_ms,
             needs_human_review=needs_review,
         )
+
+        # Record extraction completed
+        trail.add_event(
+            event_type=AuditEventType.EXTRACTION_COMPLETED,
+            description=f"Data extraction completed (quality: {extraction_quality:.2f})",
+            actor="DataExtractionAgent",
+            details={
+                "fields_extracted": len(final_data),
+                "extraction_quality": extraction_quality,
+                "needs_human_review": needs_review,
+                "conflict_count": len(conflicts),
+                "low_confidence_count": len(low_confidence_fields),
+            },
+            stage="extraction",
+            duration_ms=extraction_time_ms,
+        )
+
+        # Record if flagged for human review
+        if needs_review:
+            trail.add_event(
+                event_type=AuditEventType.EXTRACTION_HUMAN_REVIEW,
+                description="Extraction flagged for human review",
+                actor="DataExtractionAgent",
+                details={
+                    "reason": "quality_below_threshold"
+                    if extraction_quality < 0.8
+                    else "conflicts_or_low_confidence",
+                    "conflicts": conflicts,
+                    "low_confidence_fields": low_confidence_fields,
+                },
+                stage="extraction",
+            )
 
         # Cache result
         self._extraction_cache[cache_key] = extracted_data
