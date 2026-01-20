@@ -648,9 +648,10 @@ class VisualizationGenerator:
         # ===== STATISTICS BOX =====
         stats_lines = []
 
-        # Heterogeneity info
+        # Heterogeneity info (I², τ², Q)
         het = meta_result.heterogeneity
         stats_lines.append(f"Heterogeneity: I² = {het.i_squared:.1f}%")
+        stats_lines.append(f"τ² = {het.tau_squared:.4f}, Q = {het.q_statistic:.2f} (p = {het.q_p_value:.4f})")
 
         # Egger's test
         if meta_result.egger_test_p_value is not None:
