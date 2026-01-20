@@ -1952,7 +1952,7 @@ def workflow(
     }
 
     # Stage 1: Search
-    console.print("\n[bold cyan]Stage 1/7:[/bold cyan] Literature Search")
+    console.print("\n[bold cyan]Stage 1/8:[/bold cyan] Literature Search")
     console.print(f"[dim]Searching {databases}...[/dim]\n")
 
     from arakis.orchestrator import SearchOrchestrator
@@ -1999,7 +1999,7 @@ def workflow(
         raise typer.Exit(0)
 
     # Stage 2: Screening
-    console.print("[bold cyan]Stage 2/7:[/bold cyan] Paper Screening")
+    console.print("[bold cyan]Stage 2/8:[/bold cyan] Paper Screening")
     mode_desc = "single-pass" if fast_mode else "dual-review"
     console.print(f"[dim]Screening with {mode_desc} mode...[/dim]\n")
 
@@ -2150,7 +2150,7 @@ def workflow(
 
     # Stage 4: Extraction
     console.print(
-        f"[bold cyan]Stage {'4' if extract_text else '3'}/{'8' if extract_text else '7'}:[/bold cyan] Data Extraction"
+        f"[bold cyan]Stage {'4' if extract_text else '3'}/8:[/bold cyan] Data Extraction"
     )
     extraction_mode = "single-pass" if fast_mode else "triple-review"
     text_mode = "full text" if use_full_text else "abstracts"
@@ -2231,7 +2231,7 @@ def workflow(
     # Stage 4: Analysis
     analysis_file = None
     if not skip_analysis:
-        console.print("[bold cyan]Stage 4/7:[/bold cyan] Statistical Analysis")
+        console.print("[bold cyan]Stage 4/8:[/bold cyan] Statistical Analysis")
         console.print("[dim]Running analysis...[/dim]\n")
 
         from arakis.analysis.meta_analysis import MetaAnalysisEngine
@@ -2339,7 +2339,7 @@ def workflow(
         }
 
     # Stage 5: PRISMA Diagram
-    console.print("[bold cyan]Stage 5/7:[/bold cyan] PRISMA Diagram")
+    console.print("[bold cyan]Stage 5/8:[/bold cyan] PRISMA Diagram")
     console.print("[dim]Generating diagram...[/dim]\n")
 
     from arakis.models.visualization import PRISMAFlow
@@ -2372,7 +2372,7 @@ def workflow(
 
     # Stage 6 & 7: Writing
     if not skip_writing:
-        console.print("[bold cyan]Stage 6/7:[/bold cyan] Writing Introduction")
+        console.print("[bold cyan]Stage 6/8:[/bold cyan] Writing Introduction")
         console.print("[dim]Generating introduction section...[/dim]\n")
 
         from arakis.agents.intro_writer import IntroductionWriterAgent
@@ -2438,7 +2438,7 @@ def workflow(
         workflow_results["total_cost"] += 1.0  # Estimate
 
         # Results section
-        console.print("[bold cyan]Stage 7/7:[/bold cyan] Writing Results")
+        console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Results")
         console.print("[dim]Generating results section...[/dim]\n")
 
         from arakis.agents.results_writer import ResultsWriterAgent
@@ -2472,6 +2472,42 @@ def workflow(
             "file": str(results_file),
         }
         workflow_results["total_cost"] += 0.7  # Estimate
+
+    # Stage 8: Manuscript Assembly
+    console.print("[bold cyan]Stage 8/8:[/bold cyan] Manuscript Assembly")
+    console.print("[dim]Assembling complete manuscript...[/dim]\n")
+
+    from arakis.manuscript import ManuscriptAssembler
+
+    assembler = ManuscriptAssembler(output_path)
+
+    # Load extraction results
+    extraction_data = assembler.load_extraction_results()
+
+    # Load included papers for references
+    reference_papers = assembler.load_included_papers()
+
+    # Assemble manuscript
+    manuscript, manuscript_path = assembler.assemble(
+        research_question=research_question,
+        extraction_results=extraction_data,
+        included_papers=reference_papers,
+        prisma_flow=flow if "flow" in dir() else None,
+        keywords=[c.strip() for c in include.split(",")][:5],  # Use inclusion criteria as keywords
+    )
+
+    console.print(f"[green]✓ Manuscript assembled: {manuscript.word_count} words[/green]")
+    console.print(f"[green]  Tables: {len(manuscript.tables)}, Figures: {len(manuscript.figures)}[/green]")
+    console.print(f"[green]  References: {len(manuscript.references)}[/green]")
+    console.print(f"[dim]Saved to {manuscript_path}[/dim]\n")
+
+    workflow_results["stages"]["manuscript"] = {
+        "word_count": manuscript.word_count,
+        "tables": len(manuscript.tables),
+        "figures": len(manuscript.figures),
+        "references": len(manuscript.references),
+        "file": str(manuscript_path),
+    }
 
     # Final summary
     end_time = datetime.now()
