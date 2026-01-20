@@ -9,6 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
+from arakis.extraction.validator import validate_extraction
 from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.audit import AuditEventType
 from arakis.models.extraction import (
@@ -552,6 +553,46 @@ Use the extract_data function."""
                 stage="extraction",
             )
 
+        # Validate extracted data against schema constraints
+        is_valid, field_errors = validate_extraction(schema, final_data, raise_on_error=False)
+        validation_errors: list[str] = []
+        invalid_fields: list[str] = []
+
+        if not is_valid:
+            for field_name, errors in field_errors.items():
+                if field_name == "_unexpected":
+                    # Unexpected fields are warnings, not critical errors
+                    validation_errors.append(f"Warning: {'; '.join(errors)}")
+                else:
+                    invalid_fields.append(field_name)
+                    validation_errors.append(f"{field_name}: {'; '.join(errors)}")
+
+            # Add validation errors to conflicts list
+            conflicts.extend(validation_errors)
+
+            # Reduce confidence for invalid fields
+            for field_name in invalid_fields:
+                if field_name in confidence_scores:
+                    # Halve confidence for fields that fail validation
+                    confidence_scores[field_name] *= 0.5
+
+            # Record validation failures in audit trail
+            trail.add_event(
+                event_type=AuditEventType.EXTRACTION_CONFLICT,
+                description=f"Schema validation failed for {len(invalid_fields)} field(s)",
+                actor="DataExtractionAgent",
+                details={
+                    "validation_errors": validation_errors,
+                    "invalid_fields": invalid_fields,
+                    "field_errors": field_errors,
+                },
+                stage="extraction",
+            )
+
+            _logger.warning(
+                f"Schema validation failed for paper {paper.id}: {len(invalid_fields)} invalid fields"
+            )
+
         # Calculate quality metrics
         extraction_quality = 1.0
         low_confidence_fields = [
@@ -560,16 +601,22 @@ Use the extract_data function."""
             if conf < ExtractedData.LOW_CONFIDENCE_THRESHOLD
         ]
 
-        # Reduce quality score for conflicts and low confidence
+        # Reduce quality score for conflicts, validation errors, and low confidence
         if conflicts:
             extraction_quality -= 0.1 * len(conflicts) / len(schema.fields)
+        if invalid_fields:
+            # Additional penalty for schema validation failures (0.2 per invalid field)
+            extraction_quality -= 0.2 * len(invalid_fields) / len(schema.fields)
         if low_confidence_fields:
             extraction_quality -= 0.15 * len(low_confidence_fields) / len(schema.fields)
         extraction_quality = max(0.0, extraction_quality)
 
-        # Determine if needs review
+        # Determine if needs review (include validation failures)
         needs_review = (
-            len(conflicts) > 0 or len(low_confidence_fields) > 0 or extraction_quality < 0.8
+            len(conflicts) > 0
+            or len(invalid_fields) > 0
+            or len(low_confidence_fields) > 0
+            or extraction_quality < 0.8
         )
 
         # Create result
@@ -600,7 +647,9 @@ Use the extract_data function."""
                 "extraction_quality": extraction_quality,
                 "needs_human_review": needs_review,
                 "conflict_count": len(conflicts),
+                "validation_error_count": len(invalid_fields),
                 "low_confidence_count": len(low_confidence_fields),
+                "schema_validation_passed": is_valid,
             },
             stage="extraction",
             duration_ms=extraction_time_ms,
@@ -608,15 +657,22 @@ Use the extract_data function."""
 
         # Record if flagged for human review
         if needs_review:
+            # Determine primary reason for review
+            if len(invalid_fields) > 0:
+                reason = "schema_validation_failed"
+            elif extraction_quality < 0.8:
+                reason = "quality_below_threshold"
+            else:
+                reason = "conflicts_or_low_confidence"
+
             trail.add_event(
                 event_type=AuditEventType.EXTRACTION_HUMAN_REVIEW,
                 description="Extraction flagged for human review",
                 actor="DataExtractionAgent",
                 details={
-                    "reason": "quality_below_threshold"
-                    if extraction_quality < 0.8
-                    else "conflicts_or_low_confidence",
+                    "reason": reason,
                     "conflicts": conflicts,
+                    "invalid_fields": invalid_fields,
                     "low_confidence_fields": low_confidence_fields,
                 },
                 stage="extraction",
