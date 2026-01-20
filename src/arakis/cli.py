@@ -1,7 +1,7 @@
 """CLI interface for Arakis."""
 
 import asyncio
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
@@ -768,6 +768,17 @@ def analyze(
 
         # Prepare study data from extractions
         studies = []
+        # Track categorical variables for subgroup analysis
+        # Common subgroup variables from extraction schemas
+        subgroup_variables = [
+            "study_design",
+            "control_type",
+            "funding_source",
+            "allocation_concealment",
+            "cohort_type",
+        ]
+        study_subgroups: dict[str, dict[str, str]] = {}  # study_id -> {variable: value}
+
         for paper in extraction_result.papers:
             # Try to extract relevant data
             study = StudyData(
@@ -784,6 +795,13 @@ def analyze(
                 control_events=paper.data.get("control_events"),
             )
             studies.append(study)
+
+            # Collect subgroup variable values for this study
+            study_subgroups[paper.paper_id] = {}
+            for var in subgroup_variables:
+                value = paper.data.get(var)
+                if value is not None and isinstance(value, str) and value.strip():
+                    study_subgroups[paper.paper_id][var] = value.strip()
 
         # Determine effect measure
         has_continuous = any(s.intervention_mean is not None for s in studies)
@@ -866,6 +884,103 @@ def analyze(
                     except Exception as e:
                         console.print(f"    [dim]Egger's test failed: {e}[/dim]")
 
+            # Step 4: Subgroup analysis (when applicable)
+            # Requires: ≥4 studies total, and at least 2 subgroups with ≥2 studies each
+            subgroup_results: dict[str, dict[str, Any]] = {}
+            if len(studies) >= 4:
+                console.print("\n[bold cyan]Step 4:[/bold cyan] Checking for applicable subgroup analyses...")
+
+                # Build mapping of study_id to StudyData for quick lookup
+                study_by_id = {s.study_id: s for s in studies}
+
+                # Check each subgroup variable
+                for var_name in subgroup_variables:
+                    # Collect values for this variable across studies
+                    var_values: dict[str, list[StudyData]] = {}
+                    for study_id, subgroup_vals in study_subgroups.items():
+                        if var_name in subgroup_vals and study_id in study_by_id:
+                            value = subgroup_vals[var_name]
+                            if value not in var_values:
+                                var_values[value] = []
+                            var_values[value].append(study_by_id[study_id])
+
+                    # Check if subgroup analysis is applicable:
+                    # Need at least 2 subgroups, each with at least 2 studies
+                    valid_subgroups = {k: v for k, v in var_values.items() if len(v) >= 2}
+                    if len(valid_subgroups) >= 2:
+                        console.print(f"\n  [bold]Subgroup analysis by {var_name.replace('_', ' ').title()}:[/bold]")
+
+                        try:
+                            # Create subgroup function for this variable
+                            def get_subgroup_value(study: StudyData, var: str = var_name) -> str:
+                                return study_subgroups.get(study.study_id, {}).get(var, "Unknown")
+
+                            # Perform subgroup analysis
+                            subgroup_result = meta_engine.subgroup_analysis(
+                                studies=studies,
+                                subgroup_func=get_subgroup_value,
+                                method=analysis_method,
+                                effect_measure=effect_measure,
+                            )
+
+                            # Filter to only valid subgroups (exclude "Unknown")
+                            subgroup_result = {k: v for k, v in subgroup_result.items() if k != "Unknown"}
+
+                            if len(subgroup_result) >= 2:
+                                # Display subgroup results
+                                subgroup_table = Table(show_header=True, header_style="bold")
+                                subgroup_table.add_column("Subgroup", style="cyan")
+                                subgroup_table.add_column("N", justify="right")
+                                subgroup_table.add_column("Effect", justify="right")
+                                subgroup_table.add_column("95% CI", justify="center")
+                                subgroup_table.add_column("P-value", justify="right")
+                                subgroup_table.add_column("I²", justify="right")
+
+                                for subgroup_name, result in subgroup_result.items():
+                                    subgroup_table.add_row(
+                                        subgroup_name.replace("_", " ").title(),
+                                        str(result.studies_included),
+                                        f"{result.pooled_effect:.3f}",
+                                        f"[{result.confidence_interval.lower:.3f}, {result.confidence_interval.upper:.3f}]",
+                                        f"{result.p_value:.4f}",
+                                        f"{result.heterogeneity.i_squared:.1f}%",
+                                    )
+
+                                console.print(subgroup_table)
+
+                                # Store results for output
+                                subgroup_results[var_name] = {
+                                    "variable": var_name,
+                                    "subgroups": {
+                                        name: {
+                                            "studies_included": int(r.studies_included),
+                                            "pooled_effect": float(r.pooled_effect),
+                                            "confidence_interval": {
+                                                "lower": float(r.confidence_interval.lower),
+                                                "upper": float(r.confidence_interval.upper),
+                                            },
+                                            "p_value": float(r.p_value),
+                                            "is_significant": bool(r.is_significant),
+                                            "heterogeneity": {
+                                                "i_squared": float(r.heterogeneity.i_squared),
+                                                "tau_squared": float(r.heterogeneity.tau_squared),
+                                            },
+                                        }
+                                        for name, r in subgroup_result.items()
+                                    },
+                                }
+
+                                # Store in meta_result for future use
+                                meta_result.subgroup_analyses.append(subgroup_results[var_name])
+                            else:
+                                console.print(f"    [dim]Insufficient valid subgroups for {var_name}[/dim]")
+
+                        except Exception as e:
+                            console.print(f"    [dim]Subgroup analysis for {var_name} failed: {e}[/dim]")
+
+                if not subgroup_results:
+                    console.print("  [dim]No applicable subgroup analyses (need ≥2 subgroups with ≥2 studies each)[/dim]")
+
             # Save results
             if output:
                 output_data = {
@@ -926,6 +1041,7 @@ def analyze(
                             }
                             for s in meta_result.studies
                         ],
+                        "subgroup_analyses": list(subgroup_results.values()) if subgroup_results else [],
                     },
                 }
 
