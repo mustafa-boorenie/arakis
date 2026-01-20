@@ -2,9 +2,17 @@
 
 Implements fixed-effects and random-effects meta-analysis with heterogeneity
 assessment and publication bias detection.
+
+All calculations include audit trails for full traceability of results.
+
+References:
+    - DerSimonian R, Laird N. Controlled Clin Trials 1986;7:177-188
+    - Higgins JPT, Thompson SG. BMJ 2002;327:557-560
+    - Cochrane Handbook for Systematic Reviews of Interventions
 """
 
 import math
+import uuid
 from typing import Callable
 
 import numpy as np
@@ -18,19 +26,32 @@ from arakis.models.analysis import (
     MetaAnalysisResult,
     StudyData,
 )
+from arakis.traceability import AuditTrail, DEFAULT_PRECISION
 
 
 class MetaAnalysisEngine:
-    """Engine for meta-analysis computations."""
+    """Engine for meta-analysis computations with full traceability.
+
+    All calculations use documented statistical methods with audit trails
+    to ensure numbers are accurate and traceable.
+
+    References:
+        - DerSimonian R, Laird N. Controlled Clin Trials 1986;7:177-188
+          (Random effects meta-analysis)
+        - Cochrane Handbook Chapter 10 (Effect measures)
+        - Higgins JPT, Thompson SG. BMJ 2002;327:557-560 (I² statistic)
+    """
 
     def __init__(self, confidence_level: float = 0.95):
         """Initialize meta-analysis engine.
 
         Args:
             confidence_level: Confidence level for intervals (default 0.95)
+                              Common values: 0.95 (95% CI), 0.90, 0.99
         """
         self.confidence_level = confidence_level
         self.alpha = 1 - confidence_level
+        self.precision = DEFAULT_PRECISION
 
     def calculate_pooled_effect(
         self,
@@ -46,27 +67,84 @@ class MetaAnalysisEngine:
             effect_measure: Type of effect measure
 
         Returns:
-            MetaAnalysisResult with pooled effect and statistics
+            MetaAnalysisResult with pooled effect, statistics, and audit trail
+
+        References:
+            - DerSimonian R, Laird N. Controlled Clin Trials 1986;7:177-188
+            - Cochrane Handbook Chapter 10
         """
         if len(studies) < 2:
             raise ValueError("Meta-analysis requires at least 2 studies")
 
+        # Initialize audit trail
+        audit = AuditTrail(
+            calculation_id=str(uuid.uuid4())[:8],
+            calculation_type="meta_analysis",
+            method_name=method.value,
+            method_reference=(
+                "DerSimonian R, Laird N. Controlled Clin Trials 1986;7:177-188"
+                if method == AnalysisMethod.RANDOM_EFFECTS
+                else "Inverse variance weighting"
+            ),
+            confidence_level=self.confidence_level,
+        )
+
         # Calculate individual study effects if not provided
         studies = self._calculate_study_effects(studies, effect_measure)
+        audit.add_step(
+            step_name="study_effects",
+            description="Calculate individual study effect estimates and standard errors",
+            formula="Effect and SE calculated from raw data using effect measure formulas",
+            inputs={"n_studies": len(studies), "effect_measure": effect_measure.value},
+            output=[{"study": s.study_id, "effect": s.effect, "se": s.standard_error} for s in studies],
+            output_name="study_effects",
+        )
 
         # Calculate heterogeneity
         heterogeneity = self._calculate_heterogeneity(studies)
+        audit.add_step(
+            step_name="heterogeneity",
+            description="Calculate heterogeneity statistics (I², τ², Q)",
+            formula="Q = Σw_i(θ_i - θ̂)²; I² = max(0, (Q-df)/Q × 100); τ² = max(0, (Q-df)/C)",
+            inputs={"n_studies": len(studies), "df": len(studies) - 1},
+            output={
+                "i_squared": heterogeneity.i_squared,
+                "tau_squared": heterogeneity.tau_squared,
+                "q_statistic": heterogeneity.q_statistic,
+                "q_p_value": heterogeneity.q_p_value,
+            },
+            output_name="heterogeneity",
+        )
 
         # Choose method based on heterogeneity if using random effects
+        # Threshold reference: Higgins JPT, Thompson SG. BMJ 2002;327:557-560
+        actual_method = method
         if method == AnalysisMethod.RANDOM_EFFECTS:
-            if heterogeneity.i_squared > 50:
+            if heterogeneity.i_squared > self.precision.I_SQUARED_MODERATE:
                 # High heterogeneity - use random effects
                 pooled_effect, ci, weights = self._random_effects_meta_analysis(
                     studies, heterogeneity
                 )
+                audit.add_step(
+                    step_name="pooling_method",
+                    description=f"Random effects selected (I² = {heterogeneity.i_squared:.1f}% > {self.precision.I_SQUARED_MODERATE}%)",
+                    formula="w_i = 1/(SE_i² + τ²); θ̂ = Σw_i·θ_i / Σw_i",
+                    inputs={"i_squared": heterogeneity.i_squared, "threshold": self.precision.I_SQUARED_MODERATE},
+                    output={"method": "random_effects"},
+                    output_name="method_selection",
+                )
             else:
                 # Low heterogeneity - random effects reduces to fixed effects
                 pooled_effect, ci, weights = self._fixed_effects_meta_analysis(studies)
+                actual_method = AnalysisMethod.FIXED_EFFECTS
+                audit.add_step(
+                    step_name="pooling_method",
+                    description=f"Fixed effects used (I² = {heterogeneity.i_squared:.1f}% ≤ {self.precision.I_SQUARED_MODERATE}%)",
+                    formula="w_i = 1/SE_i²; θ̂ = Σw_i·θ_i / Σw_i",
+                    inputs={"i_squared": heterogeneity.i_squared, "threshold": self.precision.I_SQUARED_MODERATE},
+                    output={"method": "fixed_effects"},
+                    output_name="method_selection",
+                )
         else:
             # Fixed effects
             pooled_effect, ci, weights = self._fixed_effects_meta_analysis(studies)
@@ -76,9 +154,20 @@ class MetaAnalysisEngine:
             study.weight = weight
 
         # Calculate z-statistic and p-value
-        se = (ci.upper - ci.lower) / (2 * stats.norm.ppf(1 - self.alpha / 2))
+        # Formula: z = θ̂ / SE(θ̂), p = 2 × (1 - Φ(|z|))
+        z_crit = stats.norm.ppf(1 - self.alpha / 2)
+        se = (ci.upper - ci.lower) / (2 * z_crit)
         z_statistic = pooled_effect / se if se > 0 else 0
         p_value = 2 * (1 - stats.norm.cdf(abs(z_statistic)))
+
+        audit.add_step(
+            step_name="test_of_effect",
+            description="Calculate z-statistic and p-value for overall effect",
+            formula="z = θ̂ / SE(θ̂); p = 2 × (1 - Φ(|z|))",
+            inputs={"pooled_effect": pooled_effect, "se": se},
+            output={"z_statistic": z_statistic, "p_value": p_value},
+            output_name="significance_test",
+        )
 
         # Calculate total sample size
         total_n = sum(
@@ -88,6 +177,15 @@ class MetaAnalysisEngine:
         )
         if total_n == 0:
             total_n = sum(s.sample_size or 0 for s in studies)
+
+        audit.add_step(
+            step_name="sample_size",
+            description="Calculate total sample size across studies",
+            formula="N = Σ(n_intervention + n_control) or Σn_i",
+            inputs={"n_studies": len(studies)},
+            output={"total_sample_size": total_n},
+            output_name="total_n",
+        )
 
         return MetaAnalysisResult(
             outcome_name="Pooled Analysis",
@@ -99,8 +197,9 @@ class MetaAnalysisEngine:
             heterogeneity=heterogeneity,
             z_statistic=z_statistic,
             p_value=p_value,
-            analysis_method=method,
+            analysis_method=actual_method,
             studies=studies,
+            audit_trail=audit.to_dict(),
         )
 
     def _calculate_study_effects(
@@ -199,7 +298,18 @@ class MetaAnalysisEngine:
         return hedges_g, se
 
     def _calculate_odds_ratio_effect(self, study: StudyData) -> tuple[float, float]:
-        """Calculate log odds ratio and standard error."""
+        """Calculate log odds ratio and standard error.
+
+        Uses continuity correction for zero cells.
+
+        Formula:
+            log(OR) = log((a × d) / (b × c))
+            SE = sqrt(1/a + 1/b + 1/c + 1/d)
+
+        Reference:
+            Sweeting MJ, Sutton AJ, Lambert PC. Stat Med 2004;23:1351-1375
+            (For continuity correction in sparse data)
+        """
         if not all(
             [
                 study.intervention_events is not None,
@@ -216,13 +326,16 @@ class MetaAnalysisEngine:
         d = study.control_n - study.control_events  # type: ignore
 
         # Continuity correction for zero cells
+        # Reference: Sweeting MJ et al. Stat Med 2004;23:1351-1375
+        # Using 0.5 is the traditional approach (Haldane-Anscombe correction)
         if any(x == 0 for x in [a, b, c, d]):
-            a, b, c, d = a + 0.5, b + 0.5, c + 0.5, d + 0.5
+            correction = self.precision.CONTINUITY_CORRECTION
+            a, b, c, d = a + correction, b + correction, c + correction, d + correction
 
-        # Log odds ratio
+        # Log odds ratio: log((a × d) / (b × c))
         log_or = math.log((a * d) / (b * c))
 
-        # Standard error
+        # Standard error: sqrt(1/a + 1/b + 1/c + 1/d)
         se = math.sqrt(1 / a + 1 / b + 1 / c + 1 / d)
 
         return log_or, se

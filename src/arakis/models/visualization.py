@@ -94,6 +94,7 @@ class PRISMAFlow:
     """PRISMA 2020 flow diagram data.
 
     Tracks the flow of papers through the systematic review process.
+    All numbers are validated for consistency to ensure accuracy and traceability.
     """
 
     # Identification
@@ -122,23 +123,157 @@ class PRISMAFlow:
 
     @property
     def records_after_deduplication(self) -> int:
-        """Records remaining after duplicate removal."""
+        """Records remaining after duplicate removal.
+
+        Formula: records_identified_total - records_removed_duplicates
+        Source: PRISMA 2020 Statement (Page et al., BMJ 2021;372:n71)
+        """
         return self.records_identified_total - self.records_removed_duplicates
 
     @property
     def exclusion_rate(self) -> float:
-        """Percentage of screened records excluded."""
+        """Percentage of screened records excluded.
+
+        Formula: (records_excluded / records_screened) * 100
+        Returns: Percentage (0.0-100.0)
+        """
         if self.records_screened == 0:
             return 0.0
         return (self.records_excluded / self.records_screened) * 100
 
     @property
     def retrieval_rate(self) -> float:
-        """Percentage of sought reports successfully retrieved."""
+        """Percentage of sought reports successfully retrieved.
+
+        Formula: ((reports_sought - reports_not_retrieved) / reports_sought) * 100
+        Returns: Percentage (0.0-100.0)
+        """
         if self.reports_sought == 0:
             return 0.0
         retrieved = self.reports_sought - self.reports_not_retrieved
         return (retrieved / self.reports_sought) * 100
+
+    def validate(self) -> list[str]:
+        """Validate internal consistency of PRISMA flow numbers.
+
+        Checks that numbers at each stage are mathematically consistent
+        to ensure accuracy and traceability of reported values.
+
+        Returns:
+            List of validation error messages (empty if all checks pass)
+        """
+        from arakis.traceability import validate_prisma_flow
+
+        return validate_prisma_flow(
+            records_identified=self.records_identified_total,
+            duplicates_removed=self.records_removed_duplicates,
+            records_screened=self.records_screened,
+            records_excluded=self.records_excluded,
+            reports_sought=self.reports_sought,
+            reports_not_retrieved=self.reports_not_retrieved,
+            reports_assessed=self.reports_assessed,
+            reports_excluded=self.reports_excluded,
+            studies_included=self.studies_included,
+        )
+
+    def validate_database_totals(self) -> list[str]:
+        """Validate that database counts sum to total.
+
+        Returns:
+            List of validation error messages (empty if all checks pass)
+        """
+        errors = []
+        if self.records_identified_databases:
+            db_sum = sum(self.records_identified_databases.values())
+            if db_sum != self.records_identified_total:
+                errors.append(
+                    f"Database counts sum ({db_sum}) does not match "
+                    f"records_identified_total ({self.records_identified_total}). "
+                    f"Databases: {self.records_identified_databases}"
+                )
+        return errors
+
+    def get_audit_summary(self) -> dict[str, any]:
+        """Get a summary of all PRISMA flow numbers with derivations.
+
+        Returns:
+            Dictionary with all numbers and their sources/formulas
+        """
+        return {
+            "identification": {
+                "records_identified_total": {
+                    "value": self.records_identified_total,
+                    "source": "sum of database searches",
+                    "breakdown": self.records_identified_databases,
+                },
+                "records_identified_registers": {
+                    "value": self.records_identified_registers,
+                    "source": "registry searches",
+                },
+                "duplicates_removed": {
+                    "value": self.records_removed_duplicates,
+                    "source": "deduplication algorithm (DOI, PMID, fuzzy title)",
+                },
+                "records_after_deduplication": {
+                    "value": self.records_after_deduplication,
+                    "formula": "records_identified_total - records_removed_duplicates",
+                    "calculated": True,
+                },
+            },
+            "screening": {
+                "records_screened": {
+                    "value": self.records_screened,
+                    "source": "title/abstract screening",
+                },
+                "records_excluded": {
+                    "value": self.records_excluded,
+                    "source": "screening decisions",
+                    "reasons": self.exclusion_reasons,
+                },
+                "exclusion_rate": {
+                    "value": self.exclusion_rate,
+                    "formula": "(records_excluded / records_screened) * 100",
+                    "unit": "%",
+                    "calculated": True,
+                },
+            },
+            "eligibility": {
+                "reports_sought": {
+                    "value": self.reports_sought,
+                    "source": "records passing screening",
+                },
+                "reports_not_retrieved": {
+                    "value": self.reports_not_retrieved,
+                    "source": "retrieval failures",
+                },
+                "reports_assessed": {
+                    "value": self.reports_assessed,
+                    "source": "full-text review",
+                },
+                "reports_excluded": {
+                    "value": self.reports_excluded,
+                    "source": "full-text screening",
+                    "reasons": self.reports_exclusion_reasons,
+                },
+                "retrieval_rate": {
+                    "value": self.retrieval_rate,
+                    "formula": "((reports_sought - reports_not_retrieved) / reports_sought) * 100",
+                    "unit": "%",
+                    "calculated": True,
+                },
+            },
+            "inclusion": {
+                "studies_included": {
+                    "value": self.studies_included,
+                    "source": "reports_assessed - reports_excluded",
+                },
+                "reports_included": {
+                    "value": self.reports_included,
+                    "source": "included study reports",
+                },
+            },
+            "validation_errors": self.validate() + self.validate_database_totals(),
+        }
 
 
 @dataclass

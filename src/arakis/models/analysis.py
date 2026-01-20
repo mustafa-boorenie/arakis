@@ -120,7 +120,11 @@ class StudyData:
 
 @dataclass
 class MetaAnalysisResult:
-    """Result from a meta-analysis."""
+    """Result from a meta-analysis with full traceability.
+
+    All statistical values include source documentation and can be
+    validated against the original study data.
+    """
 
     outcome_name: str
     studies_included: int
@@ -155,15 +159,155 @@ class MetaAnalysisResult:
     subgroup_analyses: list[dict[str, Any]] = field(default_factory=list)
     sensitivity_analyses: list[dict[str, Any]] = field(default_factory=list)
 
+    # Audit trail for traceability (optional, populated during analysis)
+    audit_trail: Optional[dict[str, Any]] = None
+
     @property
     def is_significant(self) -> bool:
-        """Check if result is statistically significant (p < 0.05)."""
+        """Check if result is statistically significant (p < 0.05).
+
+        Reference: Standard significance threshold in medical research.
+        """
         return self.p_value < 0.05
 
     @property
     def has_high_heterogeneity(self) -> bool:
-        """Check if heterogeneity is substantial (I² > 50%)."""
+        """Check if heterogeneity is substantial (I² > 50%).
+
+        Reference: Higgins JPT, Thompson SG. BMJ 2002;327:557-560
+        Threshold of 50% indicates "may represent substantial heterogeneity"
+        """
         return self.heterogeneity.i_squared > 50.0
+
+    def validate_sample_sizes(self) -> list[str]:
+        """Validate that total sample size matches sum of individual studies.
+
+        Returns:
+            List of validation error messages (empty if valid)
+        """
+        from arakis.traceability import validate_sample_sizes
+
+        study_dicts = [
+            {
+                "study_id": s.study_id,
+                "intervention_n": s.intervention_n,
+                "control_n": s.control_n,
+                "sample_size": s.sample_size,
+            }
+            for s in self.studies
+        ]
+        return validate_sample_sizes(study_dicts, self.total_sample_size)
+
+    def validate_weights(self) -> list[str]:
+        """Validate that study weights sum to 1.0.
+
+        Returns:
+            List of validation error messages (empty if valid)
+        """
+        from arakis.traceability import validate_weights_sum
+
+        weights = [s.weight for s in self.studies if s.weight is not None]
+        return validate_weights_sum(weights)
+
+    def get_formatted_result(self) -> dict[str, str]:
+        """Get formatted statistical values with appropriate precision.
+
+        Returns:
+            Dictionary of formatted strings for each statistic
+        """
+        from arakis.traceability import DEFAULT_PRECISION
+
+        # Determine if log scale (OR, RR need exponentiation for display)
+        is_log_scale = self.effect_measure in [
+            EffectMeasure.ODDS_RATIO,
+            EffectMeasure.RISK_RATIO,
+        ]
+
+        if is_log_scale:
+            import math
+            effect_display = math.exp(self.pooled_effect)
+            ci_lower_display = math.exp(self.confidence_interval.lower)
+            ci_upper_display = math.exp(self.confidence_interval.upper)
+        else:
+            effect_display = self.pooled_effect
+            ci_lower_display = self.confidence_interval.lower
+            ci_upper_display = self.confidence_interval.upper
+
+        return {
+            "pooled_effect": DEFAULT_PRECISION.format_effect(effect_display, is_log_scale),
+            "confidence_interval": DEFAULT_PRECISION.format_ci(ci_lower_display, ci_upper_display),
+            "p_value": DEFAULT_PRECISION.format_p_value(self.p_value),
+            "i_squared": DEFAULT_PRECISION.format_i_squared(self.heterogeneity.i_squared),
+            "i_squared_interpretation": DEFAULT_PRECISION.interpret_i_squared(
+                self.heterogeneity.i_squared
+            ),
+            "z_statistic": f"{self.z_statistic:.2f}",
+            "tau_squared": f"{self.heterogeneity.tau_squared:.4f}",
+            "q_statistic": f"{self.heterogeneity.q_statistic:.2f}",
+            "q_p_value": DEFAULT_PRECISION.format_p_value(self.heterogeneity.q_p_value),
+        }
+
+    def get_audit_summary(self) -> dict[str, Any]:
+        """Get complete audit summary of the meta-analysis.
+
+        Returns:
+            Dictionary with all values, their sources, and validation results
+        """
+        formatted = self.get_formatted_result()
+
+        return {
+            "analysis_summary": {
+                "outcome": self.outcome_name,
+                "method": self.analysis_method.value,
+                "method_reference": self._get_method_reference(),
+                "effect_measure": self.effect_measure.value,
+                "studies_included": self.studies_included,
+                "total_sample_size": self.total_sample_size,
+            },
+            "pooled_effect": {
+                "raw_value": self.pooled_effect,
+                "formatted": formatted["pooled_effect"],
+                "ci": formatted["confidence_interval"],
+                "ci_level": f"{self.confidence_interval.level * 100:.0f}%",
+                "is_significant": self.is_significant,
+            },
+            "test_of_effect": {
+                "z_statistic": formatted["z_statistic"],
+                "p_value": formatted["p_value"],
+            },
+            "heterogeneity": {
+                "i_squared": formatted["i_squared"],
+                "interpretation": formatted["i_squared_interpretation"],
+                "tau_squared": formatted["tau_squared"],
+                "q_statistic": formatted["q_statistic"],
+                "q_df": self.studies_included - 1,
+                "q_p_value": formatted["q_p_value"],
+            },
+            "study_weights": {
+                "sum_check": sum(s.weight or 0 for s in self.studies),
+                "studies": [
+                    {
+                        "id": s.study_id,
+                        "weight": f"{(s.weight or 0) * 100:.1f}%",
+                        "effect": s.effect,
+                        "se": s.standard_error,
+                    }
+                    for s in self.studies
+                ],
+            },
+            "validation": {
+                "sample_size_errors": self.validate_sample_sizes(),
+                "weight_errors": self.validate_weights(),
+            },
+            "audit_trail": self.audit_trail,
+        }
+
+    def _get_method_reference(self) -> str:
+        """Get academic reference for the analysis method."""
+        if self.analysis_method == AnalysisMethod.RANDOM_EFFECTS:
+            return "DerSimonian R, Laird N. Controlled Clin Trials 1986;7:177-188"
+        else:
+            return "Inverse variance weighting (fixed effects)"
 
 
 @dataclass

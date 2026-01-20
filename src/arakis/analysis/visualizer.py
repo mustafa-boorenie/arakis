@@ -2,6 +2,9 @@
 
 Creates publication-ready plots for systematic reviews and meta-analyses.
 Uses matplotlib/seaborn (NO LLM COST).
+
+All numerical values displayed use centralized precision settings
+to ensure consistency and traceability.
 """
 
 from pathlib import Path
@@ -15,6 +18,7 @@ from arakis.models.analysis import (
     EffectMeasure,
     MetaAnalysisResult,
 )
+from arakis.traceability import DEFAULT_PRECISION
 
 # Set publication-quality defaults
 sns.set_style("whitegrid")
@@ -33,7 +37,11 @@ plt.rcParams.update(
 
 
 class VisualizationGenerator:
-    """Generator for statistical visualizations."""
+    """Generator for statistical visualizations.
+
+    Uses centralized precision configuration to ensure all numbers
+    displayed in plots are consistent and traceable.
+    """
 
     def __init__(self, output_dir: str = "."):
         """Initialize visualization generator.
@@ -43,6 +51,7 @@ class VisualizationGenerator:
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.precision = DEFAULT_PRECISION
 
     def create_forest_plot(
         self,
@@ -158,14 +167,18 @@ class VisualizationGenerator:
         ax.axhline(y=header_y - 0.5, color="black", linewidth=0.5, alpha=0.5)
 
         # ===== INDIVIDUAL STUDIES =====
+        # Use z-critical value from precision config for consistency
+        # Reference: Rosner, B. (2015). Fundamentals of Biostatistics
+        z_crit = self.precision.Z_CRITICAL_95  # 1.96 for 95% CI
+
         for i, (study, effect, y) in enumerate(zip(studies, effects, y_positions)):
-            # Calculate CI
+            # Calculate CI using centralized z-critical value
             if use_log_scale:
-                study_ci_lower = np.exp(study.effect - 1.96 * study.standard_error)  # type: ignore
-                study_ci_upper = np.exp(study.effect + 1.96 * study.standard_error)  # type: ignore
+                study_ci_lower = np.exp(study.effect - z_crit * study.standard_error)  # type: ignore
+                study_ci_upper = np.exp(study.effect + z_crit * study.standard_error)  # type: ignore
             else:
-                study_ci_lower = study.effect - 1.96 * study.standard_error  # type: ignore
-                study_ci_upper = study.effect + 1.96 * study.standard_error  # type: ignore
+                study_ci_lower = study.effect - z_crit * study.standard_error  # type: ignore
+                study_ci_upper = study.effect + z_crit * study.standard_error  # type: ignore
 
             all_ci_lowers.append(study_ci_lower)
             all_ci_uppers.append(study_ci_upper)
@@ -348,23 +361,24 @@ class VisualizationGenerator:
         )
 
         # ===== STATISTICS PANEL =====
-        # Heterogeneity statistics
+        # Heterogeneity statistics with consistent precision
         het = meta_result.heterogeneity
+
+        # Format values using centralized precision settings
+        tau_sq = f"{het.tau_squared:.{self.precision.tau_squared_decimals}f}"
+        q_stat = f"{het.q_statistic:.{self.precision.q_statistic_decimals}f}"
+        q_p = self.precision.format_p_value(het.q_p_value)
+        i_sq = self.precision.format_i_squared(het.i_squared)
+
         het_text = (
-            f"Heterogeneity: τ² = {het.tau_squared:.4f}; "
-            f"χ² = {het.q_statistic:.2f}, df = {n_studies - 1} "
-            f"(P = {het.q_p_value:.4f}); I² = {het.i_squared:.1f}%"
+            f"Heterogeneity: τ² = {tau_sq}; "
+            f"χ² = {q_stat}, df = {n_studies - 1} "
+            f"(P {q_p}); I² = {i_sq}"
         )
 
-        # I² interpretation
-        if het.i_squared < 25:
-            het_interp = "(low heterogeneity)"
-        elif het.i_squared < 50:
-            het_interp = "(moderate heterogeneity)"
-        elif het.i_squared < 75:
-            het_interp = "(substantial heterogeneity)"
-        else:
-            het_interp = "(considerable heterogeneity)"
+        # I² interpretation using centralized thresholds
+        # Reference: Higgins JPT, Thompson SG. BMJ 2002;327:557-560
+        het_interp = f"({self.precision.interpret_i_squared(het.i_squared)})"
 
         ax.text(
             0.5,
@@ -386,11 +400,10 @@ class VisualizationGenerator:
             style="italic",
         )
 
-        # Test for overall effect
-        overall_test = (
-            f"Test for overall effect: Z = {meta_result.z_statistic:.2f} "
-            f"(P {'< 0.0001' if meta_result.p_value < 0.0001 else f'= {meta_result.p_value:.4f}'})"
-        )
+        # Test for overall effect with consistent precision
+        z_stat = f"{meta_result.z_statistic:.{self.precision.z_statistic_decimals}f}"
+        p_val = self.precision.format_p_value(meta_result.p_value)
+        overall_test = f"Test for overall effect: Z = {z_stat} (P {p_val})"
         ax.text(
             0.5,
             stats_y - 0.2,
@@ -521,11 +534,13 @@ class VisualizationGenerator:
                 se_for_contours = y_range
 
             # Significance levels and their colors
+            # Z-values from precision config for traceability
+            # Reference: Rosner, B. (2015). Fundamentals of Biostatistics
             sig_levels = [
                 (1.0, "white", "p > 0.10"),
-                (1.645, "#E8E8E8", "0.05 < p < 0.10"),
-                (1.96, "#D0D0D0", "0.01 < p < 0.05"),
-                (2.576, "#B8B8B8", "p < 0.01"),
+                (self.precision.Z_CRITICAL_90, "#E8E8E8", "0.05 < p < 0.10"),  # 1.645
+                (self.precision.Z_CRITICAL_95, "#D0D0D0", "0.01 < p < 0.05"),  # 1.96
+                (self.precision.Z_CRITICAL_99, "#B8B8B8", "p < 0.01"),  # 2.576
             ]
 
             # Draw contours from outside in
@@ -551,19 +566,20 @@ class VisualizationGenerator:
                 Patch(facecolor="white", edgecolor="gray", label="p > 0.10"),
             ]
         else:
-            # Simple 95% CI funnel
+            # Simple 95% CI funnel using z-critical from precision config
             y_range = np.linspace(0.001, max_y * 1.2, 100)
             if y_axis == "precision":
                 se_for_contours = 1 / y_range
             else:
                 se_for_contours = y_range
 
+            z_crit = self.precision.Z_CRITICAL_95  # 1.96 for 95% CI
             if use_log_scale:
-                upper = np.exp(pooled_effect + 1.96 * se_for_contours)
-                lower = np.exp(pooled_effect - 1.96 * se_for_contours)
+                upper = np.exp(pooled_effect + z_crit * se_for_contours)
+                lower = np.exp(pooled_effect - z_crit * se_for_contours)
             else:
-                upper = pooled_effect + 1.96 * se_for_contours
-                lower = pooled_effect - 1.96 * se_for_contours
+                upper = pooled_effect + z_crit * se_for_contours
+                lower = pooled_effect - z_crit * se_for_contours
 
             ax.fill_betweenx(y_range, lower, upper, alpha=0.15, color="gray", linewidth=0, zorder=1)
             ax.plot(upper, y_range, "k--", alpha=0.5, linewidth=1, zorder=2)
@@ -648,21 +664,23 @@ class VisualizationGenerator:
         # ===== STATISTICS BOX =====
         stats_lines = []
 
-        # Heterogeneity info (I², τ², Q)
+        # Heterogeneity info (I², τ², Q) with consistent precision
         het = meta_result.heterogeneity
-        stats_lines.append(f"Heterogeneity: I² = {het.i_squared:.1f}%")
-        stats_lines.append(f"τ² = {het.tau_squared:.4f}, Q = {het.q_statistic:.2f} (p = {het.q_p_value:.4f})")
+        i_sq = self.precision.format_i_squared(het.i_squared)
+        tau_sq = f"{het.tau_squared:.{self.precision.tau_squared_decimals}f}"
+        q_stat = f"{het.q_statistic:.{self.precision.q_statistic_decimals}f}"
+        q_p = self.precision.format_p_value(het.q_p_value)
 
-        # Egger's test
+        stats_lines.append(f"Heterogeneity: I² = {i_sq}")
+        stats_lines.append(f"τ² = {tau_sq}, Q = {q_stat} (p {q_p})")
+
+        # Egger's test with consistent p-value formatting
         if meta_result.egger_test_p_value is not None:
             egger_sig = (
                 "significant" if meta_result.egger_test_p_value < 0.05 else "not significant"
             )
-            if meta_result.egger_test_p_value < 0.0001:
-                egger_p_str = "p < 0.0001"
-            else:
-                egger_p_str = f"p = {meta_result.egger_test_p_value:.4f}"
-            stats_lines.append(f"Egger's test: {egger_p_str} ({egger_sig})")
+            egger_p_str = self.precision.format_p_value(meta_result.egger_test_p_value)
+            stats_lines.append(f"Egger's test: p {egger_p_str} ({egger_sig})")
 
         # Asymmetry interpretation
         if meta_result.egger_test_p_value is not None:
