@@ -4,6 +4,7 @@ import httpx
 
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
+from arakis.utils import retry_http_request
 
 
 class ArxivSource(BaseRetrievalSource):
@@ -15,6 +16,22 @@ class ArxivSource(BaseRetrievalSource):
 
     name = "arxiv"
     BASE_URL = "https://arxiv.org"
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _head_request(self, url: str) -> int:
+        """Make a HEAD request with retry logic, returns status code."""
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            response = await client.head(url)
+            return response.status_code
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _download_content(self, url: str) -> bytes | None:
+        """Download content with retry logic."""
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                return response.content
+        return None
 
     async def can_retrieve(self, paper: Paper) -> bool:
         """arXiv requires an arXiv ID."""
@@ -38,27 +55,26 @@ class ArxivSource(BaseRetrievalSource):
         pdf_url = f"{self.BASE_URL}/pdf/{arxiv_id}.pdf"
 
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                # Check PDF availability
-                response = await client.head(pdf_url)
+            # Check PDF availability
+            status_code = await self._head_request(pdf_url)
 
-                if response.status_code == 200:
-                    result = RetrievalResult(
-                        success=True,
-                        paper_id=paper.id,
-                        source_name=self.name,
-                        content_url=pdf_url,
-                        content_type=ContentType.PDF,
-                        license="arXiv",
-                        version="preprint",
-                    )
+            if status_code == 200:
+                result = RetrievalResult(
+                    success=True,
+                    paper_id=paper.id,
+                    source_name=self.name,
+                    content_url=pdf_url,
+                    content_type=ContentType.PDF,
+                    license="arXiv",
+                    version="preprint",
+                )
 
-                    if download:
-                        pdf_response = await client.get(pdf_url)
-                        if pdf_response.status_code == 200:
-                            result.content = pdf_response.content
+                if download:
+                    content = await self._download_content(pdf_url)
+                    if content:
+                        result.content = content
 
-                    return result
+                return result
 
         except httpx.HTTPError as e:
             return RetrievalResult(

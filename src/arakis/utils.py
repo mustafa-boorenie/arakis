@@ -1,10 +1,13 @@
 """Utility functions for Arakis."""
 
 import asyncio
+import random
 import time
+from collections.abc import Awaitable
 from functools import wraps
-from typing import Any, Awaitable, Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
+import httpx
 from openai import APIError, RateLimitError
 from rich.console import Console
 
@@ -64,6 +67,77 @@ def get_openai_rate_limiter() -> RateLimiter:
         settings = get_settings()
         _openai_rate_limiter = RateLimiter(calls_per_minute=settings.openai_requests_per_minute)
     return _openai_rate_limiter
+
+
+def retry_http_request(
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    max_delay: float = 30.0,
+    exponential_base: float = 2.0,
+    retry_on_status: tuple[int, ...] = (429, 500, 502, 503, 504),
+) -> Callable:
+    """
+    Decorator to retry async HTTP functions with exponential backoff.
+
+    Designed for httpx-based HTTP requests in retrieval sources.
+    Handles rate limits (429) and transient server errors (5xx).
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay in seconds
+        max_delay: Maximum delay in seconds
+        exponential_base: Base for exponential backoff
+        retry_on_status: HTTP status codes that trigger a retry
+
+    Returns:
+        Decorated function that retries on transient errors
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
+            delay = initial_delay
+            last_exception = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+
+                except httpx.HTTPStatusError as e:
+                    last_exception = e
+                    if e.response.status_code in retry_on_status:
+                        if attempt == max_retries:
+                            raise
+
+                        # Add jitter to prevent synchronized retries
+                        actual_delay = delay * (0.5 + random.random())
+                        await asyncio.sleep(actual_delay)
+                        delay = min(delay * exponential_base, max_delay)
+                    else:
+                        # Non-retryable status code
+                        raise
+
+                except (httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                    # Network errors are retryable
+                    last_exception = e
+                    if attempt == max_retries:
+                        raise
+
+                    actual_delay = delay * (0.5 + random.random())
+                    await asyncio.sleep(actual_delay)
+                    delay = min(delay * exponential_base, max_delay)
+
+                except httpx.HTTPError:
+                    # Other HTTP errors - don't retry
+                    raise
+
+            # Should never reach here, but just in case
+            if last_exception:
+                raise last_exception
+
+        return wrapper
+
+    return decorator
 
 
 def retry_with_exponential_backoff(
@@ -212,9 +286,7 @@ async def process_batch_concurrent(
             result = await process_func(item)
             return (index, item, result)
 
-        tasks = [
-            process_with_index(batch_start + i, item) for i, item in enumerate(batch_items)
-        ]
+        tasks = [process_with_index(batch_start + i, item) for i, item in enumerate(batch_items)]
 
         # Process batch concurrently and collect results as they complete
         batch_results: dict[int, R] = {}

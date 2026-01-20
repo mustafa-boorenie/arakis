@@ -5,6 +5,7 @@ import httpx
 from arakis.config import get_settings
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
+from arakis.utils import retry_http_request
 
 
 class CORESource(BaseRetrievalSource):
@@ -24,6 +25,23 @@ class CORESource(BaseRetrievalSource):
     def __init__(self):
         self.settings = get_settings()
         self.api_key = self.settings.core_api_key
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _fetch_core_data(self, url: str, headers: dict, params: dict | None = None) -> dict:
+        """Fetch data from CORE API with retry logic."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, headers=headers, params=params)
+            response.raise_for_status()
+            return response.json()
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _download_pdf(self, download_url: str) -> bytes | None:
+        """Download PDF content with retry logic."""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(download_url, follow_redirects=True)
+            if response.status_code == 200:
+                return response.content
+        return None
 
     async def can_retrieve(self, paper: Paper) -> bool:
         """Can retrieve if we have API key and DOI or title."""
@@ -45,13 +63,8 @@ class CORESource(BaseRetrievalSource):
         if paper.doi:
             url = f"{self.BASE_URL}/outputs/doi/{paper.doi}"
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    response = await client.get(url, headers=headers)
-
-                    if response.status_code == 200:
-                        data = response.json()
-                        return await self._process_core_result(paper, data, download)
-
+                data = await self._fetch_core_data(url, headers)
+                return await self._process_core_result(paper, data, download)
             except httpx.HTTPError:
                 pass
 
@@ -61,14 +74,10 @@ class CORESource(BaseRetrievalSource):
             params = {"q": f'title:"{paper.title}"', "limit": 1}
 
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
-                    response = await client.get(search_url, params=params, headers=headers)
-
-                    if response.status_code == 200:
-                        data = response.json()
-                        results = data.get("results", [])
-                        if results:
-                            return await self._process_core_result(paper, results[0], download)
+                data = await self._fetch_core_data(search_url, headers, params)
+                results = data.get("results", [])
+                if results:
+                    return await self._process_core_result(paper, results[0], download)
 
             except httpx.HTTPError as e:
                 return RetrievalResult(
@@ -125,10 +134,9 @@ class CORESource(BaseRetrievalSource):
 
         if download:
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    pdf_response = await client.get(download_url, follow_redirects=True)
-                    if pdf_response.status_code == 200:
-                        result.content = pdf_response.content
+                content = await self._download_pdf(download_url)
+                if content:
+                    result.content = content
             except httpx.HTTPError:
                 pass  # Download failed but URL is still valid
 

@@ -5,6 +5,7 @@ import httpx
 from arakis.config import get_settings
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
+from arakis.utils import retry_http_request
 
 
 class UnpaywallSource(BaseRetrievalSource):
@@ -24,6 +25,23 @@ class UnpaywallSource(BaseRetrievalSource):
     async def can_retrieve(self, paper: Paper) -> bool:
         """Unpaywall requires a DOI."""
         return bool(paper.doi and self.email)
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _fetch_unpaywall_data(self, url: str, params: dict) -> dict:
+        """Fetch data from Unpaywall API with retry logic."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _download_pdf(self, pdf_url: str) -> bytes | None:
+        """Download PDF content with retry logic."""
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(pdf_url, follow_redirects=True)
+            if response.status_code == 200:
+                return response.content
+        return None
 
     async def retrieve(self, paper: Paper, download: bool = False) -> RetrievalResult:
         """Query Unpaywall for an open access version."""
@@ -45,20 +63,18 @@ class UnpaywallSource(BaseRetrievalSource):
         params = {"email": self.email}
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(url, params=params)
-
-                if response.status_code == 404:
-                    return RetrievalResult(
-                        success=False,
-                        paper_id=paper.id,
-                        source_name=self.name,
-                        error="DOI not found in Unpaywall",
-                    )
-
-                response.raise_for_status()
-                data = response.json()
-
+            data = await self._fetch_unpaywall_data(url, params)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return RetrievalResult(
+                    success=False,
+                    paper_id=paper.id,
+                    source_name=self.name,
+                    error="DOI not found in Unpaywall",
+                )
+            return RetrievalResult(
+                success=False, paper_id=paper.id, source_name=self.name, error=f"HTTP error: {e}"
+            )
         except httpx.HTTPError as e:
             return RetrievalResult(
                 success=False, paper_id=paper.id, source_name=self.name, error=f"HTTP error: {e}"
@@ -104,10 +120,9 @@ class UnpaywallSource(BaseRetrievalSource):
         # Optionally download
         if download and pdf_url:
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    pdf_response = await client.get(pdf_url, follow_redirects=True)
-                    if pdf_response.status_code == 200:
-                        result.content = pdf_response.content
+                content = await self._download_pdf(pdf_url)
+                if content:
+                    result.content = content
             except httpx.HTTPError:
                 pass  # Download failed but URL is still valid
 

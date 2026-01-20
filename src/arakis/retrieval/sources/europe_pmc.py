@@ -4,6 +4,7 @@ import httpx
 
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
+from arakis.utils import retry_http_request
 
 
 class EuropePMCSource(BaseRetrievalSource):
@@ -16,6 +17,23 @@ class EuropePMCSource(BaseRetrievalSource):
 
     name = "europe_pmc"
     BASE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest"
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _fetch_europe_pmc_data(self, url: str, params: dict) -> dict:
+        """Fetch data from Europe PMC API with retry logic."""
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            return response.json()
+
+    @retry_http_request(max_retries=3, initial_delay=1.0, max_delay=30.0)
+    async def _download_pdf(self, pdf_url: str) -> bytes | None:
+        """Download PDF content with retry logic."""
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            response = await client.get(pdf_url)
+            if response.status_code == 200:
+                return response.content
+        return None
 
     async def can_retrieve(self, paper: Paper) -> bool:
         """Can retrieve if we have PMID, PMCID, or DOI."""
@@ -49,11 +67,7 @@ class EuropePMCSource(BaseRetrievalSource):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(search_url, params=params)
-                response.raise_for_status()
-                data = response.json()
-
+            data = await self._fetch_europe_pmc_data(search_url, params)
         except httpx.HTTPError as e:
             return RetrievalResult(
                 success=False,
@@ -108,10 +122,9 @@ class EuropePMCSource(BaseRetrievalSource):
 
         if download:
             try:
-                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                    pdf_response = await client.get(pdf_url)
-                    if pdf_response.status_code == 200:
-                        result.content = pdf_response.content
+                content = await self._download_pdf(pdf_url)
+                if content:
+                    result.content = content
             except httpx.HTTPError:
                 pass  # Download failed but URL is still valid
 
