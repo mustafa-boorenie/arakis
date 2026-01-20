@@ -423,6 +423,7 @@ class ExtractionResult:
                     "quality": e.extraction_quality,
                     "needs_review": e.needs_human_review,
                     "conflicts": e.conflicts,
+                    "low_confidence_fields": e.low_confidence_fields,
                 }
                 for e in self.extractions
             ],

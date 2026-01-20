@@ -1,15 +1,16 @@
 """Tests for data extraction functionality."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from arakis.agents.extractor import DataExtractionAgent
 from arakis.models.extraction import (
-    ExtractionField,
-    ExtractionSchema,
-    ExtractionMethod,
-    FieldType,
     ExtractedData,
+    ExtractionField,
+    ExtractionMethod,
+    ExtractionSchema,
+    FieldType,
 )
 from arakis.models.paper import Paper, PaperSource
 
@@ -405,3 +406,86 @@ class TestExtractedData:
 
         avg = extraction.average_confidence
         assert avg == pytest.approx(0.9, abs=0.01)
+
+    def test_low_confidence_fields_flagged_at_threshold(self):
+        """Test that fields below 0.8 confidence are flagged as low-confidence."""
+        extraction = ExtractedData(
+            paper_id="test_001",
+            schema_name="Test Schema",
+            extraction_method=ExtractionMethod.TRIPLE_REVIEW,
+            data={
+                "field_high": "value1",
+                "field_medium": "value2",
+                "field_low": "value3",
+                "field_borderline": "value4",
+            },
+            confidence={
+                "field_high": 0.95,      # Above threshold - NOT flagged
+                "field_medium": 0.75,    # Below 0.8 - FLAGGED
+                "field_low": 0.5,        # Well below - FLAGGED
+                "field_borderline": 0.8, # Exactly at threshold - NOT flagged
+            },
+            extraction_quality=0.9,
+        )
+
+        # Verify threshold is 0.8
+        assert ExtractedData.LOW_CONFIDENCE_THRESHOLD == 0.8
+
+        # Verify correct fields are flagged
+        assert "field_high" not in extraction.low_confidence_fields
+        assert "field_medium" in extraction.low_confidence_fields
+        assert "field_low" in extraction.low_confidence_fields
+        assert "field_borderline" not in extraction.low_confidence_fields
+
+        # Verify count
+        assert len(extraction.low_confidence_fields) == 2
+
+        # Verify has_low_confidence property
+        assert extraction.has_low_confidence
+
+    def test_low_confidence_fields_triggers_human_review(self):
+        """Test that any low-confidence field triggers needs_human_review."""
+        extraction = ExtractedData(
+            paper_id="test_001",
+            schema_name="Test Schema",
+            extraction_method=ExtractionMethod.SINGLE_PASS,
+            data={"field1": "value1"},
+            confidence={"field1": 0.79},  # Just below threshold
+            extraction_quality=0.95,  # High quality
+            conflicts=[],  # No conflicts
+        )
+
+        assert len(extraction.low_confidence_fields) == 1
+        assert extraction.needs_human_review
+
+
+class TestExtractionResultSerialization:
+    """Tests for ExtractionResult serialization."""
+
+    def test_to_dict_includes_low_confidence_fields(self, sample_schema):
+        """Test that to_dict() includes low_confidence_fields in extractions."""
+        from arakis.models.extraction import ExtractionResult
+
+        extraction = ExtractedData(
+            paper_id="test_001",
+            schema_name=sample_schema.name,
+            extraction_method=ExtractionMethod.TRIPLE_REVIEW,
+            data={"sample_size": 100, "study_design": "RCT"},
+            confidence={"sample_size": 0.6, "study_design": 0.95},  # sample_size is low
+            extraction_quality=0.85,
+        )
+
+        result = ExtractionResult(
+            schema=sample_schema,
+            extractions=[extraction],
+            extraction_method=ExtractionMethod.TRIPLE_REVIEW,
+        )
+
+        result_dict = result.to_dict()
+
+        # Verify low_confidence_fields is included in serialization
+        assert "extractions" in result_dict
+        assert len(result_dict["extractions"]) == 1
+        assert "low_confidence_fields" in result_dict["extractions"][0]
+        assert "sample_size" in result_dict["extractions"][0]["low_confidence_fields"]
+        assert "study_design" not in result_dict["extractions"][0]["low_confidence_fields"]

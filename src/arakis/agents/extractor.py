@@ -519,7 +519,9 @@ Use the extract_data function."""
         # Calculate quality metrics
         extraction_quality = 1.0
         low_confidence_fields = [
-            field_name for field_name, conf in confidence_scores.items() if conf < 0.7
+            field_name
+            for field_name, conf in confidence_scores.items()
+            if conf < ExtractedData.LOW_CONFIDENCE_THRESHOLD
         ]
 
         # Reduce quality score for conflicts and low confidence
