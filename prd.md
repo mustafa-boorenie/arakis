@@ -386,8 +386,8 @@ Auto-detect and apply appropriate tool:
 - [x] Narrative synthesis when meta-analysis not feasible
 
 ### PRISMA
-- [ ] Flow diagram generated (PNG, 300 DPI)
-- [ ] Narrative description in Results section
+- [x] Flow diagram generated (PNG, 300 DPI)
+- [x] Narrative description in Results section
 - [ ] All numbers accurate and traceable
 
 ### Tables

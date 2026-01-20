@@ -10,8 +10,9 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
-from arakis.models.analysis import MetaAnalysisResult
+from arakis.models.analysis import MetaAnalysisResult, NarrativeSynthesisResult
 from arakis.models.paper import Paper
+from arakis.models.screening import ScreeningDecision
 from arakis.models.visualization import PRISMAFlow
 from arakis.models.writing import Section, WritingResult
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
@@ -111,48 +112,79 @@ class ResultsWriterAgent:
         prisma_flow: PRISMAFlow,
         total_papers_searched: int,
         screening_summary: dict[str, int] | None = None,
+        screening_decisions: list[ScreeningDecision] | None = None,
     ) -> WritingResult:
-        """Write the study selection subsection.
+        """Write the study selection subsection with PRISMA-compliant narrative.
 
         Args:
             prisma_flow: PRISMA flow data
             total_papers_searched: Total records from database searches
             screening_summary: Summary of screening results (optional)
+            screening_decisions: List of screening decisions with exclusion reasons (optional)
 
         Returns:
-            WritingResult with generated text
+            WritingResult with generated text including detailed exclusion reasons
         """
         start_time = time.time()
 
-        # Prepare context
+        # Prepare context with exact numbers at each stage
         context = {
             "total_identified": prisma_flow.records_identified_total,
             "duplicates_removed": prisma_flow.records_removed_duplicates,
+            "records_after_deduplication": prisma_flow.records_after_deduplication,
             "records_screened": prisma_flow.records_screened,
             "records_excluded": prisma_flow.records_excluded,
+            "reports_sought": prisma_flow.reports_sought,
+            "reports_not_retrieved": prisma_flow.reports_not_retrieved,
             "reports_assessed": prisma_flow.reports_assessed,
+            "reports_excluded": prisma_flow.reports_excluded,
             "studies_included": prisma_flow.studies_included,
             "databases": prisma_flow.records_identified_databases,
         }
+
+        # Add exclusion reasons from PRISMA flow if available
+        if prisma_flow.exclusion_reasons:
+            context["title_abstract_exclusion_reasons"] = prisma_flow.exclusion_reasons
+        if prisma_flow.reports_exclusion_reasons:
+            context["fulltext_exclusion_reasons"] = prisma_flow.reports_exclusion_reasons
+
+        # Extract and aggregate exclusion reasons from screening decisions
+        if screening_decisions:
+            exclusion_reasons_summary = self._aggregate_exclusion_reasons(screening_decisions)
+            context["exclusion_reasons_detail"] = exclusion_reasons_summary
 
         if screening_summary:
             context["screening_details"] = screening_summary
 
         prompt = f"""Write the "Study Selection" subsection for a systematic review results section.
 
-**Data:**
+**PRISMA Flow Data:**
 {json.dumps(context, indent=2)}
 
-**Requirements:**
-- Start with database search results
-- Mention duplicate removal
-- Describe screening process (title/abstract, then full-text)
-- Report final number of included studies
-- Reference "Figure 1" (PRISMA flow diagram) at the end
-- Length: 150-200 words
-- Use past tense for methods, numbers for results
+**Requirements (PRISMA 2020 Compliant):**
+1. **Identification Stage**: Report exact number of records identified from each database
+2. **Duplicate Removal**: State exact number of duplicates removed
+3. **Title/Abstract Screening**: Report records screened and excluded with specific reasons
+4. **Full-Text Assessment**: Report articles assessed, not retrieved, and excluded with reasons
+5. **Final Inclusion**: Report final number of studies included in the review
 
-**Example opening:** "The literature search identified X records from Y databases..."
+**Structure:**
+- Start with total records identified across databases
+- Describe duplicate removal process
+- Detail title/abstract screening with reasons for exclusion (grouped by reason)
+- Detail full-text review with reasons for exclusion (grouped by reason)
+- End with final inclusion count
+- Reference "Figure 1" (PRISMA flow diagram) at the end
+
+**Length:** 200-300 words
+
+**Precision Requirements:**
+- Use exact numbers (not approximations)
+- List top 3-5 exclusion reasons with counts
+- Use past tense for completed actions
+
+**Example structure:**
+"The literature search identified X records (PubMed: n=A, OpenAlex: n=B, ...). After removing Y duplicates, Z records remained for title and abstract screening. Of these, N records were excluded: [reason 1] (n=X), [reason 2] (n=Y), ... Full-text articles were sought for M records; P could not be retrieved. After full-text assessment, Q articles were excluded: [reason 1] (n=X), [reason 2] (n=Y), ... A total of R studies met the inclusion criteria and were included in the review (Figure 1)."
 
 Write only the paragraph text, no headings."""
 
@@ -177,6 +209,40 @@ Write only the paragraph text, no headings."""
             cost_usd=cost,
             success=True,
         )
+
+    def _aggregate_exclusion_reasons(self, decisions: list[ScreeningDecision]) -> dict[str, Any]:
+        """Aggregate exclusion reasons from screening decisions.
+
+        Args:
+            decisions: List of screening decisions
+
+        Returns:
+            Dictionary with aggregated exclusion reasons and counts
+        """
+        from collections import Counter
+
+        exclusion_reasons: Counter[str] = Counter()
+        matched_exclusion_criteria: Counter[str] = Counter()
+
+        for decision in decisions:
+            if decision.status.value == "exclude":
+                # Count the primary reason
+                if decision.reason:
+                    # Normalize and truncate long reasons
+                    reason = decision.reason.strip()
+                    if len(reason) > 100:
+                        reason = reason[:97] + "..."
+                    exclusion_reasons[reason] += 1
+
+                # Count matched exclusion criteria
+                for criterion in decision.matched_exclusion:
+                    matched_exclusion_criteria[criterion] += 1
+
+        return {
+            "total_excluded": sum(exclusion_reasons.values()),
+            "reasons_with_counts": dict(exclusion_reasons.most_common(10)),
+            "exclusion_criteria_matched": dict(matched_exclusion_criteria.most_common(10)),
+        }
 
     async def write_study_characteristics(
         self,
@@ -317,13 +383,107 @@ Write only the paragraph text, no headings."""
             success=True,
         )
 
+    async def write_narrative_synthesis_results(
+        self, narrative_result: NarrativeSynthesisResult
+    ) -> WritingResult:
+        """Write the synthesis of results subsection for narrative synthesis.
+
+        Used when meta-analysis is not feasible. Generates PRISMA-compliant
+        narrative description of findings across studies.
+
+        Args:
+            narrative_result: Narrative synthesis results
+
+        Returns:
+            WritingResult with generated text
+        """
+        start_time = time.time()
+
+        # Prepare context from narrative synthesis
+        vote_count_data: dict[str, Any] = {}
+        if narrative_result.vote_count:
+            vote_count_data = {
+                "positive": narrative_result.vote_count.positive,
+                "negative": narrative_result.vote_count.negative,
+                "null": narrative_result.vote_count.null,
+                "mixed": narrative_result.vote_count.mixed,
+                "predominant_direction": narrative_result.vote_count.predominant_direction,
+                "consistency": narrative_result.vote_count.consistency,
+            }
+
+        context: dict[str, Any] = {
+            "outcome": narrative_result.outcome_name,
+            "studies_included": narrative_result.studies_included,
+            "total_sample_size": narrative_result.total_sample_size,
+            "vote_count": vote_count_data,
+            "summary_of_findings": narrative_result.summary_of_findings,
+            "patterns_identified": narrative_result.patterns_identified[:3],  # Top 3
+            "inconsistencies": narrative_result.inconsistencies[:3],  # Top 3
+            "heterogeneity_explanation": narrative_result.heterogeneity_explanation,
+            "confidence_in_evidence": narrative_result.confidence_in_evidence,
+            "meta_analysis_barriers": narrative_result.meta_analysis_barriers,
+        }
+
+        prompt = f"""Write the "Synthesis of Results" subsection for a systematic review results section.
+
+**IMPORTANT:** Meta-analysis was NOT feasible for this review. Write a narrative synthesis instead.
+
+**Narrative Synthesis Data:**
+{json.dumps(context, indent=2)}
+
+**Requirements (PRISMA 2020 Compliant Narrative Synthesis):**
+1. State why meta-analysis was not conducted (barriers listed above)
+2. Describe the vote counting results (how many studies showed positive/negative/null effects)
+3. Report the predominant direction of effect and consistency across studies
+4. Mention key patterns identified across studies
+5. Note any inconsistencies or conflicting findings
+6. Report the confidence in the evidence
+7. Reference the effect direction chart (Figure 2) if applicable
+
+**Structure:**
+- Opening: Why meta-analysis was not feasible
+- Vote counting: Summarize effect directions across studies
+- Patterns: Notable findings across study characteristics
+- Heterogeneity: Explain sources of variation
+- Conclusion: Overall confidence and interpretation
+
+**Length:** 200-300 words
+
+**Example opening:** "Due to [heterogeneity/insufficient data/variation in outcomes], quantitative synthesis (meta-analysis) was not feasible. Therefore, findings were synthesized narratively..."
+
+Write only the paragraph text, no headings."""
+
+        messages = [
+            {"role": "system", "content": self._get_system_prompt()},
+            {"role": "user", "content": prompt},
+        ]
+
+        response = await self._call_openai(messages)
+        content = response.choices[0].message.content
+
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        tokens_used = response.usage.total_tokens if response.usage else 0
+        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
+
+        section = Section(title="Synthesis of Results", content=content)
+
+        return WritingResult(
+            section=section,
+            generation_time_ms=elapsed_ms,
+            tokens_used=tokens_used,
+            cost_usd=cost,
+            success=True,
+        )
+
     async def write_complete_results_section(
         self,
         prisma_flow: PRISMAFlow,
         included_papers: list[Paper],
         meta_analysis_result: MetaAnalysisResult | None = None,
+        narrative_synthesis_result: NarrativeSynthesisResult | None = None,
         outcome_name: str = "primary outcome",
         extraction_summary: dict[str, Any] | None = None,
+        screening_decisions: list[ScreeningDecision] | None = None,
     ) -> Section:
         """Write complete results section with all subsections.
 
@@ -331,18 +491,22 @@ Write only the paragraph text, no headings."""
             prisma_flow: PRISMA flow data
             included_papers: List of included papers
             meta_analysis_result: Meta-analysis results (if available)
+            narrative_synthesis_result: Narrative synthesis results (if meta-analysis not feasible)
             outcome_name: Name of primary outcome
             extraction_summary: Summary of extracted data
+            screening_decisions: List of screening decisions with exclusion reasons
 
         Returns:
-            Complete results section
+            Complete results section with PRISMA-compliant narrative description
         """
         # Create main results section
         results_section = Section(title="Results", content="")
 
-        # 1. Study Selection
+        # 1. Study Selection (with detailed exclusion reasons)
         selection_result = await self.write_study_selection(
-            prisma_flow, prisma_flow.records_identified_total
+            prisma_flow,
+            prisma_flow.records_identified_total,
+            screening_decisions=screening_decisions,
         )
         results_section.add_subsection(selection_result.section)
 
@@ -352,10 +516,16 @@ Write only the paragraph text, no headings."""
         )
         results_section.add_subsection(characteristics_result.section)
 
-        # 3. Synthesis of Results (if meta-analysis available)
+        # 3. Synthesis of Results
+        # Prefer meta-analysis if available, otherwise use narrative synthesis
         if meta_analysis_result:
             synthesis_result = await self.write_synthesis_of_results(
                 meta_analysis_result, outcome_name
+            )
+            results_section.add_subsection(synthesis_result.section)
+        elif narrative_synthesis_result:
+            synthesis_result = await self.write_narrative_synthesis_results(
+                narrative_synthesis_result
             )
             results_section.add_subsection(synthesis_result.section)
 
