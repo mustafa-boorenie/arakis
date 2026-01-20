@@ -554,6 +554,92 @@ class TestExtractedCitation:
         assert citation.original_text == "[10.1234/test]"
 
 
+class TestRemoveOrphanCitations:
+    """Tests for remove_orphan_citations method."""
+
+    def test_remove_orphan_citation(self):
+        """Test removing citation without reference entry."""
+        extractor = CitationExtractor()
+        text = "Studies [10.1234/valid] and [10.1234/orphan] showed effects."
+        valid_ids = {"10.1234/valid"}
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "[10.1234/valid]" in cleaned
+        assert "[10.1234/orphan]" not in cleaned
+        assert "10.1234/orphan" in removed
+
+    def test_keep_all_valid_citations(self):
+        """Test that all valid citations are preserved."""
+        extractor = CitationExtractor()
+        text = "Studies [10.1234/a] and [10.1234/b] showed effects."
+        valid_ids = {"10.1234/a", "10.1234/b"}
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "[10.1234/a]" in cleaned
+        assert "[10.1234/b]" in cleaned
+        assert len(removed) == 0
+
+    def test_remove_all_orphan_citations(self):
+        """Test removing all citations when none are valid."""
+        extractor = CitationExtractor()
+        text = "Studies [10.1234/a] and [10.1234/b] showed effects."
+        valid_ids: set[str] = set()
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "[10.1234/a]" not in cleaned
+        assert "[10.1234/b]" not in cleaned
+        assert "10.1234/a" in removed
+        assert "10.1234/b" in removed
+
+    def test_preserve_figure_references(self):
+        """Test that figure references are not removed."""
+        extractor = CitationExtractor()
+        text = "See [Figure 1] and [10.1234/orphan] for details."
+        valid_ids: set[str] = set()
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "[Figure 1]" in cleaned
+        assert "[10.1234/orphan]" not in cleaned
+
+    def test_clean_up_double_spaces(self):
+        """Test that double spaces are cleaned up."""
+        extractor = CitationExtractor()
+        text = "Studies [10.1234/orphan] showed effects."
+        valid_ids: set[str] = set()
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "  " not in cleaned
+        assert "Studies showed effects." in cleaned
+
+    def test_clean_up_spaces_before_punctuation(self):
+        """Test that spaces before punctuation are cleaned up."""
+        extractor = CitationExtractor()
+        text = "Studies [10.1234/orphan], showing effects."
+        valid_ids: set[str] = set()
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert " ," not in cleaned
+        assert "Studies, showing" in cleaned
+
+    def test_handle_id_variations(self):
+        """Test that citation variations are matched correctly."""
+        extractor = CitationExtractor()
+        text = "Studies [doi:10.1234/test] showed effects."
+        # The normalized ID (without prefix) should match
+        valid_ids = {"10.1234/test"}
+
+        cleaned, removed = extractor.remove_orphan_citations(text, valid_ids)
+
+        assert "[doi:10.1234/test]" in cleaned
+        assert len(removed) == 0
+
+
 # ============================================================================
 # Tests for manager.py
 # ============================================================================
@@ -821,6 +907,92 @@ class TestReferenceManagerCitationReplacement:
         in_text = manager.get_in_text_citation("nonexistent")
 
         assert in_text is None
+
+
+class TestEnsureAllCitationsHaveEntries:
+    """Tests for ensure_all_citations_have_entries method."""
+
+    def test_ensure_removes_orphan_citations(self, sample_papers):
+        """Test that orphan citations are removed from section."""
+        manager = ReferenceManager()
+        # Only register first paper
+        manager.register_paper(sample_papers[0])
+
+        # Section with one valid and one orphan citation
+        section = Section(
+            title="Test",
+            content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
+        )
+
+        updated, removed = manager.ensure_all_citations_have_entries(section)
+
+        assert "[10.1234/jcard.2023.001]" in updated.content
+        assert "[10.9999/missing]" not in updated.content
+        assert "10.9999/missing" in removed
+
+    def test_ensure_preserves_all_valid_citations(self, sample_papers):
+        """Test that all valid citations are preserved."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)
+
+        section = Section(
+            title="Test",
+            content="Studies [10.1234/jcard.2023.001] and [10.1038/nm.2022.123] showed effects.",
+        )
+
+        updated, removed = manager.ensure_all_citations_have_entries(section)
+
+        assert "[10.1234/jcard.2023.001]" in updated.content
+        assert "[10.1038/nm.2022.123]" in updated.content
+        assert len(removed) == 0
+
+    def test_ensure_processes_subsections(self, sample_papers):
+        """Test that subsections are also processed."""
+        manager = ReferenceManager()
+        manager.register_paper(sample_papers[0])  # Only first paper
+
+        main_section = Section(title="Main", content="")
+        subsection = Section(
+            title="Sub",
+            content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
+        )
+        main_section.add_subsection(subsection)
+
+        updated, removed = manager.ensure_all_citations_have_entries(main_section)
+
+        # Check subsection was cleaned
+        assert "[10.1234/jcard.2023.001]" in updated.subsections[0].content
+        assert "[10.9999/missing]" not in updated.subsections[0].content
+        assert "10.9999/missing" in removed
+
+    def test_ensure_empty_section(self, sample_papers):
+        """Test handling of section with no content."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)
+
+        section = Section(title="Empty", content="")
+
+        updated, removed = manager.ensure_all_citations_have_entries(section)
+
+        assert updated.content == ""
+        assert len(removed) == 0
+
+    def test_ensure_validates_after_cleanup(self, sample_papers):
+        """Test that section is valid after cleanup."""
+        manager = ReferenceManager()
+        manager.register_paper(sample_papers[0])
+
+        section = Section(
+            title="Test",
+            content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
+        )
+
+        manager.ensure_all_citations_have_entries(section)
+
+        # Now validation should pass
+        result = manager.validate_citations(section)
+        assert result.valid is True
+        assert len(result.missing_papers) == 0
 
 
 class TestFormattedReference:

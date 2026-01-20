@@ -348,6 +348,40 @@ class ReferenceManager:
         self.style = style
         self._formatter = CitationFormatter(style)
 
+    def ensure_all_citations_have_entries(self, section: "Section") -> tuple["Section", list[str]]:
+        """Ensure all in-text citations have corresponding reference list entries.
+
+        This method validates that every citation in the section has a registered
+        paper, and removes any orphan citations that don't have entries. This
+        ensures the integrity of the reference list.
+
+        Args:
+            section: Section to clean up
+
+        Returns:
+            Tuple of (updated_section, removed_citation_ids)
+            The section content is modified in-place and also returned.
+        """
+        # Get all valid paper IDs (including alternate identifiers)
+        valid_ids = set(self.papers.keys())
+
+        removed_citations: list[str] = []
+
+        # Process main content
+        if section.content:
+            cleaned_content, removed = self._extractor.remove_orphan_citations(
+                section.content, valid_ids
+            )
+            section.content = cleaned_content
+            removed_citations.extend(removed)
+
+        # Process subsections recursively
+        for subsection in section.subsections:
+            _, sub_removed = self.ensure_all_citations_have_entries(subsection)
+            removed_citations.extend(sub_removed)
+
+        return section, removed_citations
+
     def clear(self) -> None:
         """Clear all registered papers."""
         self.papers.clear()

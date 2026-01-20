@@ -276,9 +276,7 @@ class CitationExtractor:
                 unique.append(num)
         return unique
 
-    def validate_numeric_citations(
-        self, text: str, max_valid: int
-    ) -> tuple[list[int], list[int]]:
+    def validate_numeric_citations(self, text: str, max_valid: int) -> tuple[list[int], list[int]]:
         """Validate that all numeric citations are in valid range.
 
         Args:
@@ -300,9 +298,7 @@ class CitationExtractor:
 
         return valid, invalid
 
-    def remove_invalid_numeric_citations(
-        self, text: str, max_valid: int
-    ) -> tuple[str, list[int]]:
+    def remove_invalid_numeric_citations(self, text: str, max_valid: int) -> tuple[str, list[int]]:
         """Remove invalid numeric citations from text.
 
         Args:
@@ -330,9 +326,7 @@ class CitationExtractor:
 
         return cleaned, removed
 
-    def convert_numeric_to_paper_ids(
-        self, text: str, mapping: dict[int, str]
-    ) -> str:
+    def convert_numeric_to_paper_ids(self, text: str, mapping: dict[int, str]) -> str:
         """Convert numeric citations [1], [2] to paper ID citations [paper_id].
 
         Args:
@@ -350,3 +344,62 @@ class CitationExtractor:
             return match.group(0)  # Keep as-is if not in mapping
 
         return self.NUMERIC_CITATION_PATTERN.sub(replacer, text)
+
+    def remove_orphan_citations(
+        self, text: str, valid_paper_ids: set[str]
+    ) -> tuple[str, list[str]]:
+        """Remove citations that don't have corresponding reference entries.
+
+        This ensures all in-text citations have reference list entries by
+        removing any citations whose paper IDs are not in the valid set.
+
+        Args:
+            text: Text containing [Paper ID] citations
+            valid_paper_ids: Set of paper IDs that have reference entries
+
+        Returns:
+            Tuple of (cleaned_text, removed_citation_ids)
+        """
+        removed = []
+
+        def replacer(match: re.Match) -> str:
+            paper_id = match.group(1).strip()
+
+            # Keep non-citation brackets (figures, tables, etc.)
+            if not self._is_valid_paper_id(paper_id):
+                return match.group(0)
+
+            normalized = self._normalize_paper_id(paper_id)
+
+            # Check if this citation has a corresponding reference
+            if normalized in valid_paper_ids:
+                return match.group(0)  # Keep valid citations
+
+            # Try common variations
+            variations = [
+                normalized,
+                f"doi:{normalized}",
+                f"pmid:{normalized}",
+                f"s2_{normalized}",
+                normalized.replace("doi:", ""),
+                normalized.replace("pmid:", ""),
+            ]
+
+            for variant in variations:
+                if variant in valid_paper_ids:
+                    return match.group(0)  # Keep - found in variations
+
+            # Citation has no reference entry - remove it
+            removed.append(normalized)
+            return ""
+
+        cleaned = self.CITATION_PATTERN.sub(replacer, text)
+
+        # Clean up any double spaces left by removed citations
+        cleaned = re.sub(r"  +", " ", cleaned)
+        # Clean up spaces before punctuation
+        cleaned = re.sub(r" ([.,;:])", r"\1", cleaned)
+        # Clean up empty parenthetical citations like " ()" or "()"
+        cleaned = re.sub(r"\s*\(\s*\)", "", cleaned)
+
+        return cleaned, removed
