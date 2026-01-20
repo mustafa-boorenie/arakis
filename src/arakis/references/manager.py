@@ -382,6 +382,75 @@ class ReferenceManager:
 
         return section, removed_citations
 
+    def remove_unused_papers(self, section: "Section") -> list[Paper]:
+        """Remove papers from the registry that are not cited in the section.
+
+        This ensures no orphaned references exist in the reference list - every
+        registered paper must be cited somewhere in the text. Papers that were
+        registered but never cited will be removed from the manager.
+
+        Args:
+            section: Section to check citations against
+
+        Returns:
+            List of Paper objects that were removed (for logging/auditing)
+        """
+        # Get all paper IDs cited in the section
+        cited_ids = self.extract_citations_from_section(section)
+
+        # Find which registered papers are actually used
+        used_papers: set[str] = set()
+        for pid in cited_ids:
+            paper = self.get_paper_by_any_id(pid)
+            if paper:
+                used_papers.add(paper.id)
+
+        # Find and collect unused papers before removing them
+        removed_papers: list[Paper] = []
+        keys_to_remove: list[str] = []
+
+        for key, paper in self.papers.items():
+            if paper.id not in used_papers:
+                # Only add to removed list once per unique paper
+                if paper not in removed_papers:
+                    removed_papers.append(paper)
+                keys_to_remove.append(key)
+
+        # Remove unused papers from the registry
+        for key in keys_to_remove:
+            del self.papers[key]
+
+        return removed_papers
+
+    def ensure_no_orphaned_references(
+        self, section: "Section"
+    ) -> tuple["Section", list[str], list[Paper]]:
+        """Ensure bidirectional citation-reference integrity.
+
+        This is a convenience method that combines both directions of validation:
+        1. Removes citations in text that don't have reference entries (orphan citations)
+        2. Removes references that aren't cited anywhere in the text (orphan references)
+
+        After calling this method, every citation in the text will have a corresponding
+        reference entry, and every reference entry will be cited in the text.
+
+        Args:
+            section: Section to clean up
+
+        Returns:
+            Tuple of (updated_section, removed_citation_ids, removed_papers)
+            - updated_section: Section with orphan citations removed
+            - removed_citation_ids: Paper IDs that were cited but had no entry
+            - removed_papers: Paper objects that were registered but never cited
+        """
+        # First, remove citations without entries
+        section, removed_citations = self.ensure_all_citations_have_entries(section)
+
+        # Then, remove references that aren't cited
+        removed_papers = self.remove_unused_papers(section)
+
+        return section, removed_citations, removed_papers
+
     def clear(self) -> None:
         """Clear all registered papers."""
         self.papers.clear()

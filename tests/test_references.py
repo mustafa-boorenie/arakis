@@ -1043,3 +1043,192 @@ class TestReferenceValidationResult:
         assert result.valid is False
         assert len(result.missing_papers) == 1
         assert len(result.unused_papers) == 1
+
+
+class TestRemoveUnusedPapers:
+    """Tests for remove_unused_papers method."""
+
+    def test_remove_unused_papers(self, sample_papers):
+        """Test that unused papers are removed from the registry."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)
+
+        # Section only cites the first paper
+        section = Section(
+            title="Test",
+            content="Study [10.1234/jcard.2023.001] showed effects.",
+        )
+
+        # All 3 papers registered, only 1 cited
+        assert manager.paper_count == 3
+
+        removed = manager.remove_unused_papers(section)
+
+        # Should have removed 2 papers
+        assert len(removed) == 2
+        assert manager.paper_count == 1
+
+        # The cited paper should still be registered
+        assert manager.get_paper_by_any_id("10.1234/jcard.2023.001") is not None
+
+    def test_remove_unused_papers_none_removed(self, sample_papers):
+        """Test when all registered papers are cited."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers[:2])  # Register only 2 papers
+
+        # Section cites both papers
+        section = Section(
+            title="Test",
+            content="Studies [10.1234/jcard.2023.001] and [10.1038/nm.2022.123] showed effects.",
+        )
+
+        removed = manager.remove_unused_papers(section)
+
+        assert len(removed) == 0
+        assert manager.paper_count == 2
+
+    def test_remove_unused_papers_with_subsections(self, sample_papers):
+        """Test that citations in subsections count as used."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)  # Register all 3 papers
+
+        main_section = Section(
+            title="Main",
+            content="Main cites [10.1234/jcard.2023.001].",
+        )
+        subsection = Section(
+            title="Sub",
+            content="Sub cites [10.1038/nm.2022.123].",
+        )
+        main_section.add_subsection(subsection)
+
+        removed = manager.remove_unused_papers(main_section)
+
+        # Third paper should be removed
+        assert len(removed) == 1
+        assert removed[0].doi == "10.5678/mrt.2021.456"
+        assert manager.paper_count == 2
+
+    def test_remove_unused_papers_empty_section(self, sample_papers):
+        """Test removing all papers when section has no citations."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)
+
+        section = Section(title="Empty", content="No citations here.")
+
+        removed = manager.remove_unused_papers(section)
+
+        # All papers should be removed
+        assert len(removed) == 3
+        assert manager.paper_count == 0
+
+    def test_remove_unused_papers_returns_paper_objects(self, sample_papers):
+        """Test that removed papers are returned as Paper objects."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)
+
+        section = Section(title="Test", content="Only [10.1234/jcard.2023.001].")
+
+        removed = manager.remove_unused_papers(section)
+
+        # Should return Paper objects
+        for paper in removed:
+            assert hasattr(paper, "doi")
+            assert hasattr(paper, "title")
+            assert hasattr(paper, "authors")
+
+
+class TestEnsureNoOrphanedReferences:
+    """Tests for ensure_no_orphaned_references method."""
+
+    def test_removes_both_orphan_types(self, sample_papers):
+        """Test that both orphan citations and orphan references are removed."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers[:2])  # Register 2 papers
+
+        # Section cites one registered paper and one unregistered paper
+        section = Section(
+            title="Test",
+            content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
+        )
+
+        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(
+            section
+        )
+
+        # Orphan citation removed from text
+        assert "[10.9999/missing]" not in section.content
+        assert "10.9999/missing" in removed_citations
+
+        # Unused paper removed from registry
+        assert len(removed_papers) == 1
+        assert removed_papers[0].doi == "10.1038/nm.2022.123"
+
+        # Registry should only have the cited paper
+        assert manager.paper_count == 1
+
+    def test_preserves_valid_references(self, sample_papers):
+        """Test that valid citation-reference pairs are preserved."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers[:2])
+
+        section = Section(
+            title="Test",
+            content="Studies [10.1234/jcard.2023.001] and [10.1038/nm.2022.123].",
+        )
+
+        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(
+            section
+        )
+
+        # No orphans removed
+        assert len(removed_citations) == 0
+        assert len(removed_papers) == 0
+
+        # Both citations and papers preserved
+        assert "[10.1234/jcard.2023.001]" in section.content
+        assert "[10.1038/nm.2022.123]" in section.content
+        assert manager.paper_count == 2
+
+    def test_validates_after_cleanup(self, sample_papers):
+        """Test that section passes validation after bidirectional cleanup."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)  # Register all 4
+
+        # Section with orphan citation (not registered) - only 1 registered paper cited
+        section = Section(
+            title="Test",
+            content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
+        )
+
+        manager.ensure_no_orphaned_references(section)
+
+        # Now validation should pass completely
+        result = manager.validate_citations(section)
+        assert result.valid is True
+        assert len(result.missing_papers) == 0
+        assert len(result.unused_papers) == 0
+
+    def test_handles_subsections(self, sample_papers):
+        """Test that subsections are processed in both directions."""
+        manager = ReferenceManager()
+        manager.register_papers(sample_papers)  # Register all 3 papers
+
+        main_section = Section(title="Main", content="Main [10.1234/jcard.2023.001].")
+        subsection = Section(
+            title="Sub",
+            content="Sub [10.1038/nm.2022.123] and orphan [10.9999/missing].",
+        )
+        main_section.add_subsection(subsection)
+
+        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(
+            main_section
+        )
+
+        # Orphan citation removed from subsection
+        assert "10.9999/missing" in removed_citations
+        assert "[10.9999/missing]" not in section.subsections[0].content
+
+        # Third registered paper (not cited) should be removed
+        assert len(removed_papers) == 1
+        assert removed_papers[0].doi == "10.5678/mrt.2021.456"
