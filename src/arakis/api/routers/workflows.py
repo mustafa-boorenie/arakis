@@ -503,9 +503,87 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             )
 
             # ============================================================
-            # STAGE 4: Generate Visualizations
+            # STAGE 4: Data Extraction
             # ============================================================
-            print(f"[{workflow_id}] Stage 4: Generating visualizations...")
+            print(f"[{workflow_id}] Stage 4: Extracting data from papers...")
+            workflow.current_stage = "extracting"
+            await db.commit()
+
+            extraction_results = {}  # Map paper_id -> extracted data
+            schema_name = None
+            extraction_schema = None
+
+            # Get included papers for extraction
+            included_papers = [paper_map.get(pid) for pid in included_paper_ids if pid in paper_map]
+            included_papers = [p for p in included_papers if p is not None]
+
+            if included_papers:
+                try:
+                    from arakis.agents.extractor import DataExtractionAgent
+                    from arakis.extraction.schemas import detect_schema, get_schema
+                    from arakis.database.models import Extraction
+
+                    # Auto-detect schema from research question and criteria
+                    detection_text = (
+                        f"{workflow_data.research_question} {workflow_data.inclusion_criteria}"
+                    )
+                    schema_name, confidence = detect_schema(detection_text)
+                    extraction_schema = get_schema(schema_name)
+                    print(
+                        f"[{workflow_id}] Detected schema: {schema_name} (confidence: {confidence:.0%})"
+                    )
+
+                    # Extract data from included papers
+                    extractor = DataExtractionAgent()
+                    # Use single-pass in fast mode, triple-review otherwise
+                    triple_review = not workflow_data.fast_mode
+
+                    extraction_result = await extractor.extract_batch(
+                        papers=included_papers[:20],  # Limit for cost control
+                        schema=extraction_schema,
+                        triple_review=triple_review,
+                        use_full_text=False,  # Use abstracts for API workflow
+                    )
+
+                    # Save extraction results to database and build mapping
+                    for ext in extraction_result.extractions:
+                        # Find the paper ID for this extraction
+                        for pid, paper in paper_map.items():
+                            if paper.best_identifier == ext.paper_id or paper.doi == ext.paper_id:
+                                # Save to database
+                                db_extraction = Extraction(
+                                    workflow_id=workflow_id,
+                                    paper_id=pid,
+                                    schema_name=schema_name,
+                                    extraction_method=str(ext.extraction_method.value)
+                                    if hasattr(ext.extraction_method, "value")
+                                    else str(ext.extraction_method),
+                                    data=ext.data,
+                                    confidence=ext.confidence,
+                                    extraction_quality=ext.extraction_quality,
+                                    needs_human_review=ext.needs_human_review,
+                                    conflicts=ext.conflicts,
+                                    low_confidence_fields=ext.low_confidence_fields,
+                                )
+                                db.add(db_extraction)
+                                extraction_results[pid] = ext.data
+                                break
+
+                    await db.commit()
+                    total_cost += extraction_result.estimated_cost
+                    print(
+                        f"[{workflow_id}] Extracted data from {extraction_result.successful_extractions} papers"
+                    )
+                except Exception as e:
+                    print(f"[{workflow_id}] Failed to extract data: {e}")
+                    import traceback
+
+                    traceback.print_exc()
+
+            # ============================================================
+            # STAGE 5: Generate Visualizations
+            # ============================================================
+            print(f"[{workflow_id}] Stage 5: Generating visualizations...")
 
             figures = {}
             output_dir = f"/tmp/arakis/{workflow_id}"
@@ -530,9 +608,9 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 print(f"[{workflow_id}] Failed to generate PRISMA diagram: {e}")
 
             # ============================================================
-            # STAGE 5: Write Manuscript Sections
+            # STAGE 6: Write Manuscript Sections
             # ============================================================
-            print(f"[{workflow_id}] Stage 5: Writing manuscript sections...")
+            print(f"[{workflow_id}] Stage 6: Writing manuscript sections...")
             workflow.current_stage = "writing"
             await db.commit()
 
@@ -563,10 +641,13 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 intro_references = intro_cited_papers
 
                 total_cost += 1.0
-                print(f"[{workflow_id}] Introduction written: {intro_section.total_word_count} words, {len(intro_cited_papers)} references")
+                print(
+                    f"[{workflow_id}] Introduction written: {intro_section.total_word_count} words, {len(intro_cited_papers)} references"
+                )
             except Exception as e:
                 print(f"[{workflow_id}] Failed to write introduction: {e}")
                 import traceback
+
                 traceback.print_exc()
                 intro_text = f"## Introduction\n\nThis systematic review investigates: {workflow_data.research_question}\n\n"
 
@@ -745,9 +826,9 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
 """
 
             # ============================================================
-            # STAGE 6: Generate References
+            # STAGE 7: Generate References
             # ============================================================
-            print(f"[{workflow_id}] Stage 6: Generating references...")
+            print(f"[{workflow_id}] Stage 7: Generating references...")
 
             references = []
             for i, paper in enumerate(included_papers[:20], 1):
@@ -770,14 +851,109 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                 )
 
             # ============================================================
-            # STAGE 7: Create Study Characteristics Table
+            # STAGE 8: Create Study Characteristics Table
             # ============================================================
-            print(f"[{workflow_id}] Stage 7: Creating tables...")
+            print(f"[{workflow_id}] Stage 8: Creating tables...")
 
             tables = {}
             if included_papers:
+                # Define schema-specific columns for Table 1
+                schema_columns = {
+                    "rct": {
+                        "headers": [
+                            "Study",
+                            "Year",
+                            "N",
+                            "Population",
+                            "Intervention",
+                            "Control",
+                            "Outcome",
+                        ],
+                        "fields": [
+                            "sample_size_total",
+                            "population_description",
+                            "intervention_name",
+                            "control_type",
+                            "primary_outcome",
+                        ],
+                    },
+                    "cohort": {
+                        "headers": [
+                            "Study",
+                            "Year",
+                            "N",
+                            "Population",
+                            "Exposure",
+                            "Follow-up",
+                            "Outcome",
+                        ],
+                        "fields": [
+                            "sample_size_total",
+                            "population_description",
+                            "exposure",
+                            "follow_up_duration",
+                            "primary_outcome",
+                        ],
+                    },
+                    "case_control": {
+                        "headers": [
+                            "Study",
+                            "Year",
+                            "Cases",
+                            "Controls",
+                            "Exposure",
+                            "OR (95% CI)",
+                        ],
+                        "fields": [
+                            "number_of_cases",
+                            "number_of_controls",
+                            "exposure",
+                            "odds_ratio",
+                        ],
+                    },
+                    "diagnostic": {
+                        "headers": [
+                            "Study",
+                            "Year",
+                            "N",
+                            "Population",
+                            "Index Test",
+                            "Reference Standard",
+                            "Sensitivity",
+                            "Specificity",
+                        ],
+                        "fields": [
+                            "sample_size",
+                            "population_description",
+                            "index_test",
+                            "reference_standard",
+                            "sensitivity",
+                            "specificity",
+                        ],
+                    },
+                }
+
+                # Get column definitions based on detected schema
+                if schema_name and schema_name in schema_columns:
+                    col_def = schema_columns[schema_name]
+                    headers = col_def["headers"]
+                    fields = col_def["fields"]
+                else:
+                    # Fallback to basic columns if no extraction data
+                    headers = ["Study", "Year", "Journal", "Source"]
+                    fields = None
+
                 table_rows = []
+                footnotes = []
+
                 for paper in included_papers[:15]:
+                    # Get paper identifier (workflow_id prefixed)
+                    paper_identifier = (
+                        paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
+                    )
+                    paper_id = f"{workflow_id}_{paper_identifier}"
+
+                    # Get study author(s) and year
                     year = str(paper.year) if paper.year else "N/A"
                     authors_str = ""
                     if paper.authors:
@@ -789,27 +965,73 @@ Based on the systematic review of {workflow.papers_included} studies, this revie
                         authors_str = (
                             f"{first_author} et al." if len(paper.authors) > 1 else first_author
                         )
-                    table_rows.append(
+
+                    # Build row based on schema
+                    if fields and paper_id in extraction_results:
+                        ext_data = extraction_results[paper_id]
+                        row = [authors_str[:25], year]
+
+                        for field in fields:
+                            value = ext_data.get(field)
+                            if value is None:
+                                row.append("NR")  # Not Reported
+                            elif isinstance(value, (list, tuple)):
+                                row.append(", ".join(str(v) for v in value)[:30])
+                            elif isinstance(value, float):
+                                row.append(f"{value:.1f}")
+                            else:
+                                # Truncate long strings
+                                str_val = str(value)
+                                row.append(str_val[:35] + "..." if len(str_val) > 35 else str_val)
+                        table_rows.append(row)
+                    else:
+                        # Fallback to basic paper metadata
+                        table_rows.append(
+                            [
+                                authors_str[:30],
+                                year,
+                                (paper.journal or "N/A")[:25],
+                                paper.source or "N/A",
+                            ]
+                        )
+
+                # Add footnotes explaining abbreviations
+                footnotes = ["NR = Not Reported"]
+                if schema_name == "rct":
+                    footnotes.extend(
+                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
+                    )
+                elif schema_name == "cohort":
+                    footnotes.extend(
+                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
+                    )
+                elif schema_name == "case_control":
+                    footnotes.extend(
                         [
-                            authors_str[:30],
-                            year,
-                            (paper.journal or "N/A")[:25],
-                            paper.source or "N/A",
+                            "OR = Odds Ratio",
+                            "CI = Confidence Interval",
+                            "Studies ordered by relevance",
                         ]
                     )
+                elif schema_name == "diagnostic":
+                    footnotes.extend(
+                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
+                    )
+                else:
+                    footnotes = ["Studies ordered by relevance to search criteria"]
 
                 tables["table1"] = {
                     "id": "table1",
                     "title": "Table 1. Characteristics of included studies",
-                    "headers": ["Study", "Year", "Journal", "Source"],
+                    "headers": headers,
                     "rows": table_rows,
-                    "footnotes": ["Studies ordered by relevance to search criteria"],
+                    "footnotes": footnotes,
                 }
 
             # ============================================================
-            # STAGE 8: Assemble and Save Manuscript
+            # STAGE 9: Assemble and Save Manuscript
             # ============================================================
-            print(f"[{workflow_id}] Stage 8: Assembling manuscript...")
+            print(f"[{workflow_id}] Stage 9: Assembling manuscript...")
             workflow.current_stage = "finalizing"
             await db.commit()
 
