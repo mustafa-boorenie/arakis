@@ -369,17 +369,17 @@ Auto-detect and apply appropriate tool:
 - [x] All papers are processed (100% completion)
 - [x] Full audit trail recorded for each paper
 - [x] Progress displayed in real-time
-- [ ] Batch processing with configurable size
+- [x] Batch processing with configurable size
 
 ### Data Extraction
-- [ ] Retry logic implemented for failures
-- [ ] Low-confidence fields flagged
-- [ ] Failure reasons logged
-- [ ] Schema validation enforced
+- [x] Retry logic implemented for failures
+- [x] Low-confidence fields flagged
+- [x] Failure reasons logged
+- [x] Schema validation enforced
 
 ### Meta-Analysis
-- [ ] Forest plot generated with all required statistics
-- [ ] Funnel plot generated
+- [x] Forest plot generated with all required statistics
+- [x] Funnel plot generated
 - [ ] Heterogeneity metrics displayed (I², τ², Q)
 - [ ] Individual study weights shown
 - [ ] Subgroup analyses performed when applicable

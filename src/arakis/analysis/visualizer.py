@@ -123,12 +123,36 @@ class VisualizationGenerator:
         all_ci_uppers = []
 
         # ===== COLUMN HEADERS =====
-        ax.text(-0.02, header_y, "Study", ha="right", va="center",
-                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
-        ax.text(1.02, header_y, "Effect [95% CI]", ha="left", va="center",
-                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
-        ax.text(1.35, header_y, "Weight", ha="left", va="center",
-                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
+        ax.text(
+            -0.02,
+            header_y,
+            "Study",
+            ha="right",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontweight="bold",
+            fontsize=10,
+        )
+        ax.text(
+            1.02,
+            header_y,
+            "Effect [95% CI]",
+            ha="left",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontweight="bold",
+            fontsize=10,
+        )
+        ax.text(
+            1.35,
+            header_y,
+            "Weight",
+            ha="left",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontweight="bold",
+            fontsize=10,
+        )
 
         # Separator line below headers
         ax.axhline(y=header_y - 0.5, color="black", linewidth=0.5, alpha=0.5)
@@ -154,25 +178,54 @@ class VisualizationGenerator:
             ax.plot([study_ci_lower, study_ci_upper], [y, y], "k-", linewidth=1)
 
             # Plot effect estimate as square
-            ax.scatter([effect], [y], s=box_size, marker="s", color="steelblue",
-                      edgecolors="black", zorder=3)
+            ax.scatter(
+                [effect],
+                [y],
+                s=box_size,
+                marker="s",
+                color="steelblue",
+                edgecolors="black",
+                zorder=3,
+            )
 
             # Add study label
             label = study.study_name or study.study_id
             if study.year:
                 label = f"{label} ({study.year})"
-            ax.text(-0.02, y, label, ha="right", va="center",
-                   transform=ax.get_yaxis_transform(), fontsize=9)
+            ax.text(
+                -0.02,
+                y,
+                label,
+                ha="right",
+                va="center",
+                transform=ax.get_yaxis_transform(),
+                fontsize=9,
+            )
 
             # Add effect and CI text
             effect_text = f"{effect:.2f} [{study_ci_lower:.2f}, {study_ci_upper:.2f}]"
-            ax.text(1.02, y, effect_text, ha="left", va="center",
-                   transform=ax.get_yaxis_transform(), fontsize=9, family="monospace")
+            ax.text(
+                1.02,
+                y,
+                effect_text,
+                ha="left",
+                va="center",
+                transform=ax.get_yaxis_transform(),
+                fontsize=9,
+                family="monospace",
+            )
 
             # Weight column
             weight_text = f"{weight * 100:.1f}%" if weight else ""
-            ax.text(1.35, y, weight_text, ha="left", va="center",
-                   transform=ax.get_yaxis_transform(), fontsize=9)
+            ax.text(
+                1.35,
+                y,
+                weight_text,
+                ha="left",
+                va="center",
+                transform=ax.get_yaxis_transform(),
+                fontsize=9,
+            )
 
         # Separator line above pooled effect
         ax.axhline(y=0.3, color="black", linewidth=0.5, alpha=0.5)
@@ -186,16 +239,26 @@ class VisualizationGenerator:
             (ci_upper, pooled_y),
             (pooled_effect, pooled_y - diamond_height),
         ]
-        diamond_patch = plt.Polygon(diamond, closed=True, facecolor="crimson",
-                                   edgecolor="darkred", linewidth=1.5)
+        diamond_patch = plt.Polygon(
+            diamond, closed=True, facecolor="crimson", edgecolor="darkred", linewidth=1.5
+        )
         ax.add_patch(diamond_patch)
 
         # Add prediction interval line (if random effects and available)
-        if (show_prediction_interval and
-            meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS and
-            pred_lower is not None and pred_upper is not None):
-            ax.plot([pred_lower, pred_upper], [pooled_y, pooled_y],
-                   color="crimson", linewidth=1.5, linestyle="--", alpha=0.7)
+        if (
+            show_prediction_interval
+            and meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS
+            and pred_lower is not None
+            and pred_upper is not None
+        ):
+            ax.plot(
+                [pred_lower, pred_upper],
+                [pooled_y, pooled_y],
+                color="crimson",
+                linewidth=1.5,
+                linestyle="--",
+                alpha=0.7,
+            )
             all_ci_lowers.append(pred_lower)
             all_ci_uppers.append(pred_upper)
 
@@ -204,18 +267,42 @@ class VisualizationGenerator:
 
         # Add pooled effect label
         method_label = meta_result.analysis_method.value.replace("_", " ").title()
-        ax.text(-0.02, pooled_y, f"Overall ({method_label})", ha="right", va="center",
-               fontweight="bold", transform=ax.get_yaxis_transform(), fontsize=9)
+        ax.text(
+            -0.02,
+            pooled_y,
+            f"Overall ({method_label})",
+            ha="right",
+            va="center",
+            fontweight="bold",
+            transform=ax.get_yaxis_transform(),
+            fontsize=9,
+        )
 
         # Add pooled effect text
         pooled_text = f"{pooled_effect:.2f} [{ci_lower:.2f}, {ci_upper:.2f}]"
-        ax.text(1.02, pooled_y, pooled_text, ha="left", va="center",
-               fontweight="bold", transform=ax.get_yaxis_transform(),
-               fontsize=9, family="monospace")
+        ax.text(
+            1.02,
+            pooled_y,
+            pooled_text,
+            ha="left",
+            va="center",
+            fontweight="bold",
+            transform=ax.get_yaxis_transform(),
+            fontsize=9,
+            family="monospace",
+        )
 
         # Total weight (100%)
-        ax.text(1.35, pooled_y, "100.0%", ha="left", va="center",
-               fontweight="bold", transform=ax.get_yaxis_transform(), fontsize=9)
+        ax.text(
+            1.35,
+            pooled_y,
+            "100.0%",
+            ha="left",
+            va="center",
+            fontweight="bold",
+            transform=ax.get_yaxis_transform(),
+            fontsize=9,
+        )
 
         # ===== VERTICAL NULL LINE =====
         ax.axvline(null_value, color="black", linestyle="--", linewidth=1, alpha=0.7)
@@ -241,17 +328,33 @@ class VisualizationGenerator:
                 favors_labels = ("Favors Treatment", "Favors Control")
 
         # Position favors labels below the x-axis
-        ax.text(x_min + x_range * 0.15, stats_y - 0.5, f"← {favors_labels[0]}",
-               ha="center", va="top", fontsize=9, style="italic")
-        ax.text(x_max - x_range * 0.15, stats_y - 0.5, f"{favors_labels[1]} →",
-               ha="center", va="top", fontsize=9, style="italic")
+        ax.text(
+            x_min + x_range * 0.15,
+            stats_y - 0.5,
+            f"← {favors_labels[0]}",
+            ha="center",
+            va="top",
+            fontsize=9,
+            style="italic",
+        )
+        ax.text(
+            x_max - x_range * 0.15,
+            stats_y - 0.5,
+            f"{favors_labels[1]} →",
+            ha="center",
+            va="top",
+            fontsize=9,
+            style="italic",
+        )
 
         # ===== STATISTICS PANEL =====
         # Heterogeneity statistics
         het = meta_result.heterogeneity
-        het_text = (f"Heterogeneity: τ² = {het.tau_squared:.4f}; "
-                   f"χ² = {het.q_statistic:.2f}, df = {n_studies - 1} "
-                   f"(P = {het.q_p_value:.4f}); I² = {het.i_squared:.1f}%")
+        het_text = (
+            f"Heterogeneity: τ² = {het.tau_squared:.4f}; "
+            f"χ² = {het.q_statistic:.2f}, df = {n_studies - 1} "
+            f"(P = {het.q_p_value:.4f}); I² = {het.i_squared:.1f}%"
+        )
 
         # I² interpretation
         if het.i_squared < 25:
@@ -263,24 +366,58 @@ class VisualizationGenerator:
         else:
             het_interp = "(considerable heterogeneity)"
 
-        ax.text(0.5, stats_y + 0.8, het_text, ha="center", va="center",
-               transform=ax.get_yaxis_transform(), fontsize=8)
-        ax.text(0.5, stats_y + 0.3, het_interp, ha="center", va="center",
-               transform=ax.get_yaxis_transform(), fontsize=8, style="italic")
+        ax.text(
+            0.5,
+            stats_y + 0.8,
+            het_text,
+            ha="center",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontsize=8,
+        )
+        ax.text(
+            0.5,
+            stats_y + 0.3,
+            het_interp,
+            ha="center",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontsize=8,
+            style="italic",
+        )
 
         # Test for overall effect
-        overall_test = (f"Test for overall effect: Z = {meta_result.z_statistic:.2f} "
-                       f"(P {'< 0.0001' if meta_result.p_value < 0.0001 else f'= {meta_result.p_value:.4f}'})")
-        ax.text(0.5, stats_y - 0.2, overall_test, ha="center", va="center",
-               transform=ax.get_yaxis_transform(), fontsize=8)
+        overall_test = (
+            f"Test for overall effect: Z = {meta_result.z_statistic:.2f} "
+            f"(P {'< 0.0001' if meta_result.p_value < 0.0001 else f'= {meta_result.p_value:.4f}'})"
+        )
+        ax.text(
+            0.5,
+            stats_y - 0.2,
+            overall_test,
+            ha="center",
+            va="center",
+            transform=ax.get_yaxis_transform(),
+            fontsize=8,
+        )
 
         # Prediction interval (if available)
-        if (show_prediction_interval and
-            meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS and
-            pred_lower is not None and pred_upper is not None):
+        if (
+            show_prediction_interval
+            and meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS
+            and pred_lower is not None
+            and pred_upper is not None
+        ):
             pred_text = f"Prediction interval: [{pred_lower:.2f}, {pred_upper:.2f}]"
-            ax.text(0.5, stats_y - 0.7, pred_text, ha="center", va="center",
-                   transform=ax.get_yaxis_transform(), fontsize=8)
+            ax.text(
+                0.5,
+                stats_y - 0.7,
+                pred_text,
+                ha="center",
+                va="center",
+                transform=ax.get_yaxis_transform(),
+                fontsize=8,
+            )
 
         # ===== TITLE =====
         title = f"Forest Plot: {meta_result.outcome_name}"
@@ -313,14 +450,20 @@ class VisualizationGenerator:
         self,
         meta_result: MetaAnalysisResult,
         output_filename: str | None = None,
-        figsize: tuple[float, float] = (8, 6),
+        figsize: tuple[float, float] = (10, 8),
+        show_contours: bool = True,
+        show_study_labels: bool = False,
+        y_axis: str = "se",  # "se" for standard error, "precision" for 1/SE
     ) -> str:
-        """Create a funnel plot for publication bias assessment.
+        """Create a publication-quality funnel plot for publication bias assessment.
 
         Args:
             meta_result: Meta-analysis result with study data
             output_filename: Output filename (default: funnel_plot.png)
             figsize: Figure size in inches
+            show_contours: Whether to show significance contours (p < 0.01, 0.05, 0.10)
+            show_study_labels: Whether to label individual studies
+            y_axis: Y-axis metric - "se" for standard error or "precision" for 1/SE
 
         Returns:
             Path to saved plot
@@ -329,70 +472,241 @@ class VisualizationGenerator:
             output_filename = "funnel_plot.png"
 
         studies = meta_result.studies
+        n_studies = len(studies)
         pooled_effect = meta_result.pooled_effect
+
+        # Determine if we're using log scale (for ORs, RRs)
+        use_log_scale = meta_result.effect_measure in [
+            EffectMeasure.ODDS_RATIO,
+            EffectMeasure.RISK_RATIO,
+        ]
 
         # Extract effects and standard errors
         effects = np.array([s.effect for s in studies])
         ses = np.array([s.standard_error for s in studies])
-        precisions = 1 / ses
 
-        # Create figure
+        # Transform for display if using log scale
+        if use_log_scale:
+            display_effects = np.exp(effects)
+            display_pooled = np.exp(pooled_effect)
+            null_value = 1.0
+        else:
+            display_effects = effects
+            display_pooled = pooled_effect
+            null_value = 0.0
+
+        # Create figure with space for statistics
         fig, ax = plt.subplots(figsize=figsize)
 
-        # Plot studies
-        ax.scatter(effects, precisions, s=50, alpha=0.6, color="steelblue", edgecolors="black")
+        # Y-axis values
+        if y_axis == "precision":
+            y_values = 1 / ses
+            y_label = "Precision (1/SE)"
+            max_y = max(y_values) * 1.1
+            min_y = min(y_values) * 0.5
+        else:  # Standard error (default for funnel plots)
+            y_values = ses
+            y_label = "Standard Error"
+            max_y = max(ses) * 1.2
+            min_y = 0
 
-        # Add pooled effect line
+        # ===== SIGNIFICANCE CONTOURS =====
+        if show_contours:
+            # Create y range for contours
+            y_range = np.linspace(0.001, max_y * 1.2, 200)
+
+            if y_axis == "precision":
+                se_for_contours = 1 / y_range
+            else:
+                se_for_contours = y_range
+
+            # Significance levels and their colors
+            sig_levels = [
+                (1.0, "white", "p > 0.10"),
+                (1.645, "#E8E8E8", "0.05 < p < 0.10"),
+                (1.96, "#D0D0D0", "0.01 < p < 0.05"),
+                (2.576, "#B8B8B8", "p < 0.01"),
+            ]
+
+            # Draw contours from outside in
+            for z_value, color, label in reversed(sig_levels):
+                if use_log_scale:
+                    upper = np.exp(pooled_effect + z_value * se_for_contours)
+                    lower = np.exp(pooled_effect - z_value * se_for_contours)
+                else:
+                    upper = pooled_effect + z_value * se_for_contours
+                    lower = pooled_effect - z_value * se_for_contours
+
+                ax.fill_betweenx(
+                    y_range, lower, upper, alpha=1.0, color=color, linewidth=0, zorder=1
+                )
+
+            # Add contour legend
+            from matplotlib.patches import Patch
+
+            contour_handles = [
+                Patch(facecolor="#B8B8B8", label="p < 0.01"),
+                Patch(facecolor="#D0D0D0", label="0.01 < p < 0.05"),
+                Patch(facecolor="#E8E8E8", label="0.05 < p < 0.10"),
+                Patch(facecolor="white", edgecolor="gray", label="p > 0.10"),
+            ]
+        else:
+            # Simple 95% CI funnel
+            y_range = np.linspace(0.001, max_y * 1.2, 100)
+            if y_axis == "precision":
+                se_for_contours = 1 / y_range
+            else:
+                se_for_contours = y_range
+
+            if use_log_scale:
+                upper = np.exp(pooled_effect + 1.96 * se_for_contours)
+                lower = np.exp(pooled_effect - 1.96 * se_for_contours)
+            else:
+                upper = pooled_effect + 1.96 * se_for_contours
+                lower = pooled_effect - 1.96 * se_for_contours
+
+            ax.fill_betweenx(y_range, lower, upper, alpha=0.15, color="gray", linewidth=0, zorder=1)
+            ax.plot(upper, y_range, "k--", alpha=0.5, linewidth=1, zorder=2)
+            ax.plot(lower, y_range, "k--", alpha=0.5, linewidth=1, zorder=2)
+            contour_handles = []
+
+        # ===== POOLED EFFECT LINE =====
         ax.axvline(
-            pooled_effect, color="black", linestyle="--", linewidth=1.5, label="Pooled Effect"
+            display_pooled,
+            color="black",
+            linestyle="-",
+            linewidth=1.5,
+            label=f"Pooled effect = {display_pooled:.3f}",
+            zorder=3,
         )
 
-        # Add funnel (pseudo confidence limits)
-        max_precision = max(precisions)
-        min_precision = min(precisions)
-
-        # Calculate funnel boundaries (±1.96 SE)
-        precision_range = np.linspace(min_precision * 0.5, max_precision * 1.1, 100)
-        se_range = 1 / precision_range
-
-        upper_bound = pooled_effect + 1.96 * se_range
-        lower_bound = pooled_effect - 1.96 * se_range
-
-        ax.plot(upper_bound, precision_range, "k--", alpha=0.3, linewidth=1)
-        ax.plot(lower_bound, precision_range, "k--", alpha=0.3, linewidth=1)
-        ax.fill_betweenx(
-            precision_range, lower_bound, upper_bound, alpha=0.1, color="gray", label="95% CI"
+        # ===== NULL EFFECT LINE =====
+        ax.axvline(
+            null_value,
+            color="red",
+            linestyle="--",
+            linewidth=1,
+            alpha=0.7,
+            label=f"Null effect = {null_value}",
+            zorder=3,
         )
 
-        # Invert y-axis (high precision at top)
-        ax.invert_yaxis()
+        # ===== PLOT STUDIES =====
+        ax.scatter(
+            display_effects,
+            y_values,
+            s=80,
+            alpha=0.8,
+            color="steelblue",
+            edgecolors="black",
+            linewidth=1,
+            zorder=4,
+        )
 
-        # Labels
+        # Add study labels if requested
+        if show_study_labels:
+            for study, effect, y in zip(studies, display_effects, y_values):
+                label = study.study_name or study.study_id
+                if study.year:
+                    label = f"{label} ({study.year})"
+                ax.annotate(
+                    label,
+                    (effect, y),
+                    xytext=(5, 5),
+                    textcoords="offset points",
+                    fontsize=7,
+                    alpha=0.8,
+                )
+
+        # ===== AXIS SETUP =====
+        if y_axis != "precision":
+            ax.invert_yaxis()  # For SE: low values at top
+
+        # Set axis limits with padding
+        x_range = max(display_effects) - min(display_effects)
+        x_padding = max(x_range * 0.3, abs(display_pooled - null_value) * 0.5)
+        ax.set_xlim(
+            min(min(display_effects), null_value) - x_padding,
+            max(max(display_effects), null_value) + x_padding,
+        )
+
+        if y_axis == "precision":
+            ax.set_ylim(min_y, max_y)
+        else:
+            ax.set_ylim(max_y, min_y)  # Inverted for SE
+
+        # ===== LABELS =====
         effect_label = self._get_effect_measure_label(meta_result.effect_measure)
-        ax.set_xlabel(effect_label, fontweight="bold")
-        ax.set_ylabel("Precision (1/SE)", fontweight="bold")
-        ax.set_title(f"Funnel Plot: {meta_result.outcome_name}", fontweight="bold", pad=15)
+        ax.set_xlabel(effect_label, fontweight="bold", fontsize=11)
+        ax.set_ylabel(y_label, fontweight="bold", fontsize=11)
 
-        # Add Egger's test result if available
+        # ===== TITLE =====
+        title = f"Funnel Plot: {meta_result.outcome_name}"
+        subtitle = f"k = {n_studies} studies"
+        ax.set_title(f"{title}\n{subtitle}", fontweight="bold", pad=15, fontsize=12)
+
+        # ===== STATISTICS BOX =====
+        stats_lines = []
+
+        # Heterogeneity info
+        het = meta_result.heterogeneity
+        stats_lines.append(f"Heterogeneity: I² = {het.i_squared:.1f}%")
+
+        # Egger's test
         if meta_result.egger_test_p_value is not None:
-            egger_text = f"Egger's test: p = {meta_result.egger_test_p_value:.3f}"
-            ax.text(
-                0.05,
-                0.95,
-                egger_text,
-                transform=ax.transAxes,
-                verticalalignment="top",
-                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            egger_sig = (
+                "significant" if meta_result.egger_test_p_value < 0.05 else "not significant"
             )
+            if meta_result.egger_test_p_value < 0.0001:
+                egger_p_str = "p < 0.0001"
+            else:
+                egger_p_str = f"p = {meta_result.egger_test_p_value:.4f}"
+            stats_lines.append(f"Egger's test: {egger_p_str} ({egger_sig})")
 
-        ax.legend()
-        ax.grid(True, alpha=0.3)
+        # Asymmetry interpretation
+        if meta_result.egger_test_p_value is not None:
+            if meta_result.egger_test_p_value < 0.05:
+                stats_lines.append("* Evidence of funnel plot asymmetry")
+            elif meta_result.egger_test_p_value < 0.10:
+                stats_lines.append("* Possible funnel plot asymmetry")
+            else:
+                stats_lines.append("No evidence of asymmetry")
+
+        # Study count note
+        if n_studies < 10:
+            stats_lines.append(f"Note: With k={n_studies} studies, tests have low power")
+
+        stats_text = "\n".join(stats_lines)
+        ax.text(
+            0.02,
+            0.98,
+            stats_text,
+            transform=ax.transAxes,
+            verticalalignment="top",
+            fontsize=9,
+            bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="gray", alpha=0.9),
+            zorder=5,
+        )
+
+        # ===== LEGEND =====
+        # Combine contour legend with other elements
+        handles, labels = ax.get_legend_handles_labels()
+        if contour_handles:
+            handles.extend(contour_handles)  # type: ignore[arg-type]
+            labels.extend([h.get_label() for h in contour_handles])
+
+        ax.legend(handles, labels, loc="upper right", fontsize=8, framealpha=0.9)
+
+        # ===== STYLING =====
+        ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
 
         plt.tight_layout()
 
         # Save
         output_path = self.output_dir / output_filename
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close()
 
         return str(output_path)
