@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.paper import Paper
 from arakis.retrieval.sources.arxiv import ArxivSource
 from arakis.retrieval.sources.base import BaseRetrievalSource, ContentType, RetrievalResult
@@ -21,6 +22,9 @@ from arakis.retrieval.sources.semantic_scholar import SemanticScholarSource
 from arakis.retrieval.sources.unpaywall import UnpaywallSource
 from arakis.storage import get_storage_client
 from arakis.utils import BatchProcessor
+
+# Module logger
+_logger = get_logger("fetcher")
 
 
 @dataclass
@@ -175,8 +179,17 @@ class PaperFetcher:
                             retrieval_result=result,
                             sources_tried=sources_tried,
                         )
-            except Exception:
-                pass  # URL validation failed, continue to external sources
+            except Exception as e:
+                log_failure(
+                    _logger,
+                    "Pre-populated URL validation",
+                    e,
+                    context={
+                        "paper_id": paper.id,
+                        "pdf_url": paper.pdf_url[:100] if paper.pdf_url else "N/A",
+                    },
+                )
+                # Continue to external sources
 
         # Try external sources
         for source in self.sources:
@@ -223,9 +236,14 @@ class PaperFetcher:
         try:
             metadata = {"source": source, "paper_id": paper_id}
             self.storage.upload_paper_pdf(paper_id, content, metadata)
-        except Exception:
-            # Caching failure shouldn't break the fetch
-            pass
+        except Exception as e:
+            # Caching failure shouldn't break the fetch, but log it
+            log_warning(
+                _logger,
+                "PDF caching",
+                f"Failed to cache PDF to storage: {e}",
+                context={"paper_id": paper_id, "source": source, "content_size": len(content)},
+            )
 
     async def fetch_batch(
         self,
@@ -311,7 +329,11 @@ class PaperFetcher:
                 paper.full_text_extracted_at = datetime.now(timezone.utc)
                 paper.text_extraction_method = result.extraction_method
                 paper.text_quality_score = result.quality_score
-        except Exception:
-            # Silently fail - text extraction is optional
-            # Paper will still have pdf_url even if extraction fails
-            pass
+        except Exception as e:
+            # Text extraction is optional - paper will still have pdf_url
+            log_warning(
+                _logger,
+                "PDF text extraction",
+                f"Failed to extract text from PDF: {e}",
+                context={"paper_id": paper.id, "pdf_size": len(pdf_content)},
+            )

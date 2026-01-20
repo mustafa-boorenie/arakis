@@ -13,7 +13,11 @@ from arakis.clients.openalex import OpenAlexClient
 from arakis.clients.pubmed import PubMedClient
 from arakis.clients.semantic_scholar import SemanticScholarClient
 from arakis.deduplication import DeduplicationResult, Deduplicator
+from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.paper import Paper, PRISMAFlow, SearchResult
+
+# Module logger
+_logger = get_logger("orchestrator")
 
 
 @dataclass
@@ -162,6 +166,12 @@ class SearchOrchestrator:
                 except (RateLimitError, SearchClientError) as e:
                     # For rate limit errors, warn but continue with partial results
                     if "rate limit" in str(e).lower() or isinstance(e, RateLimitError):
+                        log_warning(
+                            _logger,
+                            "Database search",
+                            f"Rate limit reached for {db_name}, skipping remaining queries",
+                            context={"database": db_name, "query": query[:100]},
+                        )
                         if progress_callback:
                             progress_callback(
                                 "search_warning",
@@ -169,12 +179,24 @@ class SearchOrchestrator:
                             )
                         break  # Skip remaining queries for this database
                     else:
+                        log_failure(
+                            _logger,
+                            "Database search",
+                            e,
+                            context={"database": db_name, "query": query[:100]},
+                        )
                         if progress_callback:
                             progress_callback("search_error", f"{db_name}: {e}")
                     continue
                 except Exception as e:
                     # Catch tenacity.RetryError and other unexpected errors
                     if "rate limit" in str(e).lower() or "retryerror" in type(e).__name__.lower():
+                        log_warning(
+                            _logger,
+                            "Database search",
+                            f"Rate limit reached for {db_name} (via retry), skipping remaining queries",
+                            context={"database": db_name, "error_type": type(e).__name__},
+                        )
                         if progress_callback:
                             progress_callback(
                                 "search_warning",
@@ -182,6 +204,12 @@ class SearchOrchestrator:
                             )
                         break
                     else:
+                        log_failure(
+                            _logger,
+                            "Database search",
+                            e,
+                            context={"database": db_name, "query": query[:100]},
+                        )
                         if progress_callback:
                             progress_callback("search_error", f"{db_name}: {type(e).__name__}: {e}")
                         continue
@@ -259,8 +287,19 @@ class SearchOrchestrator:
                             db_name, query_info["query"], count, target_range
                         )
                         refined[db_name].append(refined_query)
-                    except Exception:
+                    except Exception as e:
                         # Keep original if refinement fails
+                        log_failure(
+                            _logger,
+                            "Query refinement",
+                            e,
+                            context={
+                                "database": db_name,
+                                "query": query_info["query"][:100],
+                                "result_count": count,
+                                "target_range": target_range,
+                            },
+                        )
                         refined[db_name].append(query_info)
                 else:
                     refined[db_name].append(query_info)

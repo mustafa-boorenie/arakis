@@ -13,7 +13,11 @@ from arakis.clients.openalex import OpenAlexClient
 from arakis.clients.pubmed import PubMedClient
 from arakis.clients.semantic_scholar import SemanticScholarClient
 from arakis.config import get_settings
+from arakis.logging import get_logger, log_failure, log_warning
 from arakis.utils import retry_with_exponential_backoff
+
+# Module logger
+_logger = get_logger("query_generator")
 
 # Tool function definitions for GPT
 QUERY_TOOLS = [
@@ -251,7 +255,17 @@ Call the appropriate function for each query you generate."""
                 func_name = tool_call.function.name
                 try:
                     args = json.loads(tool_call.function.arguments)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    log_failure(
+                        _logger,
+                        "Query parsing",
+                        e,
+                        context={
+                            "function": func_name,
+                            "tool_call_id": tool_call.id,
+                            "raw_arguments": tool_call.function.arguments[:200],
+                        },
+                    )
                     continue
 
                 if func_name == "extract_pico":
@@ -328,7 +342,17 @@ Use the generate_{database}_query function for each query."""
                                 "explanation": args.get("explanation", ""),
                             }
                         )
-                    except json.JSONDecodeError:
+                    except json.JSONDecodeError as e:
+                        log_failure(
+                            _logger,
+                            "Additional query parsing",
+                            e,
+                            context={
+                                "database": database,
+                                "function": func_name,
+                                "raw_arguments": tool_call.function.arguments[:200],
+                            },
+                        )
                         continue
 
         return results
@@ -421,7 +445,22 @@ Generate a refined query using the generate_{database}_query function."""
                             "query": args.get("query", original_query),
                             "explanation": args.get("explanation", ""),
                         }
-                    except json.JSONDecodeError:
-                        pass
+                    except json.JSONDecodeError as e:
+                        log_failure(
+                            _logger,
+                            "Query refinement parsing",
+                            e,
+                            context={
+                                "database": database,
+                                "original_query": original_query[:100],
+                                "result_count": result_count,
+                            },
+                        )
 
+        log_warning(
+            _logger,
+            "Query refinement",
+            "Could not refine query - no valid tool calls returned",
+            context={"database": database, "result_count": result_count},
+        )
         return {"query": original_query, "explanation": "Could not refine query"}

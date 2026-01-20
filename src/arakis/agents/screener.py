@@ -8,10 +8,14 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
+from arakis.logging import get_logger, log_failure
 from arakis.models.audit import AuditEventType
 from arakis.models.paper import Paper
 from arakis.models.screening import ScreeningCriteria, ScreeningDecision, ScreeningStatus
 from arakis.utils import BatchProcessor, retry_with_exponential_backoff
+
+# Module logger
+_logger = get_logger("screener")
 
 SCREENING_TOOLS = [
     {
@@ -474,10 +478,38 @@ Use the screen_paper function to make your decision."""
             try:
                 args = json.loads(tool_call.function.arguments)
                 return self._parse_decision(paper.id, args)
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                log_failure(
+                    _logger,
+                    "Screening decision parsing",
+                    e,
+                    context={
+                        "paper_id": paper.id,
+                        "paper_title": paper.title[:100] if paper.title else "N/A",
+                        "tool_call_id": tool_call.id,
+                        "raw_arguments": tool_call.function.arguments[:200],
+                        "temperature": temperature,
+                    },
+                )
+                # Record failure in audit trail
+                trail = paper.ensure_audit_trail()
+                trail.add_error(
+                    error_message=f"Failed to parse screening decision: {e}",
+                    error_type="JSONDecodeError",
+                    actor="ScreeningAgent",
+                    stage="screening",
+                )
 
         # Default to MAYBE if parsing fails
+        log_failure(
+            _logger,
+            "Screening",
+            "No valid screening decision returned - defaulting to MAYBE",
+            context={
+                "paper_id": paper.id,
+                "has_tool_calls": bool(message.tool_calls),
+            },
+        )
         return ScreeningDecision(
             paper_id=paper.id,
             status=ScreeningStatus.MAYBE,

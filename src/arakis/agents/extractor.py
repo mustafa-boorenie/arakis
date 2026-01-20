@@ -9,6 +9,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.config import get_settings
+from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.audit import AuditEventType
 from arakis.models.extraction import (
     ExtractedData,
@@ -19,6 +20,9 @@ from arakis.models.extraction import (
 )
 from arakis.models.paper import Paper
 from arakis.utils import BatchProcessor, retry_with_exponential_backoff
+
+# Module logger
+_logger = get_logger("extractor")
 
 # Tool function definitions for LLM
 EXTRACTION_TOOLS = [
@@ -309,9 +313,41 @@ Use the extract_data function."""
                             reviewer_id=reviewer_id,
                         )
                     )
-            except (json.JSONDecodeError, KeyError):
-                # If parsing fails, return empty decisions
-                pass
+            except json.JSONDecodeError as e:
+                log_failure(
+                    _logger,
+                    "Extraction response parsing",
+                    e,
+                    context={
+                        "paper_id": paper.id,
+                        "reviewer_id": reviewer_id,
+                        "temperature": temperature,
+                        "raw_arguments": tool_call.function.arguments[:200],
+                    },
+                )
+            except KeyError as e:
+                log_failure(
+                    _logger,
+                    "Extraction field parsing",
+                    f"Missing required field: {e}",
+                    context={
+                        "paper_id": paper.id,
+                        "reviewer_id": reviewer_id,
+                        "temperature": temperature,
+                    },
+                )
+
+        if not decisions:
+            log_warning(
+                _logger,
+                "Extraction pass",
+                "No extraction decisions returned from LLM",
+                context={
+                    "paper_id": paper.id,
+                    "reviewer_id": reviewer_id,
+                    "has_tool_calls": bool(message.tool_calls),
+                },
+            )
 
         return decisions
 
