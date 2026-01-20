@@ -524,7 +524,12 @@ Use the screen_paper function to make your decision."""
                         Set to False for faster single-pass screening.
             human_review: If True and dual_review=False, prompt human to review each AI decision.
                          Ignored when dual_review=True.
-            progress_callback: Optional callback(current, total) for progress
+            progress_callback: Optional callback for progress updates.
+                Signature: callback(current, total, paper, decision)
+                - current: Current paper index (1-indexed)
+                - total: Total number of papers
+                - paper: The Paper object being processed
+                - decision: The ScreeningDecision made for the paper
 
         Returns:
             List of ScreeningDecisions
@@ -536,7 +541,7 @@ Use the screen_paper function to make your decision."""
             results.append(decision)
 
             if progress_callback:
-                progress_callback(i + 1, len(papers))
+                progress_callback(i + 1, len(papers), paper, decision)
 
         return results
 

@@ -217,26 +217,48 @@ def screen(
 
     screener = ScreeningAgent()
 
+    def display_screening_progress(current, total, paper, decision):
+        """Display real-time screening progress with decision details."""
+        # Truncate title for display
+        title_display = paper.title[:60] + "..." if len(paper.title) > 60 else paper.title
+
+        # Status color based on decision
+        status_colors = {
+            "INCLUDE": "green",
+            "EXCLUDE": "red",
+            "MAYBE": "yellow",
+        }
+        status_color = status_colors.get(decision.status.value, "white")
+
+        # Print progress line
+        console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+        console.print(
+            f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
+            f"(confidence: {decision.confidence:.2f})"
+        )
+
+        # Show matched criteria if any
+        matched_criteria = []
+        if decision.matched_inclusion:
+            matched_criteria.extend(decision.matched_inclusion)
+        if matched_criteria:
+            console.print(f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}")
+
+        # Show conflict indicator if dual review had a conflict
+        if decision.is_conflict:
+            console.print("[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]")
+
+        console.print()  # Empty line between papers
+
     # Note: Progress bar disabled for human review mode
     if human_review:
         decisions = _run_async(
             screener.screen_batch(papers, criteria, dual_review, human_review, None)
         )
     else:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(f"Screening 0/{len(papers)}...", total=len(papers))
-
-            def update(current, total):
-                progress.update(task, description=f"Screening {current}/{total}...")
-                progress.advance(task)
-
-            decisions = _run_async(
-                screener.screen_batch(papers, criteria, dual_review, human_review, update)
-            )
+        decisions = _run_async(
+            screener.screen_batch(papers, criteria, dual_review, human_review, display_screening_progress)
+        )
 
     # Summary
     summary = screener.summarize_screening(decisions)
@@ -1727,26 +1749,48 @@ def workflow(
 
     screener = ScreeningAgent()
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task(f"Screening 0/{len(papers)}...", total=len(papers))
+    def display_workflow_screening_progress(current, total, paper, decision):
+        """Display real-time screening progress with decision details for workflow."""
+        # Truncate title for display
+        title_display = paper.title[:60] + "..." if len(paper.title) > 60 else paper.title
 
-        def update_screen(current, total):
-            progress.update(task, description=f"Screening {current}/{total}...")
-            progress.advance(task)
+        # Status color based on decision
+        status_colors = {
+            "INCLUDE": "green",
+            "EXCLUDE": "red",
+            "MAYBE": "yellow",
+        }
+        status_color = status_colors.get(decision.status.value, "white")
 
-        decisions = _run_async(
-            screener.screen_batch(
-                papers,
-                criteria,
-                dual_review=not fast_mode,
-                human_review=False,
-                progress_callback=update_screen,
-            )
+        # Print progress line
+        console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+        console.print(
+            f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
+            f"(confidence: {decision.confidence:.2f})"
         )
+
+        # Show matched criteria if any
+        matched_criteria = []
+        if decision.matched_inclusion:
+            matched_criteria.extend(decision.matched_inclusion)
+        if matched_criteria:
+            console.print(f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}")
+
+        # Show conflict indicator if dual review had a conflict
+        if decision.is_conflict:
+            console.print("[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]")
+
+        console.print()  # Empty line between papers
+
+    decisions = _run_async(
+        screener.screen_batch(
+            papers,
+            criteria,
+            dual_review=not fast_mode,
+            human_review=False,
+            progress_callback=display_workflow_screening_progress,
+        )
+    )
 
     # Save screening results
     screening_file = output_path / "2_screening_decisions.json"
