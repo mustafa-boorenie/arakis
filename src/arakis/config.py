@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     scholarly_min_delay: float = 5.0  # Seconds between Google Scholar requests
     scholarly_max_delay: float = 15.0  # Random delay for anti-blocking
 
+    # Batch processing configuration
+    # Controls how many items are processed concurrently to balance speed vs rate limits
+    batch_size_screening: int = 5  # Papers to screen concurrently (dual-review = 2x API calls each)
+    batch_size_extraction: int = 3  # Papers to extract concurrently (triple-review = 3x API calls each)
+    batch_size_fetch: int = 10  # Papers to fetch concurrently (HTTP requests, not LLM)
+    batch_size_embedding: int = 100  # Texts to embed per API call (OpenAI supports up to 2048)
+
     # Search defaults
     default_max_results_per_query: int = 500
     default_queries_per_database: int = 3

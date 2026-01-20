@@ -11,7 +11,7 @@ from arakis.config import get_settings
 from arakis.models.audit import AuditEventType
 from arakis.models.paper import Paper
 from arakis.models.screening import ScreeningCriteria, ScreeningDecision, ScreeningStatus
-from arakis.utils import retry_with_exponential_backoff
+from arakis.utils import BatchProcessor, retry_with_exponential_backoff
 
 SCREENING_TOOLS = [
     {
@@ -513,9 +513,14 @@ Use the screen_paper function to make your decision."""
         dual_review: bool = True,
         human_review: bool = False,
         progress_callback: callable = None,
+        batch_size: int | None = None,
     ) -> list[ScreeningDecision]:
         """
-        Screen multiple papers.
+        Screen multiple papers with configurable concurrent batch processing.
+
+        Papers are processed concurrently within each batch to improve throughput
+        while respecting API rate limits. Rate limiting is handled by the
+        @retry_with_exponential_backoff decorator on individual API calls.
 
         Args:
             papers: List of papers to screen
@@ -523,27 +528,39 @@ Use the screen_paper function to make your decision."""
             dual_review: Enable dual reviewer mode (default: True).
                         Set to False for faster single-pass screening.
             human_review: If True and dual_review=False, prompt human to review each AI decision.
-                         Ignored when dual_review=True.
+                         Ignored when dual_review=True. Forces sequential processing.
             progress_callback: Optional callback for progress updates.
                 Signature: callback(current, total, paper, decision)
                 - current: Current paper index (1-indexed)
                 - total: Total number of papers
                 - paper: The Paper object being processed
                 - decision: The ScreeningDecision made for the paper
+            batch_size: Override the default batch size from settings.
+                       If None, uses settings.batch_size_screening (default: 5).
 
         Returns:
-            List of ScreeningDecisions
+            List of ScreeningDecisions in same order as input papers
         """
-        results = []
+        # Human review requires sequential processing (interactive prompts)
+        if human_review and not dual_review:
+            results = []
+            for i, paper in enumerate(papers):
+                decision = await self.screen_paper(paper, criteria, dual_review, human_review)
+                results.append(decision)
+                if progress_callback:
+                    progress_callback(i + 1, len(papers), paper, decision)
+            return results
 
-        for i, paper in enumerate(papers):
-            decision = await self.screen_paper(paper, criteria, dual_review, human_review)
-            results.append(decision)
+        # Use concurrent batch processing
+        processor = BatchProcessor(
+            batch_size=batch_size,
+            batch_size_key="batch_size_screening",
+        )
 
-            if progress_callback:
-                progress_callback(i + 1, len(papers), paper, decision)
+        async def process_paper(paper: Paper) -> ScreeningDecision:
+            return await self.screen_paper(paper, criteria, dual_review, human_review)
 
-        return results
+        return await processor.process(papers, process_paper, progress_callback)
 
     def summarize_screening(self, decisions: list[ScreeningDecision]) -> dict[str, Any]:
         """

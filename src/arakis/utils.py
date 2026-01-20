@@ -3,7 +3,7 @@
 import asyncio
 import time
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, Awaitable, Callable, TypeVar
 
 from openai import APIError, RateLimitError
 from rich.console import Console
@@ -11,6 +11,7 @@ from rich.console import Console
 console = Console()
 
 T = TypeVar("T")
+R = TypeVar("R")
 
 
 class RateLimiter:
@@ -161,3 +162,144 @@ def retry_with_exponential_backoff(
         return wrapper
 
     return decorator
+
+
+async def process_batch_concurrent(
+    items: list[T],
+    process_func: Callable[[T], Awaitable[R]],
+    batch_size: int,
+    progress_callback: Callable[[int, int, T, R], None] | None = None,
+) -> list[R]:
+    """
+    Process items in concurrent batches with configurable batch size.
+
+    This utility processes items concurrently within each batch while maintaining
+    order and providing progress tracking. Rate limiting is handled by the individual
+    process functions (via @retry_with_exponential_backoff decorator).
+
+    Args:
+        items: List of items to process
+        process_func: Async function that processes a single item and returns a result
+        batch_size: Number of items to process concurrently in each batch
+        progress_callback: Optional callback(current, total, item, result) for progress updates.
+            Called after each item completes (may be out of order within batch).
+
+    Returns:
+        List of results in the same order as input items
+
+    Example:
+        async def screen_paper(paper):
+            return await screener.screen_paper(paper, criteria)
+
+        results = await process_batch_concurrent(
+            papers,
+            screen_paper,
+            batch_size=5,
+            progress_callback=lambda c, t, p, r: print(f"{c}/{t}: {r.status}")
+        )
+    """
+    results: list[R] = []
+    total = len(items)
+    completed = 0
+
+    # Process items in batches
+    for batch_start in range(0, total, batch_size):
+        batch_end = min(batch_start + batch_size, total)
+        batch_items = items[batch_start:batch_end]
+
+        # Create tasks for concurrent processing within batch
+        async def process_with_index(index: int, item: T) -> tuple[int, T, R]:
+            result = await process_func(item)
+            return (index, item, result)
+
+        tasks = [
+            process_with_index(batch_start + i, item) for i, item in enumerate(batch_items)
+        ]
+
+        # Process batch concurrently and collect results as they complete
+        batch_results: dict[int, R] = {}
+        for coro in asyncio.as_completed(tasks):
+            index, item, result = await coro
+            batch_results[index] = result
+            completed += 1
+
+            # Call progress callback if provided
+            if progress_callback:
+                progress_callback(completed, total, item, result)
+
+        # Add results in order
+        for i in range(batch_start, batch_end):
+            results.append(batch_results[i])
+
+    return results
+
+
+class BatchProcessor:
+    """
+    Configurable batch processor for async operations.
+
+    Provides a reusable interface for processing items in batches with:
+    - Configurable batch size from settings or override
+    - Progress tracking with callbacks
+    - Result ordering preserved
+    - Integration with rate limiting
+
+    Example:
+        processor = BatchProcessor(batch_size=5)
+
+        async def process_paper(paper):
+            return await agent.screen_paper(paper, criteria)
+
+        results = await processor.process(papers, process_paper, progress_callback)
+    """
+
+    def __init__(self, batch_size: int | None = None, batch_size_key: str | None = None):
+        """
+        Initialize batch processor.
+
+        Args:
+            batch_size: Explicit batch size to use. Takes precedence over batch_size_key.
+            batch_size_key: Settings attribute name to get batch size from config
+                           (e.g., "batch_size_screening", "batch_size_extraction").
+                           Used when batch_size is None.
+        """
+        self._explicit_batch_size = batch_size
+        self._batch_size_key = batch_size_key
+
+    @property
+    def batch_size(self) -> int:
+        """Get the effective batch size."""
+        if self._explicit_batch_size is not None:
+            return self._explicit_batch_size
+
+        if self._batch_size_key:
+            from arakis.config import get_settings
+
+            settings = get_settings()
+            return getattr(settings, self._batch_size_key, 5)
+
+        return 5  # Default
+
+    async def process(
+        self,
+        items: list[T],
+        process_func: Callable[[T], Awaitable[R]],
+        progress_callback: Callable[[int, int, T, R], None] | None = None,
+    ) -> list[R]:
+        """
+        Process items in concurrent batches.
+
+        Args:
+            items: List of items to process
+            process_func: Async function to process each item
+            progress_callback: Optional callback(current, total, item, result)
+
+        Returns:
+            List of results in same order as input
+        """
+        return await process_batch_concurrent(
+            items=items,
+            process_func=process_func,
+            batch_size=self.batch_size,
+            progress_callback=progress_callback,
+        )

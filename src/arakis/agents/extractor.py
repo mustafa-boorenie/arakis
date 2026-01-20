@@ -18,7 +18,7 @@ from arakis.models.extraction import (
     ReviewerDecision,
 )
 from arakis.models.paper import Paper
-from arakis.utils import retry_with_exponential_backoff
+from arakis.utils import BatchProcessor, retry_with_exponential_backoff
 
 # Tool function definitions for LLM
 EXTRACTION_TOOLS = [
@@ -596,31 +596,47 @@ Use the extract_data function."""
         triple_review: bool = True,
         use_full_text: bool = False,
         progress_callback: callable = None,
+        batch_size: int | None = None,
     ) -> ExtractionResult:
         """
-        Extract data from multiple papers in batch.
+        Extract data from multiple papers with configurable concurrent batch processing.
+
+        Papers are processed concurrently within each batch to improve throughput
+        while respecting API rate limits. Rate limiting is handled by the
+        @retry_with_exponential_backoff decorator on individual API calls.
 
         Args:
             papers: List of papers to extract from
             schema: Extraction schema
             triple_review: Use triple-review mode
             use_full_text: Use full text if available
-            progress_callback: Optional callback(current, total) for progress tracking
+            progress_callback: Optional callback(current, total) for progress tracking.
+                Note: For compatibility, this callback only receives (current, total).
+            batch_size: Override the default batch size from settings.
+                       If None, uses settings.batch_size_extraction (default: 3).
 
         Returns:
             ExtractionResult with all extractions and summary statistics
         """
         start_time = time.time()
-        extractions = []
-        total_tokens_input = 0
-        total_tokens_output = 0
 
-        for i, paper in enumerate(papers, 1):
-            extraction = await self.extract_paper(paper, schema, triple_review, use_full_text)
-            extractions.append(extraction)
+        # Use concurrent batch processing
+        processor = BatchProcessor(
+            batch_size=batch_size,
+            batch_size_key="batch_size_extraction",
+        )
 
+        async def process_paper(paper: Paper) -> ExtractedData:
+            return await self.extract_paper(paper, schema, triple_review, use_full_text)
+
+        # Wrap the progress callback to match expected signature
+        def wrapped_callback(
+            current: int, total: int, paper: Paper, extraction: ExtractedData
+        ) -> None:
             if progress_callback:
-                progress_callback(i, len(papers))
+                progress_callback(current, total)
+
+        extractions = await processor.process(papers, process_paper, wrapped_callback)
 
         total_time_ms = int((time.time() - start_time) * 1000)
 

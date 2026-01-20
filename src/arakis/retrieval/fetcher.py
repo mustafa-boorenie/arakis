@@ -20,6 +20,7 @@ from arakis.retrieval.sources.pmc import PMCSource
 from arakis.retrieval.sources.semantic_scholar import SemanticScholarSource
 from arakis.retrieval.sources.unpaywall import UnpaywallSource
 from arakis.storage import get_storage_client
+from arakis.utils import BatchProcessor
 
 
 @dataclass
@@ -232,29 +233,44 @@ class PaperFetcher:
         download: bool = False,
         extract_text: bool = False,
         progress_callback: callable = None,
+        batch_size: int | None = None,
     ) -> list[FetchResult]:
         """
-        Fetch multiple papers.
+        Fetch multiple papers with configurable concurrent batch processing.
+
+        Papers are fetched concurrently within each batch to improve throughput.
+        This is especially effective for HTTP-based retrieval sources.
 
         Args:
             papers: List of papers to fetch
             download: If True, download actual content
             extract_text: If True AND download=True, extract text from PDFs
-            progress_callback: Optional callback(current, total, paper)
+            progress_callback: Optional callback(current, total, paper).
+                Note: For compatibility, this callback receives (current, total, paper).
+                The FetchResult is not included.
+            batch_size: Override the default batch size from settings.
+                       If None, uses settings.batch_size_fetch (default: 10).
 
         Returns:
-            List of FetchResults
+            List of FetchResults in same order as input papers
         """
-        results = []
+        # Use concurrent batch processing
+        processor = BatchProcessor(
+            batch_size=batch_size,
+            batch_size_key="batch_size_fetch",
+        )
 
-        for i, paper in enumerate(papers):
-            result = await self.fetch(paper, download, extract_text)
-            results.append(result)
+        async def process_paper(paper: Paper) -> FetchResult:
+            return await self.fetch(paper, download, extract_text)
 
+        # Wrap the progress callback to match expected signature
+        def wrapped_callback(
+            current: int, total: int, paper: Paper, result: FetchResult
+        ) -> None:
             if progress_callback:
-                progress_callback(i + 1, len(papers), paper)
+                progress_callback(current, total, paper)
 
-        return results
+        return await processor.process(papers, process_paper, wrapped_callback)
 
     def summarize_batch(self, results: list[FetchResult]) -> dict[str, Any]:
         """Summarize batch fetch results."""

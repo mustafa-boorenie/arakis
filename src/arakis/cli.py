@@ -150,6 +150,12 @@ def screen(
     human_review: bool = typer.Option(
         False, "--human-review", help="Enable human-in-the-loop review (only with --no-dual-review)"
     ),
+    batch_size: Optional[int] = typer.Option(
+        None,
+        "--batch-size",
+        "-b",
+        help="Number of papers to process concurrently (default: 5 from config)",
+    ),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file"),
 ):
     """
@@ -253,11 +259,15 @@ def screen(
     # Note: Progress bar disabled for human review mode
     if human_review:
         decisions = _run_async(
-            screener.screen_batch(papers, criteria, dual_review, human_review, None)
+            screener.screen_batch(
+                papers, criteria, dual_review, human_review, None, batch_size=batch_size
+            )
         )
     else:
         decisions = _run_async(
-            screener.screen_batch(papers, criteria, dual_review, human_review, display_screening_progress)
+            screener.screen_batch(
+                papers, criteria, dual_review, human_review, display_screening_progress, batch_size=batch_size
+            )
         )
 
     # Summary
@@ -313,6 +323,12 @@ def fetch(
     extract_text: bool = typer.Option(
         False, "--extract-text", help="Extract full text from PDFs (requires --download)"
     ),
+    batch_size: Optional[int] = typer.Option(
+        None,
+        "--batch-size",
+        "-b",
+        help="Number of papers to fetch concurrently (default: 10 from config)",
+    ),
 ):
     """
     Fetch full-text papers from open access sources.
@@ -367,7 +383,9 @@ def fetch(
             progress.update(task, description=f"Fetching {current}/{total}: {paper.title[:30]}...")
             progress.advance(task)
 
-        results = _run_async(fetcher.fetch_batch(papers, download, extract_text, update))
+        results = _run_async(
+            fetcher.fetch_batch(papers, download, extract_text, update, batch_size=batch_size)
+        )
 
     # Summary
     summary = fetcher.summarize_batch(results)
@@ -460,6 +478,12 @@ def extract(
     ),
     use_full_text: bool = typer.Option(
         True, "--use-full-text/--no-full-text", help="Use full text if available (default: True)"
+    ),
+    batch_size: Optional[int] = typer.Option(
+        None,
+        "--batch-size",
+        "-b",
+        help="Number of papers to extract concurrently (default: 3 from config)",
     ),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file"),
 ):
@@ -598,7 +622,12 @@ def extract(
 
         result = _run_async(
             agent.extract_batch(
-                papers, extraction_schema, triple_review, use_full_text, progress_callback=update
+                papers,
+                extraction_schema,
+                triple_review,
+                use_full_text,
+                progress_callback=update,
+                batch_size=batch_size,
             )
         )
 
