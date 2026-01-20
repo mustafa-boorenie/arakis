@@ -1,7 +1,7 @@
 """Reference management submodule for Arakis.
 
 This module provides tools for managing academic citations and references:
-- Citation formatting in multiple styles (APA 6, APA 7, Vancouver, Chicago, Harvard)
+- Citation formatting in multiple styles (APA 7, APA 6, Vancouver, Chicago, Harvard)
 - Citation extraction from generated text
 - Reference validation and collection
 - Reference list generation
@@ -9,7 +9,7 @@ This module provides tools for managing academic citations and references:
 Example usage:
     from arakis.references import ReferenceManager, CitationStyle
 
-    # Create manager with APA 6 style (default)
+    # Create manager with APA 7 style (default)
     manager = ReferenceManager()
 
     # Or with a different style

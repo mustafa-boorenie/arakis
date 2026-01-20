@@ -117,8 +117,8 @@ class Manuscript:
     # References
     references: list[Paper] = field(default_factory=list)
 
-    # Citation style (default: APA 6)
-    citation_style: str = "apa6"
+    # Citation style (default: APA 7)
+    citation_style: str = "apa7"
 
     # Figures and tables
     figures: dict[str, Figure] = field(default_factory=dict)  # figure_id -> Figure
@@ -316,7 +316,7 @@ class Manuscript:
                 "chicago": CitationStyle.CHICAGO,
                 "harvard": CitationStyle.HARVARD,
             }
-            style = style_map.get(self.citation_style.lower(), CitationStyle.APA_6)
+            style = style_map.get(self.citation_style.lower(), CitationStyle.APA_7)
             self._formatter = CitationFormatter(style)
         return self._formatter
 

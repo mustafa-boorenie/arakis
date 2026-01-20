@@ -73,7 +73,7 @@ class ReferenceManager:
             print(f"{ref.number}. {ref.formatted_citation}")
     """
 
-    style: CitationStyle = CitationStyle.APA_6
+    style: CitationStyle = CitationStyle.APA_7
     papers: dict[str, Paper] = field(default_factory=dict)
     _extractor: CitationExtractor = field(default_factory=CitationExtractor)
     _formatter: Optional[CitationFormatter] = field(default=None)

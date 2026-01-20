@@ -316,17 +316,17 @@ arakis version
 - Key methods:
   - `register_paper(paper)` → stores paper by best_identifier
   - `validate_citations(section)` → checks all citations have registered papers
-  - `generate_reference_list(section)` → formatted APA 6 citations
+  - `generate_reference_list(section)` → formatted APA 7 citations
   - `extract_citations_from_section(section)` → paper IDs from text
 - Integrates with `CitationExtractor` for parsing `[Paper ID]` patterns
-- Integrates with `CitationFormatter` for APA 6 formatting
+- Integrates with `CitationFormatter` for APA 7 formatting
 
 **19. CitationFormatter** (`references/formatter.py`)
-- Formats citations in various styles (default: APA 6)
-- Supported styles: APA_6, APA_7, VANCOUVER, CHICAGO, HARVARD
-- APA 6 features:
+- Formats citations in various styles (default: APA 7)
+- Supported styles: APA_7, APA_6, VANCOUVER, CHICAGO, HARVARD
+- APA 7 features:
   - Authors: `Last, F. M., Last, F. M., & Last, F. M.`
-  - 8+ authors: First 6, `...`, last author
+  - 21+ authors: First 19, `...`, last author
   - Title in sentence case, journal italicized
   - DOI as `https://doi.org/...`
 - Methods: `format_citation(paper)`, `format_in_text(paper)`
@@ -539,7 +539,7 @@ Introduction writing uses Perplexity for background literature (separate from re
 3. OpenAI generates text with `[paper_id]` citations
 4. `CitationExtractor` validates citations against registered papers
 5. LLM is restricted to citing ONLY provided papers (no training data citations)
-6. `CitationFormatter` generates APA 6 reference list
+6. `CitationFormatter` generates APA 7 reference list
 
 **Key Design Decision**: Introduction references come from Perplexity deep research, NOT from the systematic review search results. This ensures proper separation between background context and reviewed papers.
 

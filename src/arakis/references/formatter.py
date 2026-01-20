@@ -1,6 +1,6 @@
 """Citation formatter for various academic styles.
 
-Supports APA 6 (default), APA 7, Vancouver, Chicago, and Harvard styles.
+Supports APA 7 (default), APA 6, Vancouver, Chicago, and Harvard styles.
 """
 
 import re
@@ -12,14 +12,14 @@ from arakis.references.styles import CitationStyle, get_style_config
 class CitationFormatter:
     """Formats citations in various academic styles.
 
-    Default style is APA 6th Edition.
+    Default style is APA 7th Edition.
     """
 
-    def __init__(self, style: CitationStyle = CitationStyle.APA_6):
+    def __init__(self, style: CitationStyle = CitationStyle.APA_7):
         """Initialize the citation formatter.
 
         Args:
-            style: Citation style to use (default: APA 6)
+            style: Citation style to use (default: APA 7)
         """
         self.style = style
         self.config = get_style_config(style)

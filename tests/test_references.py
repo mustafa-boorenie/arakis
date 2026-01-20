@@ -197,10 +197,10 @@ class TestStyleConfig:
 class TestCitationFormatter:
     """Tests for CitationFormatter class."""
 
-    def test_default_style_is_apa6(self):
-        """Test that default style is APA 6."""
+    def test_default_style_is_apa7(self):
+        """Test that default style is APA 7."""
         formatter = CitationFormatter()
-        assert formatter.style == CitationStyle.APA_6
+        assert formatter.style == CitationStyle.APA_7
 
     def test_custom_style(self):
         """Test creating formatter with custom style."""
@@ -563,9 +563,9 @@ class TestReferenceManager:
     """Tests for ReferenceManager class."""
 
     def test_default_style(self):
-        """Test default citation style is APA 6."""
+        """Test default citation style is APA 7."""
         manager = ReferenceManager()
-        assert manager.style == CitationStyle.APA_6
+        assert manager.style == CitationStyle.APA_7
 
     def test_custom_style(self):
         """Test creating manager with custom style."""
@@ -631,7 +631,7 @@ class TestReferenceManager:
     def test_set_style(self):
         """Test changing citation style."""
         manager = ReferenceManager()
-        assert manager.style == CitationStyle.APA_6
+        assert manager.style == CitationStyle.APA_7
 
         manager.set_style(CitationStyle.VANCOUVER)
         assert manager.style == CitationStyle.VANCOUVER
