@@ -11,6 +11,7 @@ import numpy as np
 import seaborn as sns
 
 from arakis.models.analysis import (
+    AnalysisMethod,
     EffectMeasure,
     MetaAnalysisResult,
 )
@@ -48,13 +49,17 @@ class VisualizationGenerator:
         meta_result: MetaAnalysisResult,
         output_filename: str | None = None,
         figsize: tuple[float, float] | None = None,
+        show_prediction_interval: bool = True,
+        favors_labels: tuple[str, str] | None = None,
     ) -> str:
-        """Create a forest plot for meta-analysis results.
+        """Create a forest plot for meta-analysis results with all required statistics.
 
         Args:
             meta_result: Meta-analysis result with study data
             output_filename: Output filename (default: forest_plot.png)
             figsize: Figure size in inches (width, height)
+            show_prediction_interval: Whether to show prediction interval for random effects
+            favors_labels: Custom labels for favors (left, right), e.g., ("Favors Treatment", "Favors Control")
 
         Returns:
             Path to saved plot
@@ -66,9 +71,10 @@ class VisualizationGenerator:
         n_studies = len(studies)
 
         # Calculate figure height based on number of studies
+        # Add extra space for statistics panel at bottom
         if figsize is None:
-            height = max(6, 2 + n_studies * 0.4)
-            figsize = (10, height)
+            height = max(8, 4 + n_studies * 0.5)
+            figsize = (12, height)
 
         fig, ax = plt.subplots(figsize=figsize)
 
@@ -87,18 +93,47 @@ class VisualizationGenerator:
             ci_lower = np.exp(meta_result.confidence_interval.lower)
             ci_upper = np.exp(meta_result.confidence_interval.upper)
             null_value = 1.0
+            # Prediction interval
+            if meta_result.heterogeneity.prediction_interval:
+                pred_lower = np.exp(meta_result.heterogeneity.prediction_interval.lower)
+                pred_upper = np.exp(meta_result.heterogeneity.prediction_interval.upper)
+            else:
+                pred_lower = pred_upper = None
         else:
             effects = [s.effect for s in studies]
             pooled_effect = meta_result.pooled_effect
             ci_lower = meta_result.confidence_interval.lower
             ci_upper = meta_result.confidence_interval.upper
             null_value = 0.0
+            # Prediction interval
+            if meta_result.heterogeneity.prediction_interval:
+                pred_lower = meta_result.heterogeneity.prediction_interval.lower
+                pred_upper = meta_result.heterogeneity.prediction_interval.upper
+            else:
+                pred_lower = pred_upper = None
 
-        # Y-axis positions
+        # Y-axis positions - leave space for headers and statistics
+        header_y = n_studies + 2
         y_positions = list(range(n_studies, 0, -1))
-        pooled_y = 0
+        pooled_y = -0.5
+        stats_y = -2.5
 
-        # Plot individual studies
+        # Collect all CI values for axis scaling
+        all_ci_lowers = []
+        all_ci_uppers = []
+
+        # ===== COLUMN HEADERS =====
+        ax.text(-0.02, header_y, "Study", ha="right", va="center",
+                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
+        ax.text(1.02, header_y, "Effect [95% CI]", ha="left", va="center",
+                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
+        ax.text(1.35, header_y, "Weight", ha="left", va="center",
+                transform=ax.get_yaxis_transform(), fontweight="bold", fontsize=10)
+
+        # Separator line below headers
+        ax.axhline(y=header_y - 0.5, color="black", linewidth=0.5, alpha=0.5)
+
+        # ===== INDIVIDUAL STUDIES =====
         for i, (study, effect, y) in enumerate(zip(studies, effects, y_positions)):
             # Calculate CI
             if use_log_scale:
@@ -108,42 +143,42 @@ class VisualizationGenerator:
                 study_ci_lower = study.effect - 1.96 * study.standard_error  # type: ignore
                 study_ci_upper = study.effect + 1.96 * study.standard_error  # type: ignore
 
+            all_ci_lowers.append(study_ci_lower)
+            all_ci_uppers.append(study_ci_upper)
+
             # Box size proportional to weight
             weight = study.weight or 1.0
-            box_size = weight * 200  # Scale factor for visibility
+            box_size = max(weight * 300, 30)  # Scale factor for visibility with minimum size
 
             # Plot CI line
             ax.plot([study_ci_lower, study_ci_upper], [y, y], "k-", linewidth=1)
 
             # Plot effect estimate as square
-            ax.scatter([effect], [y], s=box_size, marker="s", color="black", zorder=3)
+            ax.scatter([effect], [y], s=box_size, marker="s", color="steelblue",
+                      edgecolors="black", zorder=3)
 
             # Add study label
             label = study.study_name or study.study_id
             if study.year:
                 label = f"{label} ({study.year})"
-            ax.text(-0.02, y, label, ha="right", va="center", transform=ax.get_yaxis_transform())
+            ax.text(-0.02, y, label, ha="right", va="center",
+                   transform=ax.get_yaxis_transform(), fontsize=9)
 
             # Add effect and CI text
-            if use_log_scale:
-                effect_text = f"{effect:.2f} [{study_ci_lower:.2f}, {study_ci_upper:.2f}]"
-            else:
-                effect_text = f"{effect:.2f} [{study_ci_lower:.2f}, {study_ci_upper:.2f}]"
+            effect_text = f"{effect:.2f} [{study_ci_lower:.2f}, {study_ci_upper:.2f}]"
+            ax.text(1.02, y, effect_text, ha="left", va="center",
+                   transform=ax.get_yaxis_transform(), fontsize=9, family="monospace")
 
+            # Weight column
             weight_text = f"{weight * 100:.1f}%" if weight else ""
-            ax.text(
-                1.02,
-                y,
-                f"{effect_text}  {weight_text}",
-                ha="left",
-                va="center",
-                transform=ax.get_yaxis_transform(),
-                fontsize=8,
-            )
+            ax.text(1.35, y, weight_text, ha="left", va="center",
+                   transform=ax.get_yaxis_transform(), fontsize=9)
 
-        # Plot pooled effect (diamond)
-        (ci_upper - ci_lower) / 2
-        diamond_height = 0.3
+        # Separator line above pooled effect
+        ax.axhline(y=0.3, color="black", linewidth=0.5, alpha=0.5)
+
+        # ===== POOLED EFFECT (DIAMOND) =====
+        diamond_height = 0.25
 
         diamond = [
             (ci_lower, pooled_y),
@@ -151,59 +186,108 @@ class VisualizationGenerator:
             (ci_upper, pooled_y),
             (pooled_effect, pooled_y - diamond_height),
         ]
-        diamond_patch = plt.Polygon(diamond, closed=True, facecolor="black", edgecolor="black")
+        diamond_patch = plt.Polygon(diamond, closed=True, facecolor="crimson",
+                                   edgecolor="darkred", linewidth=1.5)
         ax.add_patch(diamond_patch)
 
+        # Add prediction interval line (if random effects and available)
+        if (show_prediction_interval and
+            meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS and
+            pred_lower is not None and pred_upper is not None):
+            ax.plot([pred_lower, pred_upper], [pooled_y, pooled_y],
+                   color="crimson", linewidth=1.5, linestyle="--", alpha=0.7)
+            all_ci_lowers.append(pred_lower)
+            all_ci_uppers.append(pred_upper)
+
+        all_ci_lowers.extend([ci_lower, null_value])
+        all_ci_uppers.extend([ci_upper, null_value])
+
         # Add pooled effect label
-        ax.text(
-            -0.02,
-            pooled_y,
-            "Pooled Effect",
-            ha="right",
-            va="center",
-            fontweight="bold",
-            transform=ax.get_yaxis_transform(),
-        )
+        method_label = meta_result.analysis_method.value.replace("_", " ").title()
+        ax.text(-0.02, pooled_y, f"Overall ({method_label})", ha="right", va="center",
+               fontweight="bold", transform=ax.get_yaxis_transform(), fontsize=9)
 
         # Add pooled effect text
-        if use_log_scale:
-            pooled_text = f"{pooled_effect:.2f} [{ci_lower:.2f}, {ci_upper:.2f}]"
-        else:
-            pooled_text = f"{pooled_effect:.2f} [{ci_lower:.2f}, {ci_upper:.2f}]"
+        pooled_text = f"{pooled_effect:.2f} [{ci_lower:.2f}, {ci_upper:.2f}]"
+        ax.text(1.02, pooled_y, pooled_text, ha="left", va="center",
+               fontweight="bold", transform=ax.get_yaxis_transform(),
+               fontsize=9, family="monospace")
 
-        ax.text(
-            1.02,
-            pooled_y,
-            pooled_text,
-            ha="left",
-            va="center",
-            fontweight="bold",
-            transform=ax.get_yaxis_transform(),
-            fontsize=8,
-        )
+        # Total weight (100%)
+        ax.text(1.35, pooled_y, "100.0%", ha="left", va="center",
+               fontweight="bold", transform=ax.get_yaxis_transform(), fontsize=9)
 
-        # Add vertical line at null effect
-        ax.axvline(null_value, color="black", linestyle="--", linewidth=1, alpha=0.5)
+        # ===== VERTICAL NULL LINE =====
+        ax.axvline(null_value, color="black", linestyle="--", linewidth=1, alpha=0.7)
 
-        # Set axis limits and labels
-        all_values = effects + [pooled_effect, ci_lower, ci_upper, null_value]
-        x_min = min(all_values) - (max(all_values) - min(all_values)) * 0.1
-        x_max = max(all_values) + (max(all_values) - min(all_values)) * 0.1
+        # ===== AXIS LIMITS =====
+        x_range = max(all_ci_uppers) - min(all_ci_lowers)
+        x_padding = x_range * 0.15
+        x_min = min(all_ci_lowers) - x_padding
+        x_max = max(all_ci_uppers) + x_padding
 
         ax.set_xlim(x_min, x_max)
-        ax.set_ylim(-1, n_studies + 1)
+        ax.set_ylim(stats_y - 1.5, header_y + 0.5)
 
-        # Labels
+        # ===== X-AXIS LABEL WITH FAVORS LABELS =====
         effect_label = self._get_effect_measure_label(meta_result.effect_measure)
-        ax.set_xlabel(effect_label, fontweight="bold")
-        ax.set_title(
-            f"Forest Plot: {meta_result.outcome_name}\n"
-            f"({meta_result.analysis_method.value.replace('_', ' ').title()}, "
-            f"I² = {meta_result.heterogeneity.i_squared:.1f}%)",
-            fontweight="bold",
-            pad=15,
-        )
+        ax.set_xlabel(effect_label, fontweight="bold", fontsize=11)
 
+        # Add favors labels
+        if favors_labels is None:
+            if use_log_scale:
+                favors_labels = ("Favors Treatment", "Favors Control")
+            else:
+                favors_labels = ("Favors Treatment", "Favors Control")
+
+        # Position favors labels below the x-axis
+        ax.text(x_min + x_range * 0.15, stats_y - 0.5, f"← {favors_labels[0]}",
+               ha="center", va="top", fontsize=9, style="italic")
+        ax.text(x_max - x_range * 0.15, stats_y - 0.5, f"{favors_labels[1]} →",
+               ha="center", va="top", fontsize=9, style="italic")
+
+        # ===== STATISTICS PANEL =====
+        # Heterogeneity statistics
+        het = meta_result.heterogeneity
+        het_text = (f"Heterogeneity: τ² = {het.tau_squared:.4f}; "
+                   f"χ² = {het.q_statistic:.2f}, df = {n_studies - 1} "
+                   f"(P = {het.q_p_value:.4f}); I² = {het.i_squared:.1f}%")
+
+        # I² interpretation
+        if het.i_squared < 25:
+            het_interp = "(low heterogeneity)"
+        elif het.i_squared < 50:
+            het_interp = "(moderate heterogeneity)"
+        elif het.i_squared < 75:
+            het_interp = "(substantial heterogeneity)"
+        else:
+            het_interp = "(considerable heterogeneity)"
+
+        ax.text(0.5, stats_y + 0.8, het_text, ha="center", va="center",
+               transform=ax.get_yaxis_transform(), fontsize=8)
+        ax.text(0.5, stats_y + 0.3, het_interp, ha="center", va="center",
+               transform=ax.get_yaxis_transform(), fontsize=8, style="italic")
+
+        # Test for overall effect
+        overall_test = (f"Test for overall effect: Z = {meta_result.z_statistic:.2f} "
+                       f"(P {'< 0.0001' if meta_result.p_value < 0.0001 else f'= {meta_result.p_value:.4f}'})")
+        ax.text(0.5, stats_y - 0.2, overall_test, ha="center", va="center",
+               transform=ax.get_yaxis_transform(), fontsize=8)
+
+        # Prediction interval (if available)
+        if (show_prediction_interval and
+            meta_result.analysis_method == AnalysisMethod.RANDOM_EFFECTS and
+            pred_lower is not None and pred_upper is not None):
+            pred_text = f"Prediction interval: [{pred_lower:.2f}, {pred_upper:.2f}]"
+            ax.text(0.5, stats_y - 0.7, pred_text, ha="center", va="center",
+                   transform=ax.get_yaxis_transform(), fontsize=8)
+
+        # ===== TITLE =====
+        title = f"Forest Plot: {meta_result.outcome_name}"
+        subtitle = f"k = {n_studies} studies, N = {meta_result.total_sample_size:,}"
+        ax.set_title(f"{title}\n{subtitle}", fontweight="bold", pad=15, fontsize=12)
+
+        # ===== STYLING =====
         # Remove y-axis ticks and labels (we have custom labels)
         ax.set_yticks([])
         ax.set_yticklabels([])
@@ -213,14 +297,14 @@ class VisualizationGenerator:
         ax.spines["right"].set_visible(False)
         ax.spines["left"].set_visible(False)
 
-        # Add gridlines
-        ax.grid(True, axis="x", alpha=0.3)
+        # Add light gridlines
+        ax.grid(True, axis="x", alpha=0.3, linestyle="-", linewidth=0.5)
 
         plt.tight_layout()
 
         # Save
         output_path = self.output_dir / output_filename
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
         plt.close()
 
         return str(output_path)
