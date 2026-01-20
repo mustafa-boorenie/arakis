@@ -380,10 +380,10 @@ Auto-detect and apply appropriate tool:
 ### Meta-Analysis
 - [x] Forest plot generated with all required statistics
 - [x] Funnel plot generated
-- [ ] Heterogeneity metrics displayed (I², τ², Q)
-- [ ] Individual study weights shown
-- [ ] Subgroup analyses performed when applicable
-- [ ] Narrative synthesis when meta-analysis not feasible
+- [x] Heterogeneity metrics displayed (I², τ², Q)
+- [x] Individual study weights shown
+- [x] Subgroup analyses performed when applicable
+- [x] Narrative synthesis when meta-analysis not feasible
 
 ### PRISMA
 - [ ] Flow diagram generated (PNG, 300 DPI)

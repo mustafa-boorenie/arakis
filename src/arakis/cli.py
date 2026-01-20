@@ -1061,6 +1061,139 @@ def analyze(
         for warning in recommendation.warnings:
             console.print(f"  • {warning}")
 
+        # Perform narrative synthesis instead
+        console.print("\n[bold cyan]Performing narrative synthesis instead...[/bold cyan]")
+
+        from arakis.analysis.narrative_synthesis import NarrativeSynthesizer, SynthesisConfig
+
+        config = SynthesisConfig(output_dir=figures_dir)
+        synthesizer = NarrativeSynthesizer(config=config)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            progress.add_task("Synthesizing findings narratively...", total=None)
+            synthesis_result = synthesizer.synthesize(
+                extraction_result=extraction_result,
+                outcome=outcome,
+                meta_analysis_barriers=recommendation.warnings,
+            )
+
+        # Display narrative synthesis results
+        console.print("\n[bold]Narrative Synthesis Results[/bold]\n")
+
+        # Summary table
+        summary_table = Table(title="Synthesis Summary")
+        summary_table.add_column("Metric", style="cyan")
+        summary_table.add_column("Value", style="magenta")
+
+        summary_table.add_row("Studies Included", str(synthesis_result.studies_included))
+        summary_table.add_row("Total Sample Size", str(synthesis_result.total_sample_size))
+        summary_table.add_row("Confidence in Evidence", synthesis_result.confidence_in_evidence.title())
+
+        if synthesis_result.vote_count:
+            vc = synthesis_result.vote_count
+            summary_table.add_row(
+                "Effect Direction",
+                f"{vc.positive} positive, {vc.negative} negative, {vc.null} null, {vc.mixed} mixed"
+            )
+            summary_table.add_row("Predominant Direction", vc.predominant_direction.title())
+            summary_table.add_row("Consistency", vc.consistency.title())
+
+        console.print(summary_table)
+
+        # Summary of findings
+        console.print(f"\n[bold]Summary of Findings:[/bold]")
+        console.print(synthesis_result.summary_of_findings)
+
+        # Heterogeneity explanation
+        if synthesis_result.heterogeneity_explanation:
+            console.print(f"\n[bold]Heterogeneity:[/bold]")
+            console.print(synthesis_result.heterogeneity_explanation)
+
+        # Evidence quality
+        if synthesis_result.evidence_quality_assessment:
+            console.print(f"\n[bold]Evidence Quality:[/bold]")
+            console.print(synthesis_result.evidence_quality_assessment)
+
+        # Patterns identified
+        if synthesis_result.patterns_identified:
+            console.print("\n[bold]Patterns Identified:[/bold]")
+            for pattern in synthesis_result.patterns_identified:
+                console.print(f"  • {pattern}")
+
+        # Inconsistencies
+        if synthesis_result.inconsistencies:
+            console.print("\n[yellow]Inconsistencies:[/yellow]")
+            for inconsistency in synthesis_result.inconsistencies:
+                console.print(f"  • {inconsistency}")
+
+        # Gaps in evidence
+        if synthesis_result.gaps_in_evidence:
+            console.print("\n[yellow]Gaps in Evidence:[/yellow]")
+            for gap in synthesis_result.gaps_in_evidence:
+                console.print(f"  • {gap}")
+
+        # Display study-level summary table
+        if synthesis_result.study_summaries:
+            console.print("\n")
+            study_table = Table(title="Study-Level Summary")
+            study_table.add_column("Study", style="cyan", max_width=30)
+            study_table.add_column("N", style="magenta")
+            study_table.add_column("Design", style="blue")
+            study_table.add_column("Direction", style="yellow")
+            study_table.add_column("Magnitude", style="green")
+
+            for study in synthesis_result.study_summaries:
+                # Determine direction color
+                direction = study.effect_direction or "unknown"
+                if direction == "positive":
+                    direction_display = "[green]Positive[/green]"
+                elif direction == "negative":
+                    direction_display = "[red]Negative[/red]"
+                elif direction == "null":
+                    direction_display = "[dim]Null[/dim]"
+                else:
+                    direction_display = "[yellow]Mixed[/yellow]"
+
+                study_table.add_row(
+                    study.study_id[:30],
+                    str(study.sample_size) if study.sample_size else "NR",
+                    study.study_design or "NR",
+                    direction_display,
+                    study.effect_magnitude or "unknown",
+                )
+
+            console.print(study_table)
+
+        # Effect direction chart
+        if synthesis_result.effect_direction_chart_path:
+            console.print(f"\n[dim]Effect direction chart saved to {synthesis_result.effect_direction_chart_path}[/dim]")
+
+        # Save results
+        if output:
+            output_data = {
+                "analysis_type": "narrative_synthesis",
+                "timestamp": datetime.now().isoformat(),
+                "input_file": input_file,
+                "recommendation": {
+                    "recommended_tests": [
+                        {"name": t.test_name, "type": t.test_type.value}
+                        for t in recommendation.recommended_tests
+                    ],
+                    "rationale": recommendation.rationale,
+                    "data_characteristics": recommendation.data_characteristics,
+                    "warnings": recommendation.warnings,
+                },
+                "narrative_synthesis": synthesis_result.to_dict(),
+            }
+
+            with open(output, "w") as f:
+                json.dump(output_data, f, indent=2)
+            console.print(f"\n[dim]Narrative synthesis results saved to {output}[/dim]")
+
 
 @app.command()
 def prisma_diagram(
