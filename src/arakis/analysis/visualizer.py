@@ -950,3 +950,372 @@ class VisualizationGenerator:
             EffectMeasure.CORRELATION: "Correlation Coefficient",
         }
         return labels.get(effect_measure, str(effect_measure))
+
+    def create_risk_of_bias_summary(
+        self,
+        summary: "RiskOfBiasSummary",
+        output_filename: str | None = None,
+        figsize: tuple[float, float] = (12, 8),
+        show_domains: bool = True,
+    ) -> str:
+        """Create a risk of bias summary plot.
+
+        Generates a horizontal stacked bar chart showing the distribution
+        of risk of bias judgments across studies for each domain.
+
+        Args:
+            summary: RiskOfBiasSummary from RiskOfBiasAssessor
+            output_filename: Output filename (default: rob_summary.png)
+            figsize: Figure size in inches
+            show_domains: Whether to show domain-level breakdown
+
+        Returns:
+            Path to saved plot
+        """
+        from arakis.models.risk_of_bias import RiskLevel
+
+        if output_filename is None:
+            output_filename = "rob_summary.png"
+
+        if not summary.studies:
+            # Create empty plot
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.text(0.5, 0.5, "No studies to assess", ha="center", va="center", fontsize=14)
+            ax.axis("off")
+            output_path = self.output_dir / output_filename
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            return str(output_path)
+
+        n_studies = summary.n_studies
+        domain_names = summary.get_domain_names()
+        domain_distributions = summary.domain_distributions
+
+        # Colors for risk levels
+        colors = {
+            RiskLevel.LOW: "#00a65a",  # Green
+            RiskLevel.SOME_CONCERNS: "#f39c12",  # Yellow/Orange
+            RiskLevel.HIGH: "#dd4b39",  # Red
+            RiskLevel.UNCLEAR: "#f39c12",  # Yellow
+            RiskLevel.NOT_APPLICABLE: "#d2d6de",  # Gray
+        }
+
+        # Prepare data - domains + overall
+        categories = domain_names + ["Overall"] if show_domains else ["Overall"]
+        y_positions = np.arange(len(categories))
+
+        # Calculate percentages for each category
+        data_low = []
+        data_concerns = []
+        data_high = []
+
+        if show_domains:
+            for domain_id, dist in domain_distributions.items():
+                low_count = dist.get(RiskLevel.LOW, 0)
+                concerns_count = (
+                    dist.get(RiskLevel.SOME_CONCERNS, 0) + dist.get(RiskLevel.UNCLEAR, 0)
+                )
+                high_count = dist.get(RiskLevel.HIGH, 0)
+
+                data_low.append(low_count / n_studies * 100)
+                data_concerns.append(concerns_count / n_studies * 100)
+                data_high.append(high_count / n_studies * 100)
+
+        # Add overall
+        overall_dist = summary.overall_distribution
+        data_low.append(overall_dist.get(RiskLevel.LOW, 0) / n_studies * 100)
+        data_concerns.append(
+            (overall_dist.get(RiskLevel.SOME_CONCERNS, 0) + overall_dist.get(RiskLevel.UNCLEAR, 0))
+            / n_studies
+            * 100
+        )
+        data_high.append(overall_dist.get(RiskLevel.HIGH, 0) / n_studies * 100)
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Create stacked horizontal bar chart
+        bar_height = 0.6
+
+        # Plot bars (stacked)
+        bars_low = ax.barh(
+            y_positions,
+            data_low,
+            height=bar_height,
+            color=colors[RiskLevel.LOW],
+            label="Low risk",
+            edgecolor="white",
+            linewidth=0.5,
+        )
+        bars_concerns = ax.barh(
+            y_positions,
+            data_concerns,
+            height=bar_height,
+            left=data_low,
+            color=colors[RiskLevel.SOME_CONCERNS],
+            label="Some concerns",
+            edgecolor="white",
+            linewidth=0.5,
+        )
+        bars_high = ax.barh(
+            y_positions,
+            data_high,
+            height=bar_height,
+            left=[l + c for l, c in zip(data_low, data_concerns)],
+            color=colors[RiskLevel.HIGH],
+            label="High risk",
+            edgecolor="white",
+            linewidth=0.5,
+        )
+
+        # Add percentage labels inside bars (if segment > 10%)
+        for i, (low, concerns, high) in enumerate(zip(data_low, data_concerns, data_high)):
+            # Low risk label
+            if low > 10:
+                ax.text(low / 2, i, f"{low:.0f}%", ha="center", va="center", fontsize=9, color="white", fontweight="bold")
+
+            # Some concerns label
+            if concerns > 10:
+                ax.text(low + concerns / 2, i, f"{concerns:.0f}%", ha="center", va="center", fontsize=9, color="black", fontweight="bold")
+
+            # High risk label
+            if high > 10:
+                ax.text(low + concerns + high / 2, i, f"{high:.0f}%", ha="center", va="center", fontsize=9, color="white", fontweight="bold")
+
+        # Customize axes
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(categories, fontsize=10)
+        ax.set_xlabel("Percentage of studies", fontweight="bold", fontsize=11)
+        ax.set_xlim(0, 100)
+
+        # Add grid
+        ax.xaxis.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
+        ax.set_axisbelow(True)
+
+        # Style
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        # Legend
+        ax.legend(
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.08),
+            ncol=3,
+            frameon=False,
+            fontsize=10,
+        )
+
+        # Title
+        tool_names = {
+            "rob_2": "RoB 2",
+            "robins_i": "ROBINS-I",
+            "quadas_2": "QUADAS-2",
+        }
+        tool_name = tool_names.get(summary.tool.value, summary.tool.value)
+        title = f"Risk of Bias Summary ({tool_name})"
+        subtitle = f"k = {n_studies} studies"
+        ax.set_title(f"{title}\n{subtitle}", fontweight="bold", pad=15, fontsize=12)
+
+        plt.tight_layout()
+
+        # Save
+        output_path = self.output_dir / output_filename
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
+        plt.close()
+
+        return str(output_path)
+
+    def create_risk_of_bias_traffic_light(
+        self,
+        summary: "RiskOfBiasSummary",
+        output_filename: str | None = None,
+        figsize: tuple[float, float] | None = None,
+        cell_size: float = 0.8,
+    ) -> str:
+        """Create a traffic light plot for risk of bias.
+
+        Shows individual study assessments across domains as a color-coded matrix.
+
+        Args:
+            summary: RiskOfBiasSummary from RiskOfBiasAssessor
+            output_filename: Output filename (default: rob_traffic_light.png)
+            figsize: Figure size (auto-calculated if None)
+            cell_size: Size of each cell in the matrix
+
+        Returns:
+            Path to saved plot
+        """
+        from arakis.models.risk_of_bias import RiskLevel
+
+        if output_filename is None:
+            output_filename = "rob_traffic_light.png"
+
+        if not summary.studies:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.text(0.5, 0.5, "No studies to assess", ha="center", va="center", fontsize=14)
+            ax.axis("off")
+            output_path = self.output_dir / output_filename
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
+            plt.close()
+            return str(output_path)
+
+        n_studies = len(summary.studies)
+        domain_names = summary.get_domain_names() + ["Overall"]
+        n_domains = len(domain_names)
+
+        # Auto-calculate figure size
+        if figsize is None:
+            width = max(8, n_domains * 1.2 + 3)
+            height = max(6, n_studies * 0.5 + 2)
+            figsize = (width, height)
+
+        # Colors
+        colors = {
+            RiskLevel.LOW: "#00a65a",
+            RiskLevel.SOME_CONCERNS: "#f39c12",
+            RiskLevel.HIGH: "#dd4b39",
+            RiskLevel.UNCLEAR: "#f39c12",
+            RiskLevel.NOT_APPLICABLE: "#d2d6de",
+        }
+
+        # Symbols
+        symbols = {
+            RiskLevel.LOW: "+",
+            RiskLevel.SOME_CONCERNS: "?",
+            RiskLevel.HIGH: "-",
+            RiskLevel.UNCLEAR: "?",
+            RiskLevel.NOT_APPLICABLE: "NA",
+        }
+
+        fig, ax = plt.subplots(figsize=figsize)
+
+        # Draw cells
+        for i, study in enumerate(summary.studies):
+            y_pos = n_studies - i - 1  # Reverse order (first study at top)
+
+            # Draw domain cells
+            for j, domain in enumerate(study.domains):
+                color = colors[domain.judgment]
+                symbol = symbols[domain.judgment]
+
+                # Draw cell
+                rect = plt.Rectangle(
+                    (j, y_pos),
+                    cell_size,
+                    cell_size,
+                    facecolor=color,
+                    edgecolor="white",
+                    linewidth=1,
+                )
+                ax.add_patch(rect)
+
+                # Add symbol
+                ax.text(
+                    j + cell_size / 2,
+                    y_pos + cell_size / 2,
+                    symbol,
+                    ha="center",
+                    va="center",
+                    fontsize=12,
+                    fontweight="bold",
+                    color="white",
+                )
+
+            # Draw overall cell
+            j = len(study.domains)
+            color = colors[study.overall_judgment]
+            symbol = symbols[study.overall_judgment]
+
+            rect = plt.Rectangle(
+                (j, y_pos),
+                cell_size,
+                cell_size,
+                facecolor=color,
+                edgecolor="white",
+                linewidth=2,
+            )
+            ax.add_patch(rect)
+            ax.text(
+                j + cell_size / 2,
+                y_pos + cell_size / 2,
+                symbol,
+                ha="center",
+                va="center",
+                fontsize=12,
+                fontweight="bold",
+                color="white",
+            )
+
+        # Add study labels
+        for i, study in enumerate(summary.studies):
+            y_pos = n_studies - i - 1
+            ax.text(
+                -0.1,
+                y_pos + cell_size / 2,
+                study.study_name,
+                ha="right",
+                va="center",
+                fontsize=9,
+            )
+
+        # Add domain labels at top
+        for j, domain_name in enumerate(domain_names):
+            ax.text(
+                j + cell_size / 2,
+                n_studies + 0.1,
+                domain_name,
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                rotation=45,
+            )
+
+        # Set axis limits
+        ax.set_xlim(-0.5, n_domains)
+        ax.set_ylim(-0.5, n_studies + 1)
+        ax.set_aspect("equal")
+        ax.axis("off")
+
+        # Add legend
+        from matplotlib.patches import Patch
+
+        legend_elements = [
+            Patch(facecolor=colors[RiskLevel.LOW], edgecolor="white", label="Low risk (+)"),
+            Patch(
+                facecolor=colors[RiskLevel.SOME_CONCERNS],
+                edgecolor="white",
+                label="Some concerns (?)",
+            ),
+            Patch(facecolor=colors[RiskLevel.HIGH], edgecolor="white", label="High risk (-)"),
+        ]
+        ax.legend(
+            handles=legend_elements,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.02),
+            ncol=3,
+            frameon=False,
+            fontsize=9,
+        )
+
+        # Title
+        tool_names = {
+            "rob_2": "RoB 2",
+            "robins_i": "ROBINS-I",
+            "quadas_2": "QUADAS-2",
+        }
+        tool_name = tool_names.get(summary.tool.value, summary.tool.value)
+        ax.set_title(
+            f"Risk of Bias Traffic Light Plot ({tool_name})",
+            fontweight="bold",
+            pad=20,
+            fontsize=12,
+        )
+
+        plt.tight_layout()
+
+        # Save
+        output_path = self.output_dir / output_filename
+        plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
+        plt.close()
+
+        return str(output_path)

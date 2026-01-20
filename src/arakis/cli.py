@@ -2510,6 +2510,163 @@ def workflow(
                 console.print(f"  • {file_path.name} ({size:,} bytes)")
 
 
+@app.command(name="risk-of-bias")
+def risk_of_bias(
+    extractions: str = typer.Argument(..., help="Path to extraction results JSON file"),
+    output: Optional[str] = typer.Option(
+        None, "--output", "-o", help="Output file for risk of bias results (JSON)"
+    ),
+    tool: Optional[str] = typer.Option(
+        None,
+        "--tool",
+        "-t",
+        help="Assessment tool to use (rob_2, robins_i, quadas_2). Auto-detected if not specified.",
+    ),
+    figures: Optional[str] = typer.Option(
+        None, "--figures", "-f", help="Directory for output figures"
+    ),
+    format: str = typer.Option(
+        "both",
+        "--format",
+        help="Output format: table, figures, or both",
+    ),
+):
+    """
+    Assess risk of bias for extracted studies.
+
+    Uses standardized tools:
+    - RoB 2: For randomized controlled trials
+    - ROBINS-I: For cohort and case-control studies
+    - QUADAS-2: For diagnostic accuracy studies
+
+    Example:
+        arakis risk-of-bias extractions.json --output rob_results.json --figures ./figures/
+    """
+    import json
+    from pathlib import Path
+
+    from arakis.analysis import RiskOfBiasAssessor, RiskOfBiasTableGenerator
+    from arakis.analysis.visualizer import VisualizationGenerator
+    from arakis.models.extraction import ExtractionResult
+    from arakis.models.risk_of_bias import RoBTool
+
+    # Load extraction results
+    extractions_path = Path(extractions)
+    if not extractions_path.exists():
+        console.print(f"[red]Error: File not found: {extractions}[/red]")
+        raise typer.Exit(1)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Loading extraction data...", total=None)
+
+        try:
+            with open(extractions_path) as f:
+                data = json.load(f)
+            extraction_result = ExtractionResult.from_dict(data)
+        except Exception as e:
+            console.print(f"[red]Error loading extractions: {e}[/red]")
+            raise typer.Exit(1)
+
+        # Determine tool
+        rob_tool = None
+        if tool:
+            try:
+                rob_tool = RoBTool(tool)
+            except ValueError:
+                console.print(f"[red]Unknown tool: {tool}. Use rob_2, robins_i, or quadas_2[/red]")
+                raise typer.Exit(1)
+
+        progress.update(task, description="Assessing risk of bias...")
+
+        # Run assessment
+        assessor = RiskOfBiasAssessor()
+        summary = assessor.assess_studies(extraction_result, tool=rob_tool)
+
+        # Generate table
+        progress.update(task, description="Generating risk of bias table...")
+        table_generator = RiskOfBiasTableGenerator()
+        rob_table = table_generator.generate_table(summary)
+
+    # Display results
+    console.print("\n[bold green]Risk of Bias Assessment Complete![/bold green]\n")
+
+    # Tool used
+    tool_names = {
+        "rob_2": "Cochrane RoB 2 (for RCTs)",
+        "robins_i": "ROBINS-I (for observational studies)",
+        "quadas_2": "QUADAS-2 (for diagnostic studies)",
+    }
+    console.print(f"[cyan]Tool:[/cyan] {tool_names.get(summary.tool.value, summary.tool.value)}")
+    console.print(f"[cyan]Studies assessed:[/cyan] {summary.n_studies}")
+    console.print(f"[cyan]Low risk:[/cyan] {summary.percent_low_risk:.0f}%")
+    console.print(f"[cyan]High risk:[/cyan] {summary.percent_high_risk:.0f}%")
+
+    # Display table
+    if format in ["table", "both"]:
+        console.print("\n[bold]Risk of Bias Summary Table:[/bold]")
+        display_table = Table(title=rob_table.title)
+        for header in rob_table.headers:
+            display_table.add_column(header)
+        for row in rob_table.rows:
+            # Color code the cells
+            colored_row = []
+            for cell in row:
+                if cell == "+":
+                    colored_row.append("[green]+[/green]")
+                elif cell == "-":
+                    colored_row.append("[red]-[/red]")
+                elif cell == "?":
+                    colored_row.append("[yellow]?[/yellow]")
+                else:
+                    colored_row.append(cell)
+            display_table.add_row(*colored_row)
+        console.print(display_table)
+
+        # Footnotes
+        for note in rob_table.footnotes:
+            console.print(f"[dim]{note}[/dim]")
+
+    # Generate figures
+    if format in ["figures", "both"] and figures:
+        figures_dir = Path(figures)
+        figures_dir.mkdir(parents=True, exist_ok=True)
+
+        visualizer = VisualizationGenerator(output_dir=str(figures_dir))
+
+        # Summary plot
+        summary_path = visualizer.create_risk_of_bias_summary(summary, "rob_summary.png")
+        console.print(f"\n[green]Created:[/green] {summary_path}")
+
+        # Traffic light plot
+        traffic_light_path = visualizer.create_risk_of_bias_traffic_light(
+            summary, "rob_traffic_light.png"
+        )
+        console.print(f"[green]Created:[/green] {traffic_light_path}")
+
+    # Save results
+    if output:
+        output_path = Path(output)
+        output_data = {
+            "summary": summary.to_dict(),
+            "table": {
+                "id": rob_table.id,
+                "title": rob_table.title,
+                "caption": rob_table.caption,
+                "headers": rob_table.headers,
+                "rows": rob_table.rows,
+                "footnotes": rob_table.footnotes,
+                "markdown": rob_table.markdown,
+            },
+        }
+        with open(output_path, "w") as f:
+            json.dump(output_data, f, indent=2)
+        console.print(f"\n[green]Results saved to:[/green] {output_path}")
+
+
 @app.command()
 def version():
     """Show version information."""
