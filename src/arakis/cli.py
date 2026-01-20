@@ -1872,10 +1872,10 @@ def write_abstract(
 @app.command()
 def workflow(
     research_question: str = typer.Option(
-        ..., "--question", "-q", help="Research question for the systematic review"
+        None, "--question", "-q", help="Research question for the systematic review"
     ),
     include: str = typer.Option(
-        ..., "--include", "-i", help="Inclusion criteria (comma-separated)"
+        None, "--include", "-i", help="Inclusion criteria (comma-separated)"
     ),
     exclude: str = typer.Option("", "--exclude", "-e", help="Exclusion criteria (comma-separated)"),
     databases: str = typer.Option(
@@ -1900,6 +1900,9 @@ def workflow(
         "-s",
         help="Extraction schema: auto (detect from question), rct, cohort, case_control, diagnostic",
     ),
+    resume: bool = typer.Option(
+        False, "--resume", "-r", help="Resume workflow from last checkpoint"
+    ),
 ):
     """
     Run complete systematic review workflow end-to-end.
@@ -1922,91 +1925,253 @@ def workflow(
     - cohort: Cohort/observational studies
     - case_control: Case-control studies
     - diagnostic: Diagnostic accuracy studies
+
+    Use --resume to continue a previously interrupted workflow from the last
+    completed checkpoint.
     """
     import json
     from dataclasses import asdict
     from datetime import datetime
     from pathlib import Path
 
+    from arakis.models.workflow_state import WorkflowStage
+    from arakis.workflow.state_manager import WorkflowStateManager
+
     # Setup
     start_time = datetime.now()
     output_path = Path(output_dir)
     output_path.mkdir(exist_ok=True)
 
-    console.print(
-        Panel.fit(
-            f"[bold blue]Arakis Systematic Review Workflow[/bold blue]\n\n"
-            f"[cyan]Research Question:[/cyan]\n{research_question}\n\n"
-            f"[cyan]Inclusion:[/cyan] {include}\n"
-            f"[cyan]Exclusion:[/cyan] {exclude or '(none)'}\n\n"
-            f"[dim]Output: {output_dir}[/dim]",
-            title="🚀 Starting Workflow",
+    # Initialize state manager
+    state_manager = WorkflowStateManager(output_path)
+
+    # Handle resume mode
+    if resume:
+        if not state_manager.can_resume():
+            console.print("[red]No resumable workflow found in this directory.[/red]")
+            console.print(f"[dim]Looking for: {state_manager.state_file}[/dim]")
+            raise typer.Exit(1)
+
+        resume_info = state_manager.get_resume_info()
+        if resume_info:
+            console.print(
+                Panel.fit(
+                    f"[bold blue]Resuming Workflow[/bold blue]\n\n"
+                    f"[cyan]Workflow ID:[/cyan] {resume_info['workflow_id']}\n"
+                    f"[cyan]Research Question:[/cyan]\n{resume_info['research_question']}\n\n"
+                    f"[cyan]Progress:[/cyan] {resume_info['progress']}\n"
+                    f"[cyan]Completed Stages:[/cyan] {', '.join(resume_info['completed_stages'])}\n"
+                    f"[cyan]Resuming from:[/cyan] {resume_info['resume_stage']}\n\n"
+                    f"[dim]Output: {output_dir}[/dim]",
+                    title="🔄 Resuming Workflow",
+                )
+            )
+
+        # Load state and get config
+        state = state_manager.load_state()
+        if state is None:
+            console.print("[red]Failed to load workflow state.[/red]")
+            raise typer.Exit(1)
+
+        # Restore configuration from state
+        research_question = state.research_question
+        include = ",".join(state.inclusion_criteria)
+        exclude = ",".join(state.exclusion_criteria)
+        databases = ",".join(state.databases)
+        max_results = state.max_results
+        fast_mode = state.fast_mode
+        extract_text = state.extract_text
+        use_full_text = state.use_full_text
+        skip_analysis = state.skip_analysis
+        skip_writing = state.skip_writing
+        schema = state.schema
+
+        resume_stage = state.get_resume_stage()
+    else:
+        # Validate required arguments for new workflow
+        if research_question is None:
+            console.print("[red]--question is required for new workflows[/red]")
+            raise typer.Exit(1)
+        if include is None:
+            console.print("[red]--include is required for new workflows[/red]")
+            raise typer.Exit(1)
+
+        # Check if there's an existing incomplete workflow
+        if state_manager.can_resume():
+            resume_info = state_manager.get_resume_info()
+            console.print(
+                Panel.fit(
+                    f"[yellow]Found incomplete workflow in this directory[/yellow]\n\n"
+                    f"[cyan]Workflow ID:[/cyan] {resume_info['workflow_id']}\n"
+                    f"[cyan]Progress:[/cyan] {resume_info['progress']}\n\n"
+                    f"Use --resume to continue, or choose a different output directory.",
+                    title="⚠️ Existing Workflow Found",
+                )
+            )
+            raise typer.Exit(1)
+
+        # Create new workflow state
+        inclusion_criteria = [c.strip() for c in include.split(",")]
+        exclusion_criteria = [c.strip() for c in exclude.split(",")] if exclude else []
+        db_list = [d.strip() for d in databases.split(",")]
+
+        state_manager.create_new_state(
+            research_question=research_question,
+            inclusion_criteria=inclusion_criteria,
+            exclusion_criteria=exclusion_criteria,
+            databases=db_list,
+            max_results=max_results,
+            fast_mode=fast_mode,
+            extract_text=extract_text,
+            use_full_text=use_full_text,
+            skip_analysis=skip_analysis,
+            skip_writing=skip_writing,
+            schema=schema,
         )
-    )
+
+        resume_stage = None
+
+        console.print(
+            Panel.fit(
+                f"[bold blue]Arakis Systematic Review Workflow[/bold blue]\n\n"
+                f"[cyan]Research Question:[/cyan]\n{research_question}\n\n"
+                f"[cyan]Inclusion:[/cyan] {include}\n"
+                f"[cyan]Exclusion:[/cyan] {exclude or '(none)'}\n\n"
+                f"[dim]Output: {output_dir}[/dim]",
+                title="🚀 Starting Workflow",
+            )
+        )
 
     workflow_results = {
         "research_question": research_question,
         "started_at": start_time.isoformat(),
         "stages": {},
-        "total_cost": 0.0,
+        "total_cost": state_manager.state.total_cost if state_manager.state else 0.0,
     }
 
     # Stage 1: Search
-    console.print("\n[bold cyan]Stage 1/8:[/bold cyan] Literature Search")
-    console.print(f"[dim]Searching {databases}...[/dim]\n")
-
-    from arakis.orchestrator import SearchOrchestrator
-
-    db_list = [d.strip() for d in databases.split(",")]
-    orchestrator = SearchOrchestrator()
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Searching databases...", total=None)
-
-        def update_search(stage: str, detail: str):
-            progress.update(task, description=f"{stage}: {detail}")
-
-        search_result = _run_async(
-            orchestrator.comprehensive_search(
-                research_question=research_question,
-                databases=db_list,
-                max_results_per_query=max_results,
-                validate_queries=False,
-                progress_callback=update_search,
-            )
-        )
-
-    # Save search results
+    search_result = None
     search_file = output_path / "1_search_results.json"
-    with open(search_file, "w") as f:
-        json.dump([asdict(p) for p in search_result.papers], f, indent=2, default=str)
 
-    console.print(f"[green]✓ Found {len(search_result.papers)} unique papers[/green]")
-    console.print(f"[dim]Saved to {search_file}[/dim]\n")
+    if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.SEARCH):
+        console.print("\n[bold cyan]Stage 1/8:[/bold cyan] Literature Search [dim](cached)[/dim]")
 
-    workflow_results["stages"]["search"] = {
-        "papers_found": len(search_result.papers),
-        "duplicates_removed": search_result.prisma_flow.duplicates_removed,
-        "file": str(search_file),
-    }
+        # Load cached search results
+        cached_papers = state_manager.load_search_results()
+        if cached_papers:
+            from arakis.models.paper import PRISMAFlow as PRISMAFlowModel
+
+            # Reconstruct minimal search result for downstream use
+            class CachedSearchResult:
+                def __init__(self, papers_data, stage_data):
+                    from arakis.models.paper import Author, Paper, PaperSource
+
+                    self.papers = []
+                    for p in papers_data:
+                        authors = [
+                            Author(name=a["name"], affiliation=a.get("affiliation"), orcid=a.get("orcid"))
+                            if isinstance(a, dict) else Author(name=str(a))
+                            for a in p.get("authors", [])
+                        ]
+                        paper = Paper(
+                            id=p["id"],
+                            title=p.get("title", ""),
+                            abstract=p.get("abstract"),
+                            year=p.get("year"),
+                            authors=authors,
+                            doi=p.get("doi"),
+                            pmid=p.get("pmid"),
+                            source=PaperSource(p.get("source", "pubmed")),
+                        )
+                        self.papers.append(paper)
+
+                    self.prisma_flow = PRISMAFlowModel(
+                        records_identified=stage_data.get("records_identified", {}),
+                        duplicates_removed=stage_data.get("duplicates_removed", 0),
+                    )
+
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.SEARCH)
+            search_result = CachedSearchResult(cached_papers, stage_data)
+            console.print(f"[green]✓ Loaded {len(search_result.papers)} papers from cache[/green]\n")
+
+            workflow_results["stages"]["search"] = {
+                "papers_found": len(search_result.papers),
+                "duplicates_removed": stage_data.get("duplicates_removed", 0),
+                "file": str(search_file),
+            }
+        else:
+            console.print("[yellow]Cache file missing, re-running search...[/yellow]")
+            state_manager.state.stages[WorkflowStage.SEARCH.value].status = state_manager.state.stages[WorkflowStage.SEARCH.value].status.__class__.PENDING
+
+    if search_result is None:
+        console.print("\n[bold cyan]Stage 1/8:[/bold cyan] Literature Search")
+        console.print(f"[dim]Searching {databases}...[/dim]\n")
+
+        state_manager.start_stage(WorkflowStage.SEARCH)
+
+        from arakis.orchestrator import SearchOrchestrator
+
+        db_list = [d.strip() for d in databases.split(",")]
+        orchestrator = SearchOrchestrator()
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Searching databases...", total=None)
+
+            def update_search(stage: str, detail: str):
+                progress.update(task, description=f"{stage}: {detail}")
+
+            search_result = _run_async(
+                orchestrator.comprehensive_search(
+                    research_question=research_question,
+                    databases=db_list,
+                    max_results_per_query=max_results,
+                    validate_queries=False,
+                    progress_callback=update_search,
+                )
+            )
+
+        # Save search results
+        with open(search_file, "w") as f:
+            json.dump([asdict(p) for p in search_result.papers], f, indent=2, default=str)
+
+        console.print(f"[green]✓ Found {len(search_result.papers)} unique papers[/green]")
+        console.print(f"[dim]Saved to {search_file}[/dim]\n")
+
+        workflow_results["stages"]["search"] = {
+            "papers_found": len(search_result.papers),
+            "duplicates_removed": search_result.prisma_flow.duplicates_removed,
+            "file": str(search_file),
+        }
+
+        # Save checkpoint
+        state_manager.complete_stage(
+            WorkflowStage.SEARCH,
+            output_file=str(search_file),
+            data={
+                "papers_found": len(search_result.papers),
+                "duplicates_removed": search_result.prisma_flow.duplicates_removed,
+                "records_identified": dict(search_result.prisma_flow.records_identified),
+            },
+        )
 
     if len(search_result.papers) == 0:
         console.print("[yellow]No papers found. Workflow cannot continue.[/yellow]")
         raise typer.Exit(0)
 
     # Stage 2: Screening
-    console.print("[bold cyan]Stage 2/8:[/bold cyan] Paper Screening")
-    mode_desc = "single-pass" if fast_mode else "dual-review"
-    console.print(f"[dim]Screening with {mode_desc} mode...[/dim]\n")
+    decisions = None
+    summary = None
+    screening_file = output_path / "2_screening_decisions.json"
 
     from arakis.agents.screener import ScreeningAgent
     from arakis.models.paper import Paper
-    from arakis.models.screening import ScreeningCriteria
+    from arakis.models.screening import ScreeningCriteria, ScreeningDecision, ScreeningStatus
 
+    # Build papers list from search results (needed for both cached and fresh runs)
     papers = [
         Paper(
             id=p.id,
@@ -2020,95 +2185,272 @@ def workflow(
         for p in search_result.papers
     ]
 
-    criteria = ScreeningCriteria(
-        inclusion=[c.strip() for c in include.split(",")],
-        exclusion=[c.strip() for c in exclude.split(",")] if exclude else [],
-    )
+    if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.SCREENING):
+        console.print("[bold cyan]Stage 2/8:[/bold cyan] Paper Screening [dim](cached)[/dim]")
 
-    screener = ScreeningAgent()
+        # Load cached screening decisions
+        cached_decisions = state_manager.load_screening_decisions()
+        if cached_decisions:
+            decisions = []
+            for d in cached_decisions:
+                decision = ScreeningDecision(
+                    paper_id=d["paper_id"],
+                    status=ScreeningStatus(d["status"]),
+                    reason=d.get("reason", ""),
+                    confidence=d.get("confidence", 0.0),
+                    matched_inclusion=d.get("matched_inclusion", []),
+                    matched_exclusion=d.get("matched_exclusion", []),
+                    is_conflict=d.get("is_conflict", False),
+                )
+                decisions.append(decision)
 
-    def display_workflow_screening_progress(current, total, paper, decision):
-        """Display real-time screening progress with decision details for workflow."""
-        # Truncate title for display
-        title_display = paper.title[:60] + "..." if len(paper.title) > 60 else paper.title
+            screener = ScreeningAgent()
+            summary = screener.summarize_screening(decisions)
+            console.print(f"[green]✓ Loaded {len(decisions)} decisions from cache[/green]")
+            console.print(
+                f"[green]  Included: {summary['included']}, Excluded: {summary['excluded']}, Maybe: {summary['maybe']}[/green]\n"
+            )
 
-        # Status color based on decision
-        status_colors = {
-            "INCLUDE": "green",
-            "EXCLUDE": "red",
-            "MAYBE": "yellow",
-        }
-        status_color = status_colors.get(decision.status.value, "white")
+            workflow_results["stages"]["screening"] = {
+                "total_screened": len(decisions),
+                "included": summary["included"],
+                "excluded": summary["excluded"],
+                "maybe": summary["maybe"],
+                "conflicts": summary.get("conflicts", 0),
+                "file": str(screening_file),
+            }
+        else:
+            console.print("[yellow]Cache file missing, re-running screening...[/yellow]")
 
-        # Print progress line
-        console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+    if decisions is None:
+        console.print("[bold cyan]Stage 2/8:[/bold cyan] Paper Screening")
+        mode_desc = "single-pass" if fast_mode else "dual-review"
+        console.print(f"[dim]Screening with {mode_desc} mode...[/dim]\n")
+
+        state_manager.start_stage(WorkflowStage.SCREENING)
+
+        criteria = ScreeningCriteria(
+            inclusion=[c.strip() for c in include.split(",")],
+            exclusion=[c.strip() for c in exclude.split(",")] if exclude else [],
+        )
+
+        screener = ScreeningAgent()
+
+        def display_workflow_screening_progress(current, total, paper, decision):
+            """Display real-time screening progress with decision details for workflow."""
+            # Truncate title for display
+            title_display = paper.title[:60] + "..." if len(paper.title) > 60 else paper.title
+
+            # Status color based on decision
+            status_colors = {
+                "INCLUDE": "green",
+                "EXCLUDE": "red",
+                "MAYBE": "yellow",
+            }
+            status_color = status_colors.get(decision.status.value, "white")
+
+            # Print progress line
+            console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+            console.print(
+                f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
+                f"(confidence: {decision.confidence:.2f})"
+            )
+
+            # Show matched criteria if any
+            matched_criteria = []
+            if decision.matched_inclusion:
+                matched_criteria.extend(decision.matched_inclusion)
+            if matched_criteria:
+                console.print(f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}")
+
+            # Show conflict indicator if dual review had a conflict
+            if decision.is_conflict:
+                console.print("[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]")
+
+            console.print()  # Empty line between papers
+
+        decisions = _run_async(
+            screener.screen_batch(
+                papers,
+                criteria,
+                dual_review=not fast_mode,
+                human_review=False,
+                progress_callback=display_workflow_screening_progress,
+            )
+        )
+
+        # Save screening results
+        summary = screener.summarize_screening(decisions)
+
+        with open(screening_file, "w") as f:
+            json.dump([asdict(d) for d in decisions], f, indent=2, default=str)
+
         console.print(
-            f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
-            f"(confidence: {decision.confidence:.2f})"
+            f"[green]✓ Included: {summary['included']}, Excluded: {summary['excluded']}, Maybe: {summary['maybe']}[/green]"
         )
+        if not fast_mode:
+            console.print(f"[yellow]  Conflicts: {summary['conflicts']}[/yellow]")
+        console.print(f"[dim]Saved to {screening_file}[/dim]\n")
 
-        # Show matched criteria if any
-        matched_criteria = []
-        if decision.matched_inclusion:
-            matched_criteria.extend(decision.matched_inclusion)
-        if matched_criteria:
-            console.print(f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}")
+        workflow_results["stages"]["screening"] = {
+            "total_screened": len(decisions),
+            "included": summary["included"],
+            "excluded": summary["excluded"],
+            "maybe": summary["maybe"],
+            "conflicts": summary.get("conflicts", 0),
+            "file": str(screening_file),
+        }
 
-        # Show conflict indicator if dual review had a conflict
-        if decision.is_conflict:
-            console.print("[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]")
-
-        console.print()  # Empty line between papers
-
-    decisions = _run_async(
-        screener.screen_batch(
-            papers,
-            criteria,
-            dual_review=not fast_mode,
-            human_review=False,
-            progress_callback=display_workflow_screening_progress,
+        # Save checkpoint
+        state_manager.complete_stage(
+            WorkflowStage.SCREENING,
+            output_file=str(screening_file),
+            data={
+                "total_screened": len(decisions),
+                "included": summary["included"],
+                "excluded": summary["excluded"],
+                "maybe": summary["maybe"],
+                "conflicts": summary.get("conflicts", 0),
+            },
         )
-    )
-
-    # Save screening results
-    screening_file = output_path / "2_screening_decisions.json"
-    summary = screener.summarize_screening(decisions)
-
-    with open(screening_file, "w") as f:
-        json.dump([asdict(d) for d in decisions], f, indent=2, default=str)
-
-    console.print(
-        f"[green]✓ Included: {summary['included']}, Excluded: {summary['excluded']}, Maybe: {summary['maybe']}[/green]"
-    )
-    if not fast_mode:
-        console.print(f"[yellow]  Conflicts: {summary['conflicts']}[/yellow]")
-    console.print(f"[dim]Saved to {screening_file}[/dim]\n")
-
-    workflow_results["stages"]["screening"] = {
-        "total_screened": len(decisions),
-        "included": summary["included"],
-        "excluded": summary["excluded"],
-        "maybe": summary["maybe"],
-        "conflicts": summary.get("conflicts", 0),
-        "file": str(screening_file),
-    }
 
     if summary["included"] == 0:
         console.print("[yellow]No papers included. Workflow cannot continue.[/yellow]")
         raise typer.Exit(0)
 
     # Stage 3: PDF Fetch and Text Extraction
+    fetch_results = None
     if extract_text:
-        console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction")
-        console.print("[dim]Downloading and extracting text from included papers...[/dim]\n")
+        if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.PDF_FETCH):
+            console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction [dim](cached)[/dim]")
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.PDF_FETCH)
+            console.print(f"[green]✓ Text extracted for {stage_data.get('with_full_text', 0)} papers (from cache)[/green]\n")
+            workflow_results["stages"]["fetch"] = stage_data
+        else:
+            console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction")
+            console.print("[dim]Downloading and extracting text from included papers...[/dim]\n")
 
-        from arakis.retrieval.fetcher import PaperFetcher
+            state_manager.start_stage(WorkflowStage.PDF_FETCH)
 
-        # Get included papers
-        included_ids = [d.paper_id for d in decisions if d.status.value == "include"]
-        included_papers_to_fetch = [p for p in papers if p.id in included_ids]
+            from arakis.retrieval.fetcher import PaperFetcher
 
-        fetcher = PaperFetcher()
+            # Get included papers
+            included_ids = [d.paper_id for d in decisions if d.status.value == "include"]
+            included_papers_to_fetch = [p for p in papers if p.id in included_ids]
+
+            fetcher = PaperFetcher()
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task(
+                    f"Fetching 0/{len(included_papers_to_fetch)}...",
+                    total=len(included_papers_to_fetch),
+                )
+
+                def update_fetch(current, total, paper):
+                    progress.update(task, description=f"Fetching {current}/{total}...")
+                    progress.advance(task)
+
+                fetch_results = _run_async(
+                    fetcher.fetch_batch(
+                        included_papers_to_fetch,
+                        download=True,
+                        extract_text=True,
+                        progress_callback=update_fetch,
+                    )
+                )
+
+            # Update papers with extracted text
+            papers_with_text = sum(1 for r in fetch_results if r.success and r.paper.has_full_text)
+            console.print(
+                f"[green]✓ Extracted text from {papers_with_text}/{len(included_papers_to_fetch)} papers[/green]"
+            )
+            console.print(f"[dim]Downloaded to {output_path / 'pdfs'}[/dim]\n")
+
+            workflow_results["stages"]["fetch"] = {
+                "total_fetched": len(fetch_results),
+                "with_full_text": papers_with_text,
+                "success_rate": papers_with_text / len(included_papers_to_fetch)
+                if included_papers_to_fetch
+                else 0,
+            }
+
+            # Save checkpoint
+            state_manager.complete_stage(
+                WorkflowStage.PDF_FETCH,
+                data=workflow_results["stages"]["fetch"],
+            )
+    else:
+        state_manager.skip_stage(WorkflowStage.PDF_FETCH, "extract_text disabled")
+
+    # Stage 4: Extraction
+    extraction_result = None
+    extraction_file = output_path / "3_extraction_results.json"
+
+    from arakis.agents.extractor import DataExtractionAgent
+    from arakis.extraction.schemas import detect_schema, get_schema, list_schemas
+    from arakis.models.extraction import ExtractionResult
+
+    # Get included papers
+    included_ids = [d.paper_id for d in decisions if d.status.value == "include"]
+    included_papers = [p for p in papers if p.id in included_ids]
+
+    if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.EXTRACTION):
+        console.print(
+            f"[bold cyan]Stage {'4' if extract_text else '3'}/8:[/bold cyan] Data Extraction [dim](cached)[/dim]"
+        )
+
+        # Load cached extraction results
+        cached_extraction = state_manager.load_extraction_results()
+        if cached_extraction:
+            extraction_result = ExtractionResult.from_dict(cached_extraction)
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.EXTRACTION)
+            console.print(f"[green]✓ Loaded {extraction_result.successful_extractions} extractions from cache[/green]\n")
+
+            workflow_results["stages"]["extraction"] = {
+                "total_papers": extraction_result.total_papers,
+                "successful": extraction_result.successful_extractions,
+                "average_quality": extraction_result.average_quality,
+                "cost": stage_data.get("cost", 0.0),
+                "file": str(extraction_file),
+            }
+        else:
+            console.print("[yellow]Cache file missing, re-running extraction...[/yellow]")
+
+    if extraction_result is None:
+        console.print(
+            f"[bold cyan]Stage {'4' if extract_text else '3'}/8:[/bold cyan] Data Extraction"
+        )
+        extraction_mode = "single-pass" if fast_mode else "triple-review"
+        text_mode = "full text" if use_full_text else "abstracts"
+        console.print(f"[dim]Extracting with {extraction_mode} mode using {text_mode}...[/dim]")
+
+        state_manager.start_stage(WorkflowStage.EXTRACTION)
+
+        # Get extraction schema (auto-detect or explicit)
+        detected_schema_name = None
+        if schema == "auto":
+            # Auto-detect schema from research question and inclusion criteria
+            detection_text = f"{research_question} {include}"
+            detected_schema_name, confidence = detect_schema(detection_text)
+            console.print(
+                f"[dim]Schema: {detected_schema_name} (auto-detected, confidence: {confidence:.0%})[/dim]\n"
+            )
+            extraction_schema = get_schema(detected_schema_name)
+        else:
+            console.print(f"[dim]Schema: {schema}[/dim]\n")
+            try:
+                extraction_schema = get_schema(schema)
+            except ValueError as e:
+                console.print(f"[red]{e}[/red]")
+                console.print("\n[bold]Available schemas:[/bold]")
+                for s in list_schemas():
+                    console.print(f"  • {s}")
+                raise typer.Exit(1)
+        agent = DataExtractionAgent()
 
         with Progress(
             SpinnerColumn(),
@@ -2116,235 +2458,184 @@ def workflow(
             console=console,
         ) as progress:
             task = progress.add_task(
-                f"Fetching 0/{len(included_papers_to_fetch)}...",
-                total=len(included_papers_to_fetch),
+                f"Extracting 0/{len(included_papers)}...", total=len(included_papers)
             )
 
-            def update_fetch(current, total, paper):
-                progress.update(task, description=f"Fetching {current}/{total}...")
+            def update_extract(current, total):
+                progress.update(task, description=f"Extracting {current}/{total}...")
                 progress.advance(task)
 
-            fetch_results = _run_async(
-                fetcher.fetch_batch(
-                    included_papers_to_fetch,
-                    download=True,
-                    extract_text=True,
-                    progress_callback=update_fetch,
+            extraction_result = _run_async(
+                agent.extract_batch(
+                    included_papers,
+                    extraction_schema,
+                    triple_review=not fast_mode,
+                    use_full_text=use_full_text,
+                    progress_callback=update_extract,
                 )
             )
 
-        # Update papers with extracted text
-        papers_with_text = sum(1 for r in fetch_results if r.success and r.paper.has_full_text)
-        console.print(
-            f"[green]✓ Extracted text from {papers_with_text}/{len(included_papers_to_fetch)} papers[/green]"
-        )
-        console.print(f"[dim]Downloaded to {output_path / 'pdfs'}[/dim]\n")
+        # Save extraction results
+        with open(extraction_file, "w") as f:
+            json.dump(extraction_result.to_dict(), f, indent=2, default=str)
 
-        workflow_results["stages"]["fetch"] = {
-            "total_fetched": len(fetch_results),
-            "with_full_text": papers_with_text,
-            "success_rate": papers_with_text / len(included_papers_to_fetch)
-            if included_papers_to_fetch
-            else 0,
+        console.print(f"[green]✓ Extracted {extraction_result.successful_extractions} papers[/green]")
+        console.print(
+            f"[dim]Quality: {extraction_result.average_quality:.2f}, Cost: ${extraction_result.estimated_cost:.2f}[/dim]"
+        )
+        console.print(f"[dim]Saved to {extraction_file}[/dim]\n")
+
+        workflow_results["stages"]["extraction"] = {
+            "total_papers": extraction_result.total_papers,
+            "successful": extraction_result.successful_extractions,
+            "average_quality": extraction_result.average_quality,
+            "cost": extraction_result.estimated_cost,
+            "file": str(extraction_file),
         }
+        workflow_results["total_cost"] += extraction_result.estimated_cost
+        state_manager.add_cost(extraction_result.estimated_cost)
 
-    # Stage 4: Extraction
-    console.print(
-        f"[bold cyan]Stage {'4' if extract_text else '3'}/8:[/bold cyan] Data Extraction"
-    )
-    extraction_mode = "single-pass" if fast_mode else "triple-review"
-    text_mode = "full text" if use_full_text else "abstracts"
-    console.print(f"[dim]Extracting with {extraction_mode} mode using {text_mode}...[/dim]")
-
-    from arakis.agents.extractor import DataExtractionAgent
-    from arakis.extraction.schemas import detect_schema, get_schema, list_schemas
-
-    # Get included papers
-    included_ids = [d.paper_id for d in decisions if d.status.value == "include"]
-    included_papers = [p for p in papers if p.id in included_ids]
-
-    # Get extraction schema (auto-detect or explicit)
-    detected_schema_name = None
-    if schema == "auto":
-        # Auto-detect schema from research question and inclusion criteria
-        detection_text = f"{research_question} {include}"
-        detected_schema_name, confidence = detect_schema(detection_text)
-        console.print(
-            f"[dim]Schema: {detected_schema_name} (auto-detected, confidence: {confidence:.0%})[/dim]\n"
-        )
-        extraction_schema = get_schema(detected_schema_name)
-    else:
-        console.print(f"[dim]Schema: {schema}[/dim]\n")
-        try:
-            extraction_schema = get_schema(schema)
-        except ValueError as e:
-            console.print(f"[red]{e}[/red]")
-            console.print("\n[bold]Available schemas:[/bold]")
-            for s in list_schemas():
-                console.print(f"  • {s}")
-            raise typer.Exit(1)
-    agent = DataExtractionAgent()
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task(
-            f"Extracting 0/{len(included_papers)}...", total=len(included_papers)
+        # Save checkpoint
+        state_manager.complete_stage(
+            WorkflowStage.EXTRACTION,
+            output_file=str(extraction_file),
+            data=workflow_results["stages"]["extraction"],
         )
 
-        def update_extract(current, total):
-            progress.update(task, description=f"Extracting {current}/{total}...")
-            progress.advance(task)
-
-        extraction_result = _run_async(
-            agent.extract_batch(
-                included_papers,
-                extraction_schema,
-                triple_review=not fast_mode,
-                use_full_text=use_full_text,
-                progress_callback=update_extract,
-            )
-        )
-
-    # Save extraction results
-    extraction_file = output_path / "3_extraction_results.json"
-    with open(extraction_file, "w") as f:
-        json.dump(extraction_result.to_dict(), f, indent=2, default=str)
-
-    console.print(f"[green]✓ Extracted {extraction_result.successful_extractions} papers[/green]")
-    console.print(
-        f"[dim]Quality: {extraction_result.average_quality:.2f}, Cost: ${extraction_result.estimated_cost:.2f}[/dim]"
-    )
-    console.print(f"[dim]Saved to {extraction_file}[/dim]\n")
-
-    workflow_results["stages"]["extraction"] = {
-        "total_papers": extraction_result.total_papers,
-        "successful": extraction_result.successful_extractions,
-        "average_quality": extraction_result.average_quality,
-        "cost": extraction_result.estimated_cost,
-        "file": str(extraction_file),
-    }
-    workflow_results["total_cost"] += extraction_result.estimated_cost
-
-    # Stage 4: Analysis
-    analysis_file = None
+    # Stage 5: Analysis
+    analysis_file = output_path / "4_analysis_results.json"
     if not skip_analysis:
-        console.print("[bold cyan]Stage 4/8:[/bold cyan] Statistical Analysis")
-        console.print("[dim]Running analysis...[/dim]\n")
+        if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.ANALYSIS):
+            console.print("[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis [dim](cached)[/dim]")
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.ANALYSIS)
+            console.print(f"[green]✓ Analysis loaded from cache[/green]\n")
+            workflow_results["stages"]["analysis"] = stage_data
+        else:
+            console.print("[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis")
+            console.print("[dim]Running analysis...[/dim]\n")
 
-        from arakis.analysis.meta_analysis import MetaAnalysisEngine
-        from arakis.analysis.recommender import AnalysisRecommenderAgent
-        from arakis.models.analysis import AnalysisMethod, EffectMeasure, StudyData
+            state_manager.start_stage(WorkflowStage.ANALYSIS)
 
-        recommender = AnalysisRecommenderAgent()
+            from arakis.analysis.meta_analysis import MetaAnalysisEngine
+            from arakis.analysis.recommender import AnalysisRecommenderAgent
+            from arakis.models.analysis import AnalysisMethod, EffectMeasure, StudyData
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Analyzing data...", total=None)
-            recommendation = _run_async(recommender.recommend_tests(extraction_result, None))
+            recommender = AnalysisRecommenderAgent()
 
-        console.print(
-            f"[green]✓ Recommended tests: {len(recommendation.recommended_tests)}[/green]"
-        )
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Analyzing data...", total=None)
+                recommendation = _run_async(recommender.recommend_tests(extraction_result, None))
 
-        # Try meta-analysis if feasible
-        meta_result = None
-        if recommendation.data_characteristics.get("meta_analysis_feasible", False):
-            console.print("[dim]Performing meta-analysis...[/dim]")
+            console.print(
+                f"[green]✓ Recommended tests: {len(recommendation.recommended_tests)}[/green]"
+            )
 
-            studies = []
-            for paper in extraction_result.extractions:
-                study = StudyData(
-                    study_id=paper.paper_id,
-                    study_name=paper.paper_id,
-                    sample_size=paper.data.get("sample_size_total"),
-                    intervention_n=paper.data.get("sample_size_intervention"),
-                    control_n=paper.data.get("sample_size_control"),
-                    intervention_mean=paper.data.get("intervention_mean"),
-                    intervention_sd=paper.data.get("intervention_sd"),
-                    control_mean=paper.data.get("control_mean"),
-                    control_sd=paper.data.get("control_sd"),
-                    intervention_events=paper.data.get("intervention_events"),
-                    control_events=paper.data.get("control_events"),
-                )
-                studies.append(study)
+            # Try meta-analysis if feasible
+            meta_result = None
+            if recommendation.data_characteristics.get("meta_analysis_feasible", False):
+                console.print("[dim]Performing meta-analysis...[/dim]")
 
-            has_continuous = any(s.intervention_mean is not None for s in studies)
-            has_binary = any(s.intervention_events is not None for s in studies)
-
-            if has_continuous or has_binary:
-                effect_measure = (
-                    EffectMeasure.MEAN_DIFFERENCE if has_continuous else EffectMeasure.ODDS_RATIO
-                )
-                meta_engine = MetaAnalysisEngine()
-
-                try:
-                    meta_result = meta_engine.calculate_pooled_effect(
-                        studies=studies,
-                        method=AnalysisMethod.RANDOM_EFFECTS,
-                        effect_measure=effect_measure,
+                studies = []
+                for paper in extraction_result.extractions:
+                    study = StudyData(
+                        study_id=paper.paper_id,
+                        study_name=paper.paper_id,
+                        sample_size=paper.data.get("sample_size_total"),
+                        intervention_n=paper.data.get("sample_size_intervention"),
+                        control_n=paper.data.get("sample_size_control"),
+                        intervention_mean=paper.data.get("intervention_mean"),
+                        intervention_sd=paper.data.get("intervention_sd"),
+                        control_mean=paper.data.get("control_mean"),
+                        control_sd=paper.data.get("control_sd"),
+                        intervention_events=paper.data.get("intervention_events"),
+                        control_events=paper.data.get("control_events"),
                     )
-                    console.print(
-                        f"[green]  ✓ Meta-analysis: Effect={meta_result.pooled_effect:.3f}, p={meta_result.p_value:.4f}[/green]"
+                    studies.append(study)
+
+                has_continuous = any(s.intervention_mean is not None for s in studies)
+                has_binary = any(s.intervention_events is not None for s in studies)
+
+                if has_continuous or has_binary:
+                    effect_measure = (
+                        EffectMeasure.MEAN_DIFFERENCE if has_continuous else EffectMeasure.ODDS_RATIO
                     )
-                except Exception as e:
-                    console.print(f"[yellow]  Meta-analysis failed: {e}[/yellow]")
+                    meta_engine = MetaAnalysisEngine()
 
-        # Save analysis
-        analysis_file = output_path / "4_analysis_results.json"
-        analysis_data = {
-            "recommendation": {
-                "recommended_tests": [
-                    {
-                        "test_name": t.test_name,
-                        "test_type": t.test_type.value,
-                        "description": t.description,
-                        "parameters": t.parameters,
-                    }
-                    for t in recommendation.recommended_tests
-                ],
-                "rationale": recommendation.rationale,
-                "warnings": recommendation.warnings,
-            },
-        }
+                    try:
+                        meta_result = meta_engine.calculate_pooled_effect(
+                            studies=studies,
+                            method=AnalysisMethod.RANDOM_EFFECTS,
+                            effect_measure=effect_measure,
+                        )
+                        console.print(
+                            f"[green]  ✓ Meta-analysis: Effect={meta_result.pooled_effect:.3f}, p={meta_result.p_value:.4f}[/green]"
+                        )
+                    except Exception as e:
+                        console.print(f"[yellow]  Meta-analysis failed: {e}[/yellow]")
 
-        if meta_result:
-            analysis_data["meta_analysis"] = {
-                "outcome_name": meta_result.outcome_name,
-                "studies_included": int(meta_result.studies_included),
-                "total_sample_size": int(meta_result.total_sample_size),
-                "pooled_effect": float(meta_result.pooled_effect),
-                "p_value": float(meta_result.p_value),
-                "is_significant": bool(meta_result.is_significant),
-                "effect_measure": meta_result.effect_measure.value,
-                "heterogeneity": {
-                    "i_squared": float(meta_result.heterogeneity.i_squared),
+            # Save analysis
+            analysis_data = {
+                "recommendation": {
+                    "recommended_tests": [
+                        {
+                            "test_name": t.test_name,
+                            "test_type": t.test_type.value,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        }
+                        for t in recommendation.recommended_tests
+                    ],
+                    "rationale": recommendation.rationale,
+                    "warnings": recommendation.warnings,
                 },
             }
 
-        with open(analysis_file, "w") as f:
-            json.dump(analysis_data, f, indent=2)
+            if meta_result:
+                analysis_data["meta_analysis"] = {
+                    "outcome_name": meta_result.outcome_name,
+                    "studies_included": int(meta_result.studies_included),
+                    "total_sample_size": int(meta_result.total_sample_size),
+                    "pooled_effect": float(meta_result.pooled_effect),
+                    "p_value": float(meta_result.p_value),
+                    "is_significant": bool(meta_result.is_significant),
+                    "effect_measure": meta_result.effect_measure.value,
+                    "heterogeneity": {
+                        "i_squared": float(meta_result.heterogeneity.i_squared),
+                    },
+                }
 
-        console.print(f"[dim]Saved to {analysis_file}[/dim]\n")
+            with open(analysis_file, "w") as f:
+                json.dump(analysis_data, f, indent=2)
 
-        workflow_results["stages"]["analysis"] = {
-            "tests_recommended": len(recommendation.recommended_tests),
-            "meta_analysis": meta_result is not None,
-            "file": str(analysis_file),
-        }
+            console.print(f"[dim]Saved to {analysis_file}[/dim]\n")
 
-    # Stage 5: PRISMA Diagram
-    console.print("[bold cyan]Stage 5/8:[/bold cyan] PRISMA Diagram")
-    console.print("[dim]Generating diagram...[/dim]\n")
+            workflow_results["stages"]["analysis"] = {
+                "tests_recommended": len(recommendation.recommended_tests),
+                "meta_analysis": meta_result is not None,
+                "file": str(analysis_file),
+            }
+
+            # Save checkpoint
+            state_manager.complete_stage(
+                WorkflowStage.ANALYSIS,
+                output_file=str(analysis_file),
+                data=workflow_results["stages"]["analysis"],
+            )
+    else:
+        state_manager.skip_stage(WorkflowStage.ANALYSIS, "skip_analysis enabled")
+
+    # Stage 6: PRISMA Diagram
+    prisma_file = output_path / "5_prisma_diagram.png"
+    flow = None
 
     from arakis.models.visualization import PRISMAFlow
     from arakis.visualization.prisma import PRISMADiagramGenerator
 
+    # Build PRISMA flow data (needed for both cached and fresh runs)
     flow = PRISMAFlow(
         records_identified_total=search_result.prisma_flow.total_identified,
         records_identified_databases={
@@ -2359,155 +2650,223 @@ def workflow(
         reports_included=summary["included"],
     )
 
-    generator = PRISMADiagramGenerator(output_dir=str(output_path))
-    generator.generate(flow, "5_prisma_diagram.png")
-    prisma_file = output_path / "5_prisma_diagram.png"
+    if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.PRISMA):
+        console.print("[bold cyan]Stage 6/8:[/bold cyan] PRISMA Diagram [dim](cached)[/dim]")
+        console.print(f"[green]✓ PRISMA diagram loaded from cache[/green]\n")
+        workflow_results["stages"]["prisma"] = {"file": str(prisma_file)}
+    else:
+        console.print("[bold cyan]Stage 6/8:[/bold cyan] PRISMA Diagram")
+        console.print("[dim]Generating diagram...[/dim]\n")
 
-    console.print("[green]✓ PRISMA diagram generated[/green]")
-    console.print(f"[dim]Saved to {prisma_file}[/dim]\n")
+        state_manager.start_stage(WorkflowStage.PRISMA)
 
-    workflow_results["stages"]["prisma"] = {
-        "file": str(prisma_file),
-    }
+        generator = PRISMADiagramGenerator(output_dir=str(output_path))
+        generator.generate(flow, "5_prisma_diagram.png")
 
-    # Stage 6 & 7: Writing
+        console.print("[green]✓ PRISMA diagram generated[/green]")
+        console.print(f"[dim]Saved to {prisma_file}[/dim]\n")
+
+        workflow_results["stages"]["prisma"] = {"file": str(prisma_file)}
+
+        # Save checkpoint
+        state_manager.complete_stage(
+            WorkflowStage.PRISMA,
+            output_file=str(prisma_file),
+            data=workflow_results["stages"]["prisma"],
+        )
+
+    # Stage 7: Writing Introduction
+    intro_file = output_path / "6_introduction.md"
     if not skip_writing:
-        console.print("[bold cyan]Stage 6/8:[/bold cyan] Writing Introduction")
-        console.print("[dim]Generating introduction section...[/dim]\n")
-
-        from arakis.agents.intro_writer import IntroductionWriterAgent
-
-        intro_writer = IntroductionWriterAgent()
-
-        # Check if Perplexity is configured
-        use_perplexity = intro_writer.perplexity.is_configured
-        if use_perplexity:
-            console.print("[cyan]Using Perplexity API for literature research[/cyan]")
+        if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.INTRODUCTION):
+            console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Introduction [dim](cached)[/dim]")
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.INTRODUCTION)
+            console.print(f"[green]✓ Introduction loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+            workflow_results["stages"]["introduction"] = stage_data
         else:
-            console.print("[dim]Perplexity API not configured - using provided context[/dim]")
+            console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Introduction")
+            console.print("[dim]Generating introduction section...[/dim]\n")
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Writing introduction...", total=None)
-            intro_section, cited_papers = _run_async(
-                intro_writer.write_complete_introduction(
-                    research_question=research_question,
-                    literature_context=None,
-                    retriever=None,
-                    use_perplexity=use_perplexity,
-                )
-            )
+            state_manager.start_stage(WorkflowStage.INTRODUCTION)
 
-        intro_file = output_path / "6_introduction.md"
-        with open(intro_file, "w") as f:
-            f.write(intro_section.to_markdown())
+            from arakis.agents.intro_writer import IntroductionWriterAgent
 
-        # Validate citations
-        validation = intro_writer.validate_citations(intro_section)
+            intro_writer = IntroductionWriterAgent()
 
-        # Save references if any papers were cited
-        if cited_papers:
-            ref_file = output_path / "6_introduction_references.md"
-            ref_text = intro_writer.generate_reference_list(intro_section)
-            with open(ref_file, "w") as f:
-                f.write("# References\n\n")
-                f.write(ref_text)
-
-            # Report citation validation status
-            if validation["valid"]:
-                console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
-                console.print(f"[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+            # Check if Perplexity is configured
+            use_perplexity = intro_writer.perplexity.is_configured
+            if use_perplexity:
+                console.print("[cyan]Using Perplexity API for literature research[/cyan]")
             else:
-                console.print(f"[yellow]⚠ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/yellow]")
-                console.print(f"[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
+                console.print("[dim]Perplexity API not configured - using provided context[/dim]")
 
-            console.print(f"[dim]Saved to {intro_file}[/dim]")
-            console.print(f"[dim]References saved to {ref_file}[/dim]\n")
-        else:
-            console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]")
-            console.print(f"[dim]Saved to {intro_file}[/dim]\n")
-
-        workflow_results["stages"]["introduction"] = {
-            "word_count": intro_section.total_word_count,
-            "references_count": len(cited_papers) if cited_papers else 0,
-            "file": str(intro_file),
-        }
-        workflow_results["total_cost"] += 1.0  # Estimate
-
-        # Results section
-        console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Results")
-        console.print("[dim]Generating results section...[/dim]\n")
-
-        from arakis.agents.results_writer import ResultsWriterAgent
-
-        results_writer = ResultsWriterAgent()
-
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Writing results...", total=None)
-            results_section = _run_async(
-                results_writer.write_complete_results_section(
-                    prisma_flow=flow,
-                    included_papers=included_papers,
-                    meta_analysis_result=None,
-                    outcome_name="primary outcome",
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Writing introduction...", total=None)
+                intro_section, cited_papers = _run_async(
+                    intro_writer.write_complete_introduction(
+                        research_question=research_question,
+                        literature_context=None,
+                        retriever=None,
+                        use_perplexity=use_perplexity,
+                    )
                 )
+
+            with open(intro_file, "w") as f:
+                f.write(intro_section.to_markdown())
+
+            # Validate citations
+            validation = intro_writer.validate_citations(intro_section)
+
+            # Save references if any papers were cited
+            if cited_papers:
+                ref_file = output_path / "6_introduction_references.md"
+                ref_text = intro_writer.generate_reference_list(intro_section)
+                with open(ref_file, "w") as f:
+                    f.write("# References\n\n")
+                    f.write(ref_text)
+
+                # Report citation validation status
+                if validation["valid"]:
+                    console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
+                    console.print(f"[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+                else:
+                    console.print(f"[yellow]⚠ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/yellow]")
+                    console.print(f"[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
+
+                console.print(f"[dim]Saved to {intro_file}[/dim]")
+                console.print(f"[dim]References saved to {ref_file}[/dim]\n")
+            else:
+                console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]")
+                console.print(f"[dim]Saved to {intro_file}[/dim]\n")
+
+            workflow_results["stages"]["introduction"] = {
+                "word_count": intro_section.total_word_count,
+                "references_count": len(cited_papers) if cited_papers else 0,
+                "file": str(intro_file),
+            }
+            workflow_results["total_cost"] += 1.0  # Estimate
+            state_manager.add_cost(1.0)
+
+            # Save checkpoint
+            state_manager.complete_stage(
+                WorkflowStage.INTRODUCTION,
+                output_file=str(intro_file),
+                data=workflow_results["stages"]["introduction"],
             )
 
+        # Stage 8: Writing Results
         results_file = output_path / "7_results.md"
-        with open(results_file, "w") as f:
-            f.write(results_section.to_markdown())
+        if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.RESULTS):
+            console.print("[bold cyan]Stage 8/8:[/bold cyan] Writing Results [dim](cached)[/dim]")
+            stage_data = state_manager.state.get_stage_data(WorkflowStage.RESULTS)
+            console.print(f"[green]✓ Results loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+            workflow_results["stages"]["results"] = stage_data
+        else:
+            console.print("[bold cyan]Stage 8/8:[/bold cyan] Writing Results")
+            console.print("[dim]Generating results section...[/dim]\n")
 
-        console.print(f"[green]✓ Results: {results_section.total_word_count} words[/green]")
-        console.print(f"[dim]Saved to {results_file}[/dim]\n")
+            state_manager.start_stage(WorkflowStage.RESULTS)
 
-        workflow_results["stages"]["results"] = {
-            "word_count": results_section.total_word_count,
-            "file": str(results_file),
+            from arakis.agents.results_writer import ResultsWriterAgent
+
+            results_writer = ResultsWriterAgent()
+
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Writing results...", total=None)
+                results_section = _run_async(
+                    results_writer.write_complete_results_section(
+                        prisma_flow=flow,
+                        included_papers=included_papers,
+                        meta_analysis_result=None,
+                        outcome_name="primary outcome",
+                    )
+                )
+
+            with open(results_file, "w") as f:
+                f.write(results_section.to_markdown())
+
+            console.print(f"[green]✓ Results: {results_section.total_word_count} words[/green]")
+            console.print(f"[dim]Saved to {results_file}[/dim]\n")
+
+            workflow_results["stages"]["results"] = {
+                "word_count": results_section.total_word_count,
+                "file": str(results_file),
+            }
+            workflow_results["total_cost"] += 0.7  # Estimate
+            state_manager.add_cost(0.7)
+
+            # Save checkpoint
+            state_manager.complete_stage(
+                WorkflowStage.RESULTS,
+                output_file=str(results_file),
+                data=workflow_results["stages"]["results"],
+            )
+    else:
+        state_manager.skip_stage(WorkflowStage.INTRODUCTION, "skip_writing enabled")
+        state_manager.skip_stage(WorkflowStage.RESULTS, "skip_writing enabled")
+
+    # Stage 9: Manuscript Assembly
+    manuscript_path = output_path / "8_manuscript.md"
+    if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.MANUSCRIPT):
+        console.print("[bold cyan]Stage 9/9:[/bold cyan] Manuscript Assembly [dim](cached)[/dim]")
+        stage_data = state_manager.state.get_stage_data(WorkflowStage.MANUSCRIPT)
+        console.print(f"[green]✓ Manuscript loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+        workflow_results["stages"]["manuscript"] = stage_data
+    else:
+        console.print("[bold cyan]Stage 9/9:[/bold cyan] Manuscript Assembly")
+        console.print("[dim]Assembling complete manuscript...[/dim]\n")
+
+        state_manager.start_stage(WorkflowStage.MANUSCRIPT)
+
+        from arakis.manuscript import ManuscriptAssembler
+
+        assembler = ManuscriptAssembler(output_path)
+
+        # Load extraction results
+        extraction_data = assembler.load_extraction_results()
+
+        # Load included papers for references
+        reference_papers = assembler.load_included_papers()
+
+        # Assemble manuscript
+        manuscript, manuscript_path = assembler.assemble(
+            research_question=research_question,
+            extraction_results=extraction_data,
+            included_papers=reference_papers,
+            prisma_flow=flow if flow else None,
+            keywords=[c.strip() for c in include.split(",")][:5],  # Use inclusion criteria as keywords
+        )
+
+        console.print(f"[green]✓ Manuscript assembled: {manuscript.word_count} words[/green]")
+        console.print(f"[green]  Tables: {len(manuscript.tables)}, Figures: {len(manuscript.figures)}[/green]")
+        console.print(f"[green]  References: {len(manuscript.references)}[/green]")
+        console.print(f"[dim]Saved to {manuscript_path}[/dim]\n")
+
+        workflow_results["stages"]["manuscript"] = {
+            "word_count": manuscript.word_count,
+            "tables": len(manuscript.tables),
+            "figures": len(manuscript.figures),
+            "references": len(manuscript.references),
+            "file": str(manuscript_path),
         }
-        workflow_results["total_cost"] += 0.7  # Estimate
 
-    # Stage 8: Manuscript Assembly
-    console.print("[bold cyan]Stage 8/8:[/bold cyan] Manuscript Assembly")
-    console.print("[dim]Assembling complete manuscript...[/dim]\n")
+        # Save checkpoint
+        state_manager.complete_stage(
+            WorkflowStage.MANUSCRIPT,
+            output_file=str(manuscript_path),
+            data=workflow_results["stages"]["manuscript"],
+        )
 
-    from arakis.manuscript import ManuscriptAssembler
-
-    assembler = ManuscriptAssembler(output_path)
-
-    # Load extraction results
-    extraction_data = assembler.load_extraction_results()
-
-    # Load included papers for references
-    reference_papers = assembler.load_included_papers()
-
-    # Assemble manuscript
-    manuscript, manuscript_path = assembler.assemble(
-        research_question=research_question,
-        extraction_results=extraction_data,
-        included_papers=reference_papers,
-        prisma_flow=flow if "flow" in dir() else None,
-        keywords=[c.strip() for c in include.split(",")][:5],  # Use inclusion criteria as keywords
-    )
-
-    console.print(f"[green]✓ Manuscript assembled: {manuscript.word_count} words[/green]")
-    console.print(f"[green]  Tables: {len(manuscript.tables)}, Figures: {len(manuscript.figures)}[/green]")
-    console.print(f"[green]  References: {len(manuscript.references)}[/green]")
-    console.print(f"[dim]Saved to {manuscript_path}[/dim]\n")
-
-    workflow_results["stages"]["manuscript"] = {
-        "word_count": manuscript.word_count,
-        "tables": len(manuscript.tables),
-        "figures": len(manuscript.figures),
-        "references": len(manuscript.references),
-        "file": str(manuscript_path),
-    }
+    # Mark workflow as completed
+    state_manager.mark_completed()
 
     # Final summary
     end_time = datetime.now()

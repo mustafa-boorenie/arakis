@@ -406,9 +406,9 @@ Auto-detect and apply appropriate tool:
 - [x] All figures saved to ./figures/ directory
 
 ### State Management
-- [ ] State saved after each operation
-- [ ] Resume from any point possible
-- [ ] No data loss on interruption
+- [x] State saved after each operation
+- [x] Resume from any point possible
+- [x] No data loss on interruption
 
 ---
 
