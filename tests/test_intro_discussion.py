@@ -307,19 +307,21 @@ class TestDiscussionWriter:
         with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
             mock_create.side_effect = mock_responses
 
-            section = await writer.write_complete_discussion(
-                meta_analysis_result=sample_meta_analysis,
-                outcome_name="Mortality",
-                literature_context=sample_papers,
-            )
+            # Mock the rate limiter to avoid delays
+            with patch.object(writer.rate_limiter, "wait", new_callable=AsyncMock):
+                section = await writer.write_complete_discussion(
+                    meta_analysis_result=sample_meta_analysis,
+                    outcome_name="Mortality",
+                    literature_context=sample_papers,
+                )
 
-            assert section.title == "Discussion"
-            assert len(section.subsections) == 4
-            assert section.subsections[0].title == "Summary of Main Findings"
-            assert section.subsections[1].title == "Comparison with Existing Literature"
-            assert section.subsections[2].title == "Limitations"
-            assert section.subsections[3].title == "Implications"
-            assert mock_create.call_count == 4
+                assert section.title == "Discussion"
+                assert len(section.subsections) == 4
+                assert section.subsections[0].title == "Summary of Main Findings"
+                assert section.subsections[1].title == "Comparison with Existing Literature"
+                assert section.subsections[2].title == "Limitations"
+                assert section.subsections[3].title == "Implications"
+                assert mock_create.call_count == 4
 
     def test_cost_estimation(self):
         """Test cost estimation."""
