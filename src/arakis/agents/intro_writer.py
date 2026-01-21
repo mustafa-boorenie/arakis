@@ -9,10 +9,13 @@ than the specific papers being reviewed.
 """
 
 import json
+import logging
 import time
 from typing import Any, Optional, Union
 
 from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 from arakis.clients.perplexity import PerplexityClient
 from arakis.config import get_settings
@@ -202,9 +205,13 @@ class IntroductionWriterAgent:
                 # Register papers with reference manager
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except Exception:
+                logger.debug(f"Perplexity returned {len(papers)} papers for background")
+            except Exception as e:
                 # Fall back to other methods if Perplexity fails
-                pass
+                logger.warning(
+                    f"Perplexity API failed for background literature, falling back to "
+                    f"provided papers: {type(e).__name__}: {e}"
+                )
 
         if not papers and literature_context:
             # Use provided papers
@@ -303,8 +310,12 @@ Write only the background text, no headings."""
 
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except Exception:
-                pass
+                logger.debug(f"Perplexity returned {len(papers)} papers for rationale")
+            except Exception as e:
+                logger.warning(
+                    f"Perplexity API failed for rationale literature, falling back to "
+                    f"provided papers: {type(e).__name__}: {e}"
+                )
 
         if not papers and existing_reviews:
             papers = existing_reviews[:3]
@@ -606,7 +617,12 @@ Write only the objectives text, no headings."""
         return "\n".join(lines)
 
     def _get_numeric_id_mapping(self, papers: list[Paper]) -> dict[int, str]:
-        """Get mapping from numeric IDs to paper best_identifier.
+        """Get mapping from numeric IDs to paper IDs.
+
+        Note: We use paper.id instead of paper.best_identifier to avoid
+        DOI-based IDs that would be incorrectly removed by DOI cleanup patterns
+        in _generate_with_validation. Perplexity papers have IDs like
+        'perplexity_abc123' which are safe from DOI cleanup.
 
         Args:
             papers: List of papers
@@ -614,7 +630,7 @@ Write only the objectives text, no headings."""
         Returns:
             Dict mapping 1, 2, 3... to paper IDs
         """
-        return {i + 1: paper.best_identifier for i, paper in enumerate(papers)}
+        return {i + 1: paper.id for i, paper in enumerate(papers)}
 
     async def _generate_with_validation(
         self,
