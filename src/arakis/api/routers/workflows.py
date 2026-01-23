@@ -10,11 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.api.dependencies import get_current_user, get_db
 from arakis.api.schemas.workflow import (
+    StageCheckpoint,
+    StageRerunRequest,
+    StageRerunResponse,
     WorkflowCreate,
     WorkflowList,
     WorkflowResponse,
 )
-from arakis.database.models import User, Workflow
+from arakis.database.models import User, Workflow, WorkflowStageCheckpoint, WorkflowFigure
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -100,7 +103,7 @@ async def create_workflow(
         workflow_data=workflow_data,
     )
 
-    return WorkflowResponse.model_validate(workflow)
+    return await _build_workflow_response(workflow, db)
 
 
 @router.get("/", response_model=WorkflowList)
@@ -197,7 +200,7 @@ async def get_workflow(
             detail=f"Workflow {workflow_id} not found",
         )
 
-    return WorkflowResponse.model_validate(workflow)
+    return await _build_workflow_response(workflow, db)
 
 
 @router.delete("/{workflow_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -281,7 +284,286 @@ async def claim_workflow(
     await db.commit()
     await db.refresh(workflow)
 
-    return WorkflowResponse.model_validate(workflow)
+    return await _build_workflow_response(workflow, db)
+
+
+# Helper function to build workflow response with stages and figures
+async def _build_workflow_response(workflow: Workflow, db: AsyncSession) -> WorkflowResponse:
+    """Build WorkflowResponse with stages and figure URLs."""
+    # Get stage checkpoints
+    result = await db.execute(
+        select(WorkflowStageCheckpoint)
+        .where(WorkflowStageCheckpoint.workflow_id == workflow.id)
+        .order_by(WorkflowStageCheckpoint.started_at)
+    )
+    checkpoints = result.scalars().all()
+
+    stages = [
+        StageCheckpoint(
+            stage=cp.stage,
+            status=cp.status,
+            started_at=cp.started_at,
+            completed_at=cp.completed_at,
+            retry_count=cp.retry_count,
+            error_message=cp.error_message,
+            cost=cp.cost or 0.0,
+        )
+        for cp in checkpoints
+    ]
+
+    # Get figure URLs
+    result = await db.execute(
+        select(WorkflowFigure)
+        .where(WorkflowFigure.workflow_id == workflow.id)
+    )
+    figures = result.scalars().all()
+
+    forest_plot_url = None
+    funnel_plot_url = None
+    prisma_url = None
+
+    for fig in figures:
+        if fig.figure_type == "forest_plot":
+            forest_plot_url = fig.r2_url
+        elif fig.figure_type == "funnel_plot":
+            funnel_plot_url = fig.r2_url
+        elif fig.figure_type == "prisma_flow":
+            prisma_url = fig.r2_url
+
+    return WorkflowResponse(
+        id=workflow.id,
+        research_question=workflow.research_question,
+        inclusion_criteria=workflow.inclusion_criteria,
+        exclusion_criteria=workflow.exclusion_criteria,
+        databases=workflow.databases,
+        status=workflow.status,
+        current_stage=workflow.current_stage,
+        papers_found=workflow.papers_found or 0,
+        papers_screened=workflow.papers_screened or 0,
+        papers_included=workflow.papers_included or 0,
+        total_cost=workflow.total_cost or 0.0,
+        created_at=workflow.created_at,
+        completed_at=workflow.completed_at,
+        error_message=workflow.error_message,
+        needs_user_action=workflow.needs_user_action or False,
+        action_required=workflow.action_required,
+        meta_analysis_feasible=workflow.meta_analysis_feasible,
+        stages=stages,
+        forest_plot_url=forest_plot_url,
+        funnel_plot_url=funnel_plot_url,
+        prisma_url=prisma_url,
+    )
+
+
+@router.get("/{workflow_id}/stages", response_model=list[StageCheckpoint])
+async def get_stage_checkpoints(
+    workflow_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Get all stage checkpoints for a workflow.
+
+    Returns the status, timing, and error information for each stage.
+    """
+    # Verify ownership
+    query = select(Workflow).where(Workflow.id == workflow_id)
+    if current_user:
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found",
+        )
+
+    # Get checkpoints
+    result = await db.execute(
+        select(WorkflowStageCheckpoint)
+        .where(WorkflowStageCheckpoint.workflow_id == workflow_id)
+        .order_by(WorkflowStageCheckpoint.started_at)
+    )
+    checkpoints = result.scalars().all()
+
+    return [
+        StageCheckpoint(
+            stage=cp.stage,
+            status=cp.status,
+            started_at=cp.started_at,
+            completed_at=cp.completed_at,
+            retry_count=cp.retry_count,
+            error_message=cp.error_message,
+            cost=cp.cost or 0.0,
+        )
+        for cp in checkpoints
+    ]
+
+
+@router.post("/{workflow_id}/stages/{stage}/rerun", response_model=StageRerunResponse)
+async def rerun_stage(
+    workflow_id: str,
+    stage: str,
+    request: Request,
+    rerun_request: StageRerunRequest = None,
+    background_tasks: BackgroundTasks = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Re-run a specific stage of a workflow.
+
+    This allows you to retry a failed stage or re-run a completed stage
+    with modified input data.
+    """
+    from arakis.workflow.orchestrator import WorkflowOrchestrator
+
+    # Verify ownership
+    query = select(Workflow).where(Workflow.id == workflow_id)
+    if current_user:
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found",
+        )
+
+    # Validate stage
+    valid_stages = [
+        "search", "screen", "pdf_fetch", "extract", "rob",
+        "analysis", "prisma", "tables", "introduction",
+        "methods", "results", "discussion"
+    ]
+    if stage not in valid_stages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid stage: {stage}. Must be one of: {', '.join(valid_stages)}",
+        )
+
+    try:
+        orchestrator = WorkflowOrchestrator(db)
+        input_override = rerun_request.input_override if rerun_request else None
+        result = await orchestrator.rerun_stage(workflow_id, stage, input_override)
+
+        return StageRerunResponse(
+            success=result.success,
+            stage=stage,
+            output_data=result.output_data if result.success else None,
+            error=result.error,
+            cost=result.cost,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to re-run stage: {str(e)}",
+        )
+
+
+@router.post("/{workflow_id}/resume", response_model=WorkflowResponse)
+async def resume_workflow(
+    workflow_id: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    """
+    Resume a paused workflow after user action.
+
+    Use this endpoint when a workflow is in 'needs_review' status
+    and you're ready to continue processing.
+    """
+    # Verify ownership
+    query = select(Workflow).where(Workflow.id == workflow_id)
+    if current_user:
+        query = query.where(Workflow.user_id == current_user.id)
+    else:
+        session_id = request.cookies.get("arakis_session")
+        if not session_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+        query = query.where(Workflow.session_id == session_id)
+
+    result = await db.execute(query)
+    workflow = result.scalar_one_or_none()
+    if not workflow:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Workflow {workflow_id} not found",
+        )
+
+    if workflow.status != "needs_review":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Workflow is not paused. Current status: {workflow.status}",
+        )
+
+    # Start resume in background
+    background_tasks.add_task(
+        execute_workflow_resume,
+        workflow_id=workflow_id,
+    )
+
+    # Update status to running
+    workflow.status = "running"
+    workflow.needs_user_action = False
+    workflow.action_required = None
+    await db.commit()
+    await db.refresh(workflow)
+
+    return await _build_workflow_response(workflow, db)
+
+
+# Background task for resuming workflow
+async def execute_workflow_resume(workflow_id: str):
+    """Resume workflow execution in background."""
+    from arakis.database.connection import AsyncSessionLocal
+    from arakis.workflow.orchestrator import WorkflowOrchestrator
+
+    async with AsyncSessionLocal() as db:
+        try:
+            orchestrator = WorkflowOrchestrator(db)
+            await orchestrator.resume_workflow(workflow_id)
+        except Exception as e:
+            import traceback
+            print(f"[{workflow_id}] Resume failed: {e}")
+            print(traceback.format_exc())
+
+            # Mark as failed
+            result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
+            workflow = result.scalar_one_or_none()
+            if workflow:
+                workflow.status = "failed"
+                workflow.error_message = str(e)
+                await db.commit()
 
 
 # Background task execution function
@@ -289,27 +571,26 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
     """
     Execute complete systematic review workflow pipeline in background.
 
-    Full Pipeline:
-    1. Search databases (SearchOrchestrator)
-    2. Screen papers (ScreeningAgent with dual-review)
-    3. Check for conflicts → pause if needed
-    4. Fetch full texts (PaperFetcher)
-    5. Extract data (DataExtractionAgent)
-    6. Run statistical analysis (MetaAnalysisEngine)
-    7. Generate visualizations (PRISMA, forest plots)
-    8. Write all manuscript sections
-    9. Assemble final manuscript
+    Uses WorkflowOrchestrator to run 12 stages with checkpointing:
+    1. search - Multi-database literature search
+    2. screen - AI-powered paper screening (NO 50-paper limit)
+    3. pdf_fetch - Download PDFs and extract text
+    4. extract - Structured data extraction from papers
+    5. rob - Risk of Bias assessment (auto-detect tool)
+    6. analysis - Meta-analysis with forest/funnel plots
+    7. prisma - Flow diagram generation
+    8. tables - Generate all 3 tables (characteristics, RoB, GRADE)
+    9. introduction - Write introduction section
+    10. methods - Write methods section
+    11. results - Write results section
+    12. discussion - Write discussion section
 
     Note: This function runs in a background task with its own DB session.
     """
-    import os
     import traceback
-    from dataclasses import asdict, is_dataclass
 
     from arakis.database.connection import AsyncSessionLocal
-    from arakis.database.models import Manuscript, Paper, ScreeningDecision
-
-    total_cost = 0.0
+    from arakis.workflow.orchestrator import WorkflowOrchestrator
 
     async with AsyncSessionLocal() as db:
         try:
@@ -317,756 +598,38 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
             result = await db.execute(select(Workflow).where(Workflow.id == workflow_id))
             workflow = result.scalar_one()
             workflow.status = "running"
-            workflow.current_stage = "searching"
             await db.commit()
 
-            # Import modules here to avoid circular imports
-            from arakis.agents.screener import ScreeningAgent
-            from arakis.orchestrator import SearchOrchestrator
-
-            # ============================================================
-            # STAGE 1: Search Databases
-            # ============================================================
-            print(f"[{workflow_id}] Stage 1: Searching databases...")
-            orchestrator = SearchOrchestrator()
-            search_results = await orchestrator.comprehensive_search(
-                research_question=workflow_data.research_question,
-                databases=workflow_data.databases,
-                max_results_per_query=workflow_data.max_results_per_query,
-            )
-
-            # Save papers to database
-            paper_map = {}  # Map paper ID to paper object for later use
-            for paper in search_results.papers:
-                authors_json = None
-                if paper.authors:
-                    authors_json = [asdict(a) if is_dataclass(a) else a for a in paper.authors]
-
-                paper_identifier = paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
-                unique_paper_id = f"{workflow_id}_{paper_identifier}"
-
-                db_paper = Paper(
-                    id=unique_paper_id,
-                    workflow_id=workflow_id,
-                    doi=paper.doi,
-                    pmid=paper.pmid,
-                    pmcid=paper.pmcid,
-                    arxiv_id=paper.arxiv_id,
-                    s2_id=paper.s2_id,
-                    openalex_id=paper.openalex_id,
-                    title=paper.title,
-                    abstract=paper.abstract,
-                    journal=paper.journal,
-                    year=paper.year,
-                    authors=authors_json,
-                    keywords=paper.keywords,
-                    mesh_terms=paper.mesh_terms,
-                    pdf_url=paper.pdf_url,
-                    open_access=paper.open_access,
-                    source=paper.source,
-                    source_url=paper.source_url,
-                    retrieved_at=paper.retrieved_at or datetime.now(timezone.utc),
-                )
-                db.add(db_paper)
-                paper_map[unique_paper_id] = paper
-
-            workflow.papers_found = len(search_results.papers)
-            await db.commit()
-            print(f"[{workflow_id}] Found {workflow.papers_found} papers")
-
-            # ============================================================
-            # STAGE 2: Screen Papers
-            # ============================================================
-            print(f"[{workflow_id}] Stage 2: Screening papers...")
-            workflow.current_stage = "screening"
-            await db.commit()
-
-            from arakis.models.screening import ScreeningCriteria
-
-            screener = ScreeningAgent()
-            dual_review = not workflow_data.fast_mode
-
-            criteria = ScreeningCriteria(
-                inclusion=[c.strip() for c in workflow_data.inclusion_criteria.split(",")],
-                exclusion=[c.strip() for c in workflow_data.exclusion_criteria.split(",")],
-            )
-
-            screening_decisions = []
-            conflicts = []
-            max_screen = min(len(search_results.papers), 50)  # Limit for cost control
-
-            for i, paper in enumerate(search_results.papers[:max_screen]):
-                decision = await screener.screen_paper(
-                    paper=paper,
-                    criteria=criteria,
-                    dual_review=dual_review,
-                )
-
-                paper_identifier = paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
-                unique_paper_id = f"{workflow_id}_{paper_identifier}"
-
-                # Serialize second_opinion to dict if it exists (it's a ScreeningDecision dataclass)
-                second_opinion_data = None
-                if decision.second_opinion:
-                    second_opinion_data = {
-                        "status": str(decision.second_opinion.status.value)
-                        if hasattr(decision.second_opinion.status, "value")
-                        else str(decision.second_opinion.status),
-                        "reason": decision.second_opinion.reason,
-                        "confidence": decision.second_opinion.confidence,
-                        "matched_inclusion": decision.second_opinion.matched_inclusion,
-                        "matched_exclusion": decision.second_opinion.matched_exclusion,
-                    }
-
-                # Convert status enum to string value
-                status_value = (
-                    decision.status.value
-                    if hasattr(decision.status, "value")
-                    else str(decision.status)
-                )
-
-                db_decision = ScreeningDecision(
-                    workflow_id=workflow_id,
-                    paper_id=unique_paper_id,
-                    status=status_value,
-                    reason=decision.reason,
-                    confidence=decision.confidence,
-                    matched_inclusion=decision.matched_inclusion,
-                    matched_exclusion=decision.matched_exclusion,
-                    is_conflict=decision.is_conflict,
-                    second_opinion=second_opinion_data,
-                    created_at=datetime.now(timezone.utc),
-                )
-                db.add(db_decision)
-                screening_decisions.append((unique_paper_id, decision))
-
-                if decision.is_conflict:
-                    conflicts.append(unique_paper_id)
-
-                # Update progress
-                if (i + 1) % 10 == 0:
-                    workflow.papers_screened = i + 1
-                    await db.commit()
-                    print(f"[{workflow_id}] Screened {i + 1}/{max_screen} papers")
-
-            workflow.papers_screened = len(screening_decisions)
-            total_cost += 0.02 * len(screening_decisions)  # ~$0.02 per screening
-            await db.commit()
-
-            # Get included papers (ScreeningStatus values are lowercase: "include", "exclude", "maybe")
-            from arakis.models.screening import ScreeningStatus
-
-            included_paper_ids = [
-                pid
-                for pid, dec in screening_decisions
-                if dec.status == ScreeningStatus.INCLUDE
-                or (dec.status == ScreeningStatus.MAYBE and not dec.is_conflict)
-            ]
-            workflow.papers_included = len(included_paper_ids)
-            await db.commit()
-
-            print(
-                f"[{workflow_id}] Screening complete: {workflow.papers_included} included, {len(conflicts)} conflicts"
-            )
-
-            # If there are conflicts, we could pause here for review
-            # For now, continue with conservative approach (MAYBE → exclude)
-            if conflicts:
-                print(
-                    f"[{workflow_id}] Note: {len(conflicts)} screening conflicts will use conservative resolution"
-                )
-
-            # ============================================================
-            # STAGE 3: Generate PRISMA Flow Data
-            # ============================================================
-            print(f"[{workflow_id}] Stage 3: Generating PRISMA flow...")
-            workflow.current_stage = "analyzing"
-            await db.commit()
-
-            from arakis.models.visualization import PRISMAFlow
-
-            # Get duplicates removed from search results (paper.PRISMAFlow uses 'duplicates_removed')
-            duplicates_removed = 0
-            if search_results.prisma_flow:
-                duplicates_removed = getattr(search_results.prisma_flow, "duplicates_removed", 0)
-
-            prisma_flow = PRISMAFlow(
-                records_identified_total=workflow.papers_found,
-                records_identified_databases={
-                    db: workflow.papers_found // len(workflow_data.databases)
-                    for db in workflow_data.databases
-                },
-                records_removed_duplicates=duplicates_removed,
-                records_screened=workflow.papers_screened,
-                records_excluded=workflow.papers_screened - workflow.papers_included,
-                studies_included=workflow.papers_included,
-            )
-
-            # ============================================================
-            # STAGE 4: Data Extraction
-            # ============================================================
-            print(f"[{workflow_id}] Stage 4: Extracting data from papers...")
-            workflow.current_stage = "extracting"
-            await db.commit()
-
-            extraction_results = {}  # Map paper_id -> extracted data
-            schema_name = None
-            extraction_schema = None
-
-            # Get included papers for extraction
-            included_papers = [paper_map.get(pid) for pid in included_paper_ids if pid in paper_map]
-            included_papers = [p for p in included_papers if p is not None]
-
-            if included_papers:
-                try:
-                    from arakis.agents.extractor import DataExtractionAgent
-                    from arakis.extraction.schemas import detect_schema, get_schema
-                    from arakis.database.models import Extraction
-
-                    # Auto-detect schema from research question and criteria
-                    detection_text = (
-                        f"{workflow_data.research_question} {workflow_data.inclusion_criteria}"
-                    )
-                    schema_name, confidence = detect_schema(detection_text)
-                    extraction_schema = get_schema(schema_name)
-                    print(
-                        f"[{workflow_id}] Detected schema: {schema_name} (confidence: {confidence:.0%})"
-                    )
-
-                    # Extract data from included papers
-                    extractor = DataExtractionAgent()
-                    # Use single-pass in fast mode, triple-review otherwise
-                    triple_review = not workflow_data.fast_mode
-
-                    extraction_result = await extractor.extract_batch(
-                        papers=included_papers[:20],  # Limit for cost control
-                        schema=extraction_schema,
-                        triple_review=triple_review,
-                        use_full_text=False,  # Use abstracts for API workflow
-                    )
-
-                    # Save extraction results to database and build mapping
-                    for ext in extraction_result.extractions:
-                        # Find the paper ID for this extraction
-                        for pid, paper in paper_map.items():
-                            if paper.best_identifier == ext.paper_id or paper.doi == ext.paper_id:
-                                # Save to database
-                                db_extraction = Extraction(
-                                    workflow_id=workflow_id,
-                                    paper_id=pid,
-                                    schema_name=schema_name,
-                                    extraction_method=str(ext.extraction_method.value)
-                                    if hasattr(ext.extraction_method, "value")
-                                    else str(ext.extraction_method),
-                                    data=ext.data,
-                                    confidence=ext.confidence,
-                                    extraction_quality=ext.extraction_quality,
-                                    needs_human_review=ext.needs_human_review,
-                                    conflicts=ext.conflicts,
-                                    low_confidence_fields=ext.low_confidence_fields,
-                                )
-                                db.add(db_extraction)
-                                extraction_results[pid] = ext.data
-                                break
-
-                    await db.commit()
-                    total_cost += extraction_result.estimated_cost
-                    print(
-                        f"[{workflow_id}] Extracted data from {extraction_result.successful_extractions} papers"
-                    )
-                except Exception as e:
-                    print(f"[{workflow_id}] Failed to extract data: {e}")
-                    import traceback
-
-                    traceback.print_exc()
-
-            # ============================================================
-            # STAGE 5: Generate Visualizations
-            # ============================================================
-            print(f"[{workflow_id}] Stage 5: Generating visualizations...")
-
-            figures = {}
-            output_dir = f"/tmp/arakis/{workflow_id}"
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Generate PRISMA diagram
-            try:
-                from arakis.visualization.prisma import PRISMADiagramGenerator
-
-                prisma_gen = PRISMADiagramGenerator()
-                prisma_path = f"{output_dir}/prisma_diagram.png"
-                prisma_gen.generate(prisma_flow, prisma_path)
-                figures["fig1"] = {
-                    "id": "fig1",
-                    "title": "Figure 1",
-                    "caption": "PRISMA 2020 flow diagram for systematic review",
-                    "file_path": prisma_path,
-                    "figure_type": "prisma_diagram",
-                }
-                print(f"[{workflow_id}] Generated PRISMA diagram")
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to generate PRISMA diagram: {e}")
-
-            # ============================================================
-            # STAGE 6: Write Manuscript Sections
-            # ============================================================
-            print(f"[{workflow_id}] Stage 6: Writing manuscript sections...")
-            workflow.current_stage = "writing"
-            await db.commit()
-
-            # Get included papers for writing context
-            included_papers = [paper_map.get(pid) for pid in included_paper_ids if pid in paper_map]
-            included_papers = [p for p in included_papers if p is not None]
-
-            # Write Introduction using Perplexity for literature research
-            intro_text = ""
-            intro_references = []
-            try:
-                from arakis.agents.intro_writer import IntroductionWriterAgent
-
-                intro_writer = IntroductionWriterAgent()
-                inclusion_list = [c.strip() for c in workflow_data.inclusion_criteria.split(",")]
-
-                # write_complete_introduction returns (Section, list[Paper])
-                intro_section, intro_cited_papers = await intro_writer.write_complete_introduction(
-                    research_question=workflow_data.research_question,
-                    inclusion_criteria=inclusion_list,
-                    use_perplexity=True,  # Use Perplexity for background literature
-                )
-
-                # Convert section to markdown
-                intro_text = intro_section.to_markdown()
-
-                # Store references for later use
-                intro_references = intro_cited_papers
-
-                total_cost += 1.0
-                print(
-                    f"[{workflow_id}] Introduction written: {intro_section.total_word_count} words, {len(intro_cited_papers)} references"
-                )
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to write introduction: {e}")
-                import traceback
-
-                traceback.print_exc()
-                intro_text = f"## Introduction\n\nThis systematic review investigates: {workflow_data.research_question}\n\n"
-
-            # Write Methods
-            methods_text = ""
-            try:
-                from arakis.agents.methods_writer import MethodsContext, MethodsWriterAgent
-
-                methods_writer = MethodsWriterAgent()
-                methods_context = MethodsContext(
-                    research_question=workflow_data.research_question,
-                    inclusion_criteria=workflow_data.inclusion_criteria,
-                    exclusion_criteria=workflow_data.exclusion_criteria,
-                    databases=workflow_data.databases,
-                    screening_method="dual-review" if dual_review else "single-review",
-                )
-                methods_section = await methods_writer.write_complete_methods_section(
-                    context=methods_context,
-                    has_meta_analysis=False,  # Will update if we do meta-analysis
-                )
-                methods_text = (
-                    methods_section.to_markdown()
-                    if hasattr(methods_section, "to_markdown")
-                    else str(methods_section.content)
-                )
-                total_cost += 0.5
-                print(f"[{workflow_id}] Methods written")
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to write methods: {e}")
-                methods_text = f"""## Methods
-
-### Eligibility Criteria
-**Inclusion criteria:** {workflow_data.inclusion_criteria}
-
-**Exclusion criteria:** {workflow_data.exclusion_criteria}
-
-### Information Sources
-Databases searched: {", ".join(workflow_data.databases)}
-
-### Selection Process
-Papers were screened using {"dual-review" if dual_review else "single-review"} methodology with AI assistance.
-"""
-
-            # Write Results
-            results_text = ""
-            try:
-                from arakis.agents.results_writer import ResultsWriterAgent
-
-                results_writer = ResultsWriterAgent()
-                results_section = await results_writer.write_complete_results_section(
-                    prisma_flow=prisma_flow,
-                    included_papers=included_papers[:10],
-                    meta_analysis_result=None,
-                )
-                results_text = (
-                    results_section.to_markdown()
-                    if hasattr(results_section, "to_markdown")
-                    else str(results_section.content)
-                )
-                total_cost += 0.7
-                print(f"[{workflow_id}] Results written")
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to write results: {e}")
-                results_text = f"""## Results
-
-### Study Selection
-The database search identified {workflow.papers_found} records. After screening titles and abstracts, {workflow.papers_screened} papers were assessed. {workflow.papers_included} studies met the inclusion criteria and were included in the review (see Figure 1 for PRISMA flow diagram).
-
-### Study Characteristics
-The included studies were published across various journals and years.
-"""
-
-            # Write Discussion
-            # Note: DiscussionWriterAgent requires meta_analysis_result, which we don't have yet
-            # For now, generate a structured discussion without meta-analysis
-            discussion_text = ""
-            try:
-                # Generate discussion using a direct OpenAI call since DiscussionWriterAgent
-                # requires meta-analysis results which we may not have
-                from openai import AsyncOpenAI
-
-                from arakis.config import get_settings
-
-                settings = get_settings()
-                client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-                discussion_prompt = f"""Write a discussion section for a systematic review on the following topic:
-
-Research Question: {workflow_data.research_question}
-
-Number of studies identified: {workflow.papers_found}
-Number of studies screened: {workflow.papers_screened}
-Number of studies included: {workflow.papers_included}
-
-Inclusion criteria: {workflow_data.inclusion_criteria}
-Exclusion criteria: {workflow_data.exclusion_criteria}
-
-Write a well-structured discussion section with the following subsections:
-1. Summary of Evidence - Summarize the main findings from the included studies
-2. Comparison with Existing Literature - Discuss how findings compare to previous research
-3. Limitations - Acknowledge limitations of this review and the included studies
-4. Implications - Discuss clinical/practical implications and future research directions
-
-Format the output in Markdown with appropriate headers. Total length: 500-700 words."""
-
-                response = await client.chat.completions.create(
-                    model="gpt-4o",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert scientific writer specializing in systematic reviews.",
-                        },
-                        {"role": "user", "content": discussion_prompt},
-                    ],
-                    temperature=0.6,
-                    max_tokens=2000,
-                )
-                discussion_text = response.choices[0].message.content
-                total_cost += 1.0
-                print(f"[{workflow_id}] Discussion written")
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to write discussion: {e}")
-                discussion_text = f"""## Discussion
-
-### Summary of Evidence
-This systematic review examined {workflow_data.research_question}. A total of {workflow.papers_included} studies met the inclusion criteria after screening {workflow.papers_screened} papers from an initial pool of {workflow.papers_found} records.
-
-### Comparison with Existing Literature
-The findings of this review should be considered in the context of existing literature on the topic. Further synthesis with previous systematic reviews would strengthen the evidence base.
-
-### Limitations
-This review has several limitations that should be considered when interpreting the findings. The search was limited to {", ".join(workflow_data.databases)}, which may have excluded relevant studies from other databases. The screening process, while systematic, may have inadvertently excluded some relevant studies.
-
-### Implications
-The findings of this review have implications for both clinical practice and future research. Further high-quality primary studies are needed to address gaps in the current evidence base.
-"""
-
-            # Generate conclusions from discussion
-            conclusions_text = f"""## Conclusions
-
-Based on the systematic review of {workflow.papers_included} studies, this review provides insights into {workflow_data.research_question}. The findings suggest the need for further high-quality research in this area.
-"""
-
-            # Write Abstract
-            abstract_text = ""
-            try:
-                from arakis.agents.abstract_writer import AbstractWriterAgent
-
-                abstract_writer = AbstractWriterAgent()
-                # Use write_abstract_from_sections which takes individual section texts
-                abstract_result = await abstract_writer.write_abstract_from_sections(
-                    title=f"Systematic Review: {workflow_data.research_question}",
-                    introduction_text=intro_text,
-                    methods_text=methods_text,
-                    results_text=results_text,
-                    discussion_text=discussion_text,
-                    structured=True,
-                    word_limit=300,
-                )
-                abstract_text = (
-                    abstract_result.section.content
-                    if hasattr(abstract_result, "section")
-                    else str(abstract_result)
-                )
-                total_cost += 0.2
-                print(f"[{workflow_id}] Abstract written")
-            except Exception as e:
-                print(f"[{workflow_id}] Failed to write abstract: {e}")
-                abstract_text = f"""**Background:** {workflow_data.research_question}
-
-**Methods:** We searched {", ".join(workflow_data.databases)} and screened {workflow.papers_screened} papers using predefined inclusion and exclusion criteria.
-
-**Results:** {workflow.papers_included} studies met the inclusion criteria.
-
-**Conclusions:** This systematic review provides an overview of the current evidence.
-"""
-
-            # ============================================================
-            # STAGE 7: Generate References
-            # ============================================================
-            print(f"[{workflow_id}] Stage 7: Generating references...")
-
-            references = []
-            for i, paper in enumerate(included_papers[:20], 1):
-                authors_str = ""
-                if paper.authors:
-                    author_names = [
-                        a.name if hasattr(a, "name") else str(a) for a in paper.authors[:3]
-                    ]
-                    if len(paper.authors) > 3:
-                        author_names.append("et al.")
-                    authors_str = ", ".join(author_names)
-
-                citation = f"{authors_str}. {paper.title}. {paper.journal or 'Journal'}. {paper.year or 'n.d.'}."
-                references.append(
-                    {
-                        "id": f"ref{i}",
-                        "citation": citation,
-                        "doi": paper.doi,
-                    }
-                )
-
-            # ============================================================
-            # STAGE 8: Create Study Characteristics Table
-            # ============================================================
-            print(f"[{workflow_id}] Stage 8: Creating tables...")
-
-            tables = {}
-            if included_papers:
-                # Define schema-specific columns for Table 1
-                schema_columns = {
-                    "rct": {
-                        "headers": [
-                            "Study",
-                            "Year",
-                            "N",
-                            "Population",
-                            "Intervention",
-                            "Control",
-                            "Outcome",
-                        ],
-                        "fields": [
-                            "sample_size_total",
-                            "population_description",
-                            "intervention_name",
-                            "control_type",
-                            "primary_outcome",
-                        ],
-                    },
-                    "cohort": {
-                        "headers": [
-                            "Study",
-                            "Year",
-                            "N",
-                            "Population",
-                            "Exposure",
-                            "Follow-up",
-                            "Outcome",
-                        ],
-                        "fields": [
-                            "sample_size_total",
-                            "population_description",
-                            "exposure",
-                            "follow_up_duration",
-                            "primary_outcome",
-                        ],
-                    },
-                    "case_control": {
-                        "headers": [
-                            "Study",
-                            "Year",
-                            "Cases",
-                            "Controls",
-                            "Exposure",
-                            "OR (95% CI)",
-                        ],
-                        "fields": [
-                            "number_of_cases",
-                            "number_of_controls",
-                            "exposure",
-                            "odds_ratio",
-                        ],
-                    },
-                    "diagnostic": {
-                        "headers": [
-                            "Study",
-                            "Year",
-                            "N",
-                            "Population",
-                            "Index Test",
-                            "Reference Standard",
-                            "Sensitivity",
-                            "Specificity",
-                        ],
-                        "fields": [
-                            "sample_size",
-                            "population_description",
-                            "index_test",
-                            "reference_standard",
-                            "sensitivity",
-                            "specificity",
-                        ],
-                    },
-                }
-
-                # Get column definitions based on detected schema
-                if schema_name and schema_name in schema_columns:
-                    col_def = schema_columns[schema_name]
-                    headers = col_def["headers"]
-                    fields = col_def["fields"]
-                else:
-                    # Fallback to basic columns if no extraction data
-                    headers = ["Study", "Year", "Journal", "Source"]
-                    fields = None
-
-                table_rows = []
-                footnotes = []
-
-                for paper in included_papers[:15]:
-                    # Get paper identifier (workflow_id prefixed)
-                    paper_identifier = (
-                        paper.best_identifier or f"{paper.source}_{hash(paper.title)}"
-                    )
-                    paper_id = f"{workflow_id}_{paper_identifier}"
-
-                    # Get study author(s) and year
-                    year = str(paper.year) if paper.year else "N/A"
-                    authors_str = ""
-                    if paper.authors:
-                        first_author = (
-                            paper.authors[0].name
-                            if hasattr(paper.authors[0], "name")
-                            else str(paper.authors[0])
-                        )
-                        authors_str = (
-                            f"{first_author} et al." if len(paper.authors) > 1 else first_author
-                        )
-
-                    # Build row based on schema
-                    if fields and paper_id in extraction_results:
-                        ext_data = extraction_results[paper_id]
-                        row = [authors_str[:25], year]
-
-                        for field in fields:
-                            value = ext_data.get(field)
-                            if value is None:
-                                row.append("NR")  # Not Reported
-                            elif isinstance(value, (list, tuple)):
-                                row.append(", ".join(str(v) for v in value)[:30])
-                            elif isinstance(value, float):
-                                row.append(f"{value:.1f}")
-                            else:
-                                # Truncate long strings
-                                str_val = str(value)
-                                row.append(str_val[:35] + "..." if len(str_val) > 35 else str_val)
-                        table_rows.append(row)
-                    else:
-                        # Fallback to basic paper metadata
-                        table_rows.append(
-                            [
-                                authors_str[:30],
-                                year,
-                                (paper.journal or "N/A")[:25],
-                                paper.source or "N/A",
-                            ]
-                        )
-
-                # Add footnotes explaining abbreviations
-                footnotes = ["NR = Not Reported"]
-                if schema_name == "rct":
-                    footnotes.extend(
-                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
-                    )
-                elif schema_name == "cohort":
-                    footnotes.extend(
-                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
-                    )
-                elif schema_name == "case_control":
-                    footnotes.extend(
-                        [
-                            "OR = Odds Ratio",
-                            "CI = Confidence Interval",
-                            "Studies ordered by relevance",
-                        ]
-                    )
-                elif schema_name == "diagnostic":
-                    footnotes.extend(
-                        ["N = Total sample size", "Studies ordered by relevance to search criteria"]
-                    )
-                else:
-                    footnotes = ["Studies ordered by relevance to search criteria"]
-
-                tables["table1"] = {
-                    "id": "table1",
-                    "title": "Table 1. Characteristics of included studies",
-                    "headers": headers,
-                    "rows": table_rows,
-                    "footnotes": footnotes,
-                }
-
-            # ============================================================
-            # STAGE 9: Assemble and Save Manuscript
-            # ============================================================
-            print(f"[{workflow_id}] Stage 9: Assembling manuscript...")
-            workflow.current_stage = "finalizing"
-            await db.commit()
-
-            manuscript = Manuscript(
+            # Prepare initial data for orchestrator
+            # Convert comma-separated criteria to lists for stage executors
+            inclusion_list = [c.strip() for c in workflow_data.inclusion_criteria.split(",")]
+            exclusion_list = [c.strip() for c in workflow_data.exclusion_criteria.split(",")]
+
+            initial_data = {
+                "research_question": workflow_data.research_question,
+                "inclusion_criteria": inclusion_list,
+                "exclusion_criteria": exclusion_list,
+                "databases": workflow_data.databases or ["pubmed"],
+                "max_results_per_query": workflow_data.max_results_per_query or 100,
+                "fast_mode": workflow_data.fast_mode or False,
+            }
+
+            # Determine stages to skip based on workflow options
+            skip_stages = []
+            if workflow_data.skip_analysis:
+                skip_stages.extend(["analysis"])
+            if workflow_data.skip_writing:
+                skip_stages.extend(["introduction", "methods", "results", "discussion"])
+
+            # Run the orchestrator
+            orchestrator = WorkflowOrchestrator(db)
+            result = await orchestrator.execute_workflow(
                 workflow_id=workflow_id,
-                title=f"Systematic Review: {workflow_data.research_question}",
-                abstract=abstract_text,
-                introduction=intro_text,
-                methods=methods_text,
-                results=results_text,
-                discussion=discussion_text,
-                conclusions=conclusions_text,
-                references=references,
-                figures=figures,
-                tables=tables,
-                meta={
-                    "research_question": workflow_data.research_question,
-                    "databases": workflow_data.databases,
-                    "papers_found": workflow.papers_found,
-                    "papers_screened": workflow.papers_screened,
-                    "papers_included": workflow.papers_included,
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                },
-                created_at=datetime.now(timezone.utc),
+                initial_data=initial_data,
+                skip_stages=skip_stages if skip_stages else None,
             )
-            db.add(manuscript)
 
-            # Mark workflow as completed
-            workflow.status = "completed"
-            workflow.current_stage = "completed"
-            workflow.completed_at = datetime.now(timezone.utc)
-            workflow.total_cost = total_cost
-            await db.commit()
-
-            print(f"[{workflow_id}] Workflow completed successfully! Cost: ${total_cost:.2f}")
+            print(f"[{workflow_id}] Workflow finished with status: {result['status']}")
 
         except Exception as e:
             # Mark workflow as failed with error message

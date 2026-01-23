@@ -17,7 +17,7 @@ import { DEFAULT_WORKFLOW_FORM, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/ty
 export type LayoutMode = 'landing' | 'chat-fullscreen' | 'split-view';
 export type MobileView = 'sidebar' | 'editor';
 export type ViewMode = 'new-review' | 'viewing-workflow';
-export type AppView = 'dashboard' | 'ai-writer' | 'project' | 'analytics' | 'teams' | 'integrations' | 'docs' | 'settings';
+export type AppView = 'dashboard' | 'ai-writer' | 'project' | 'analytics' | 'teams' | 'integrations' | 'docs' | 'settings' | 'history';
 
 interface LayoutState {
   mode: LayoutMode;
@@ -28,6 +28,22 @@ interface LayoutState {
   mobileView: MobileView;
   isMobileSidebarOpen: boolean;
   isSidebarCollapsed: boolean;
+  isEditorChatPanelOpen: boolean;
+}
+
+// ============= Editor Chat State =============
+
+export interface EditorChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+interface EditorChatState {
+  messages: EditorChatMessage[];
+  isLoading: boolean;
+  error: string | null;
 }
 
 // ============= Workflow State =============
@@ -79,6 +95,7 @@ interface AppState {
   editor: EditorState;
   chat: ChatState;
   auth: AuthState;
+  editorChat: EditorChatState;
 
   // Layout actions
   setLayoutMode: (mode: LayoutMode) => void;
@@ -92,6 +109,8 @@ interface AppState {
   setMobileSidebarOpen: (open: boolean) => void;
   toggleSidebarCollapsed: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleEditorChatPanel: () => void;
+  setEditorChatPanelOpen: (open: boolean) => void;
 
   // Workflow actions
   setCurrentWorkflow: (workflow: WorkflowResponse | null) => void;
@@ -126,6 +145,12 @@ interface AppState {
   initAuth: () => void;
   openLoginDialog: (message?: string) => void;
   closeLoginDialog: () => void;
+
+  // Editor Chat actions
+  addEditorChatMessage: (message: Omit<EditorChatMessage, 'id' | 'timestamp'>) => void;
+  setEditorChatLoading: (loading: boolean) => void;
+  setEditorChatError: (error: string | null) => void;
+  clearEditorChat: () => void;
 }
 
 // Generate unique message ID
@@ -145,6 +170,7 @@ export const useStore = create<AppState>()(
           mobileView: 'editor',
           isMobileSidebarOpen: false,
           isSidebarCollapsed: false,
+          isEditorChatPanelOpen: false,
         },
         workflow: {
           current: null,
@@ -173,6 +199,11 @@ export const useStore = create<AppState>()(
           error: null,
           showLoginDialog: false,
           loginDialogMessage: null,
+        },
+        editorChat: {
+          messages: [],
+          isLoading: false,
+          error: null,
         },
 
         // ============= Layout Actions =============
@@ -229,6 +260,16 @@ export const useStore = create<AppState>()(
         setSidebarCollapsed: (isSidebarCollapsed) =>
           set((state) => ({
             layout: { ...state.layout, isSidebarCollapsed },
+          })),
+
+        toggleEditorChatPanel: () =>
+          set((state) => ({
+            layout: { ...state.layout, isEditorChatPanelOpen: !state.layout.isEditorChatPanelOpen },
+          })),
+
+        setEditorChatPanelOpen: (isEditorChatPanelOpen) =>
+          set((state) => ({
+            layout: { ...state.layout, isEditorChatPanelOpen },
           })),
 
         // ============= Workflow Actions =============
@@ -492,6 +533,41 @@ export const useStore = create<AppState>()(
               ...state.auth,
               showLoginDialog: false,
               loginDialogMessage: null,
+            },
+          })),
+
+        // ============= Editor Chat Actions =============
+        addEditorChatMessage: (message) =>
+          set((state) => ({
+            editorChat: {
+              ...state.editorChat,
+              messages: [
+                ...state.editorChat.messages,
+                {
+                  ...message,
+                  id: generateId(),
+                  timestamp: new Date(),
+                },
+              ],
+            },
+          })),
+
+        setEditorChatLoading: (isLoading) =>
+          set((state) => ({
+            editorChat: { ...state.editorChat, isLoading },
+          })),
+
+        setEditorChatError: (error) =>
+          set((state) => ({
+            editorChat: { ...state.editorChat, error, isLoading: false },
+          })),
+
+        clearEditorChat: () =>
+          set(() => ({
+            editorChat: {
+              messages: [],
+              isLoading: false,
+              error: null,
             },
           })),
       }),

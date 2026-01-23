@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { AppShell } from '@/components/layout';
-import { Sidebar } from '@/components/sidebar';
+import { Sidebar, WorkflowHistory } from '@/components/sidebar';
 import { ManuscriptEditor } from '@/components/editor';
 import { ChatContainer } from '@/components/chat';
 import { WorkflowDetailView } from '@/components/workflow';
@@ -58,6 +58,11 @@ export default function Home() {
     // If viewing AI Writer documents list
     if (currentView === 'ai-writer') {
       return <DocumentsList />;
+    }
+
+    // If viewing review history
+    if (currentView === 'history') {
+      return <WorkflowHistory />;
     }
 
     // For dashboard view, show Dashboard when at welcome/question stage

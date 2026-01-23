@@ -22,7 +22,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
       <div
         className={cn(
           'flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center',
-          isAssistant ? 'bg-primary text-primary-foreground' : 'bg-muted'
+          isAssistant ? 'bg-purple-100 text-purple-600' : 'bg-purple-600 text-white'
         )}
       >
         {isAssistant ? (
@@ -37,8 +37,8 @@ export function ChatMessage({ message }: ChatMessageProps) {
         className={cn(
           'max-w-[80%] rounded-2xl px-4 py-3',
           isAssistant
-            ? 'bg-muted text-foreground rounded-tl-sm'
-            : 'bg-primary text-primary-foreground rounded-tr-sm'
+            ? 'bg-gray-100 text-gray-800 rounded-tl-sm'
+            : 'bg-purple-600 text-white rounded-tr-sm'
         )}
       >
         <p className="text-sm whitespace-pre-wrap">{message.content}</p>

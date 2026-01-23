@@ -18,14 +18,46 @@ class WorkflowStatus(str, Enum):
 
 
 class WorkflowStage(str, Enum):
-    """Current workflow stage."""
+    """Workflow stages - 12 comprehensive stages."""
 
-    SEARCHING = "searching"
-    SCREENING = "screening"
-    ANALYZING = "analyzing"
-    WRITING = "writing"
-    FINALIZING = "finalizing"
+    SEARCH = "search"
+    SCREEN = "screen"
+    PDF_FETCH = "pdf_fetch"
+    EXTRACT = "extract"
+    ROB = "rob"
+    ANALYSIS = "analysis"
+    PRISMA = "prisma"
+    TABLES = "tables"
+    INTRODUCTION = "introduction"
+    METHODS = "methods"
+    RESULTS = "results"
+    DISCUSSION = "discussion"
     COMPLETED = "completed"
+
+
+class StageStatus(str, Enum):
+    """Stage execution status."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
+class StageCheckpoint(BaseModel):
+    """Schema for a stage checkpoint."""
+
+    stage: str
+    status: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    retry_count: int = 0
+    error_message: Optional[str] = None
+    cost: float = 0.0
+
+    class Config:
+        from_attributes = True
 
 
 class WorkflowCreate(BaseModel):
@@ -105,6 +137,17 @@ class WorkflowResponse(BaseModel):
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
 
+    # New fields for unified workflow
+    needs_user_action: bool = False
+    action_required: Optional[str] = None
+    meta_analysis_feasible: Optional[bool] = None
+    stages: list[StageCheckpoint] = []
+
+    # Figure URLs from R2
+    forest_plot_url: Optional[str] = None
+    funnel_plot_url: Optional[str] = None
+    prisma_url: Optional[str] = None
+
     class Config:
         from_attributes = True  # For SQLAlchemy model conversion
         json_schema_extra = {
@@ -115,14 +158,41 @@ class WorkflowResponse(BaseModel):
                 "exclusion_criteria": "Pediatric,Animal studies",
                 "databases": ["pubmed", "openalex"],
                 "status": "completed",
+                "current_stage": "completed",
                 "papers_found": 234,
                 "papers_screened": 234,
                 "papers_included": 12,
                 "total_cost": 15.43,
                 "created_at": "2026-01-09T19:00:00Z",
                 "completed_at": "2026-01-09T19:45:00Z",
+                "needs_user_action": False,
+                "action_required": None,
+                "meta_analysis_feasible": True,
+                "stages": [],
+                "forest_plot_url": "https://r2.example.com/workflow-123/forest_plot.png",
+                "funnel_plot_url": "https://r2.example.com/workflow-123/funnel_plot.png",
+                "prisma_url": "https://r2.example.com/workflow-123/prisma_flow.png",
             }
         }
+
+
+class StageRerunRequest(BaseModel):
+    """Schema for re-running a stage."""
+
+    input_override: Optional[dict] = Field(
+        default=None,
+        description="Optional data to override previous checkpoint",
+    )
+
+
+class StageRerunResponse(BaseModel):
+    """Schema for stage re-run response."""
+
+    success: bool
+    stage: str
+    output_data: Optional[dict] = None
+    error: Optional[str] = None
+    cost: float = 0.0
 
 
 class WorkflowList(BaseModel):

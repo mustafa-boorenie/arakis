@@ -41,7 +41,7 @@ export function useWorkflow() {
       enabled: shouldPoll,
       interval: 5000, // 5 seconds
       shouldStop: (data) =>
-        data.status === 'completed' || data.status === 'failed',
+        data.status === 'completed' || data.status === 'failed' || data.status === 'needs_review',
       onSuccess: async (data) => {
         updateWorkflow(data);
         setIsPolling(data.status === 'running');
@@ -79,6 +79,11 @@ export function useWorkflow() {
             content: `Workflow failed: ${data.error_message || 'Unknown error'}. Please try again.`,
           });
           setChatStage('confirm');
+        } else if (data.status === 'needs_review') {
+          addMessage({
+            role: 'assistant',
+            content: `Workflow needs your attention: ${data.action_required || 'Please review and click Resume to continue.'}`,
+          });
         }
       },
       onError: (error) => {
@@ -150,6 +155,65 @@ export function useWorkflow() {
     return response.workflows;
   }, []);
 
+  const resumeWorkflow = useCallback(
+    async (id: string) => {
+      try {
+        const response = await api.resumeWorkflow(id);
+        setCurrentWorkflow(response);
+        setIsPolling(true);
+        addMessage({
+          role: 'assistant',
+          content: 'Resuming workflow...',
+        });
+        return response;
+      } catch (error) {
+        console.error('Failed to resume workflow:', error);
+        addMessage({
+          role: 'assistant',
+          content: 'Failed to resume workflow. Please try again.',
+        });
+        throw error;
+      }
+    },
+    [setCurrentWorkflow, setIsPolling, addMessage]
+  );
+
+  const rerunStage = useCallback(
+    async (workflowId: string, stage: string, inputOverride?: Record<string, unknown>) => {
+      try {
+        const response = await api.rerunStage(workflowId, stage, inputOverride);
+        if (response.success) {
+          // Refresh workflow data
+          const workflowData = await api.getWorkflow(workflowId);
+          setCurrentWorkflow(workflowData);
+          setIsPolling(workflowData.status === 'running');
+          addMessage({
+            role: 'assistant',
+            content: `Stage "${stage}" has been rerun successfully.`,
+          });
+        } else {
+          addMessage({
+            role: 'assistant',
+            content: `Stage "${stage}" failed: ${response.error || 'Unknown error'}`,
+          });
+        }
+        return response;
+      } catch (error) {
+        console.error('Failed to rerun stage:', error);
+        addMessage({
+          role: 'assistant',
+          content: `Failed to rerun stage "${stage}". Please try again.`,
+        });
+        throw error;
+      }
+    },
+    [setCurrentWorkflow, setIsPolling, addMessage]
+  );
+
+  const getStageCheckpoints = useCallback(async (id: string) => {
+    return api.getStageCheckpoints(id);
+  }, []);
+
   return {
     currentWorkflow: workflow.current,
     workflowHistory: workflow.history,
@@ -159,5 +223,8 @@ export function useWorkflow() {
     loadWorkflow,
     deleteWorkflow,
     listWorkflows,
+    resumeWorkflow,
+    rerunStage,
+    getStageCheckpoints,
   };
 }

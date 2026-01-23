@@ -6,16 +6,11 @@ import { useStore } from '@/store';
 import { useAuth } from '@/hooks';
 import {
   PlusCircle,
-  PenTool,
-  FolderOpen,
-  BarChart3,
-  Users,
-  Puzzle,
-  FileText,
   Settings,
   LogOut,
   Sun,
   Moon,
+  History,
 } from 'lucide-react';
 
 type NavItem = {
@@ -53,14 +48,18 @@ export function Sidebar() {
     }
   };
 
+  const handleViewHistory = () => {
+    setCurrentView('history');
+    setLayoutMode('chat-fullscreen');
+    // Navigate to home if not already there
+    if (window.location.pathname !== '/') {
+      router.push('/');
+    }
+  };
+
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'New Review', icon: PlusCircle, action: handleNewReview },
-    { id: 'ai-writer', label: 'AI Writer', icon: PenTool, action: () => setCurrentView('ai-writer') },
-    { id: 'project', label: 'Project', icon: FolderOpen, action: () => setCurrentView('project') },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3, action: () => setCurrentView('analytics') },
-    { id: 'teams', label: 'Teams', icon: Users, action: () => setCurrentView('teams') },
-    { id: 'integrations', label: 'Integrations', icon: Puzzle, action: () => setCurrentView('integrations') },
-    { id: 'docs', label: 'Documentations', icon: FileText, action: () => setCurrentView('docs') },
+    { id: 'history', label: 'My Reviews', icon: History, action: handleViewHistory },
     { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
   ];
 

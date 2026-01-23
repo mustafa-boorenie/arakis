@@ -233,18 +233,18 @@ export function ChatContainer() {
               </div>
               <Button
                 onClick={handleStartReview}
-                disabled={isCreating || isAuthLoading}
-                className="w-full gap-2"
+                disabled={isCreating || (isAuthLoading && !canStartReview)}
+                className="w-full gap-2 bg-purple-600 hover:bg-purple-700"
               >
-                {isAuthLoading ? (
-                  <>
-                    <Sparkles className="w-4 h-4 animate-spin" />
-                    Loading...
-                  </>
-                ) : canStartReview ? (
+                {canStartReview ? (
                   <>
                     <Sparkles className="w-4 h-4" />
                     {isCreating ? 'Creating...' : 'Start Review'}
+                  </>
+                ) : isAuthLoading ? (
+                  <>
+                    <Sparkles className="w-4 h-4 animate-spin" />
+                    Loading...
                   </>
                 ) : (
                   <>

@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useStore } from '@/store';
 import { useWorkflow } from '@/hooks';
 import { WorkflowCard } from './WorkflowCard';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { History, FileQuestion, RefreshCw, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api/client';
@@ -106,30 +105,33 @@ export function WorkflowHistory() {
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex items-center gap-2 p-3 border-b">
-        <History className="w-4 h-4 text-muted-foreground" />
-        <h3 className="text-sm font-medium">Review History</h3>
-        <span className="text-xs text-muted-foreground ml-auto">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex-shrink-0 flex items-center gap-2 p-4 border-b bg-white">
+        <History className="w-5 h-5 text-purple-600" />
+        <h3 className="text-lg font-semibold">My Reviews</h3>
+        <span className="text-sm text-muted-foreground ml-auto">
           {workflow.history.length} review{workflow.history.length !== 1 ? 's' : ''}
         </span>
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7"
+          className="h-8 w-8"
           onClick={handleRefresh}
           disabled={isLoading}
           title="Refresh"
         >
           {isLoading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className="w-4 h-4" />
           )}
         </Button>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-2">
+
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-3 max-w-4xl mx-auto">
           {workflow.history.map((w) => (
             <WorkflowCard
               key={w.id}
@@ -140,7 +142,7 @@ export function WorkflowHistory() {
             />
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

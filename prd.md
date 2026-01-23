@@ -1,441 +1,422 @@
-# Product Requirements Document: Arakis Workflow Improvements
+# Product Requirements Document: Unified Workflow System
 
 ## Overview
 
-This document outlines the requirements for fixing and improving the Arakis systematic review workflow based on user feedback. The current workflow has several issues that need to be addressed to produce reliable, high-quality manuscript outputs.
+Refactor the Arakis workflow system to support 12 comprehensive stages with full state persistence, R2 figure uploads, and stage re-run capabilities.
 
 ---
 
-## Issues to Fix
+## Requirements Summary
 
-### Critical Issues
-1. **Screening Incomplete** - Screening never completes for all papers found; must process ALL papers without early stopping
-2. **PRISMA Not Correctly Written** - Flow diagram and narrative description are not being generated properly
-3. **Data Extraction Unreliable** - Extraction process fails or produces inconsistent results
-4. **Meta-Analysis Rarely Completed** - Statistical tests and analysis are not being completed or displayed
-5. **References Incorrectly Written** - Citations and reference lists are not properly formatted
-6. **Tables Inappropriately Populated** - Study characteristics and other tables have incorrect or missing data
-
-### Quality Issues
-- Poor overall output quality not meeting academic standards
-- Missing statistics in meta-analysis output
-- Incomplete audit trails for decisions
-
----
-
-## Manuscript Structure Requirements
-
-### Abstract
-- **Format**: Structured abstract
-- **Sections**: Background, Methods, Results, Conclusions
-- **Word limit**: Follow journal guidelines (typically 250-350 words)
-
-### Introduction
-- **Format**: PRISMA 2020 compliant
-- **Subsections**:
-  1. **Background** (200-250 words): Broad context → specific problem
-  2. **Rationale** (100-150 words): Gaps in literature, justification for review
-  3. **Objectives** (80-120 words): Clear, specific aims (PICO-structured)
-
-### Methods
-- Standard systematic review methods section
-- Include: Search strategy, eligibility criteria, screening process, data extraction, quality assessment, statistical analysis
-
-### Results
-- **Format**: PRISMA structure
-- **Subsections**:
-  1. **Study Selection**: Search results and PRISMA flow narrative
-  2. **Study Characteristics**: Summary of included studies with Table 1
-  3. **Risk of Bias**: Quality assessment results
-  4. **Synthesis of Results**: Meta-analysis findings with statistics
-
-### Discussion
-- **Format**: Extended 4-part structure
-- **Subsections**:
-  1. **Summary of Main Findings** (150-200 words): Interpret key results
-  2. **Comparison with Existing Literature** (250-300 words): Compare with previous work
-  3. **Limitations** (150-200 words): Acknowledge study limitations
-  4. **Implications and Recommendations** (150-200 words): Clinical and policy recommendations
-  5. **Future Research** (100-150 words): Gaps and future research directions
-
-### Conclusions
-- Brief summary of main findings and implications
+| Requirement | Implementation |
+|-------------|----------------|
+| **12 stages** | Search → Screen → PDF Fetch → Extract → RoB → Analysis → PRISMA → Tables → Intro → Methods → Results → Discussion |
+| **No screening limit** | Remove `max_screen = 50` limit - process ALL papers |
+| **PDF extraction** | Enable by default (`extract_text=True`) |
+| **All sections** | Abstract, Introduction, Methods, Results, Discussion, Conclusions |
+| **Full meta-analysis** | Forest plot, funnel plot, I², τ², Q-stat, subgroups |
+| **Risk of Bias** | Auto-detect RoB 2/ROBINS-I/QUADAS-2 based on study design |
+| **State saving** | Database checkpoints per stage, resume from any point |
+| **Figure storage** | Upload to Cloudflare R2, return URLs |
+| **3 tables** | Study Characteristics, Risk of Bias, GRADE Summary of Findings |
+| **Retry logic** | 3 retries with exponential backoff, then prompt user |
+| **Re-runs** | Any stage can be re-run independently |
+| **Progress** | Polling endpoint (WebSocket later) |
+| **Output** | Markdown + JSON |
 
 ---
 
-## Tables Requirements
+## Database Schema Changes
 
-### Table 1: Study Characteristics
-- **Column Definition**: Auto-derived from extraction schema being used
-- **Typical columns** (when not auto-derived):
-  - Author/Year
-  - Study Design
-  - Country/Setting
-  - Population (N)
-  - Intervention
-  - Comparator
-  - Outcomes
-  - Follow-up duration
-- **Format**: Markdown table, placed at end of document
+### New Table: `workflow_stage_checkpoints`
 
-### Table 2: Risk of Bias Assessment
-- **Tool Selection**: Auto-detect based on study type
-  - RCTs → Cochrane RoB 2
-  - Non-randomized studies → ROBINS-I
-  - Diagnostic studies → QUADAS-2
-  - Observational studies → Newcastle-Ottawa Scale
-- **Content**: Assessment for each domain per study
-- **Summary**: Overall risk judgment per study
+```python
+class WorkflowStageCheckpoint(Base):
+    __tablename__ = "workflow_stage_checkpoints"
 
-### Table 3: Summary of Findings (GRADE)
-- **Format**: GRADE-style summary table
-- **Content**:
-  - Outcome
-  - Number of studies
-  - Number of participants
-  - Effect estimate (95% CI)
-  - Certainty of evidence
-  - Comments
+    id = Column(Integer, primary_key=True)
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
+    stage = Column(String(50), nullable=False)  # search, screen, pdf_fetch, etc.
+    status = Column(String(20), default="pending")  # pending, in_progress, completed, failed, skipped
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+    retry_count = Column(Integer, default=0)
+    output_data = Column(JSON)  # Stage-specific output
+    error_message = Column(Text)
+    cost = Column(Float, default=0.0)
 
----
-
-## PRISMA Requirements
-
-### Flow Diagram
-- **Format**: PNG image (300 DPI) for publication
-- **Compliance**: PRISMA 2020 checklist
-- **Content**:
-  - Identification: Records from databases and registers
-  - Screening: Records screened, excluded with reasons
-  - Eligibility: Full-text articles assessed
-  - Inclusion: Studies included in review and synthesis
-
-### Narrative Description
-- **Location**: Results section, Study Selection subsection
-- **Content**: Text describing each stage of the selection process
-- **Statistics**: Exact numbers at each stage with reasons for exclusion
-
----
-
-## Screening Requirements
-
-### Processing
-- **Completeness**: MUST process ALL papers found (no early stopping)
-- **Batching**: Process in configurable batches with progress reporting
-- **Real-time Supervision**: Option to monitor and intervene during screening
-
-### Audit Trail
-Full audit trail for each paper:
-- Decision (INCLUDE/EXCLUDE/MAYBE)
-- Reason for decision
-- Matched inclusion/exclusion criteria
-- Confidence score
-- Reviewer notes
-- Timestamp
-- Reviewer ID (for dual-review)
-
-### Dual Review
-- Default: Dual-review mode with conflict detection
-- Conflict resolution: Flag for human review when reviewers disagree
-- Single-review option available for faster processing
-
----
-
-## Data Extraction Requirements
-
-### Reliability
-- **Retry Logic**: Automatically retry failed extractions with different prompts
-- **Manual Review Flags**: Mark uncertain extractions for human verification
-- **Failure Logging**: Log detailed explanations for extraction failures
-
-### Quality Assurance
-- Confidence scoring per field
-- Highlight low-confidence extractions
-- Validate extracted values against schema constraints
-
-### Schema
-- Auto-detect study type and apply appropriate schema
-- Support custom schemas via configuration
-- Pre-built schemas: RCT, cohort, case-control, diagnostic
-
----
-
-## Meta-Analysis Requirements
-
-### Statistical Output (REQUIRED)
-All meta-analyses MUST display:
-1. **Effect Sizes**: Mean difference, OR, RR, or SMD as appropriate
-2. **Confidence Intervals**: 95% CI for all effect estimates
-3. **Heterogeneity Metrics**:
-   - I² statistic with interpretation
-   - τ² (tau-squared)
-   - Q-statistic with p-value
-4. **Individual Study Weights**: Weight contribution of each study
-
-### Visualizations
-1. **Forest Plot** (REQUIRED):
-   - Individual study effects with CI
-   - Pooled effect with diamond
-   - Study weights shown
-   - Heterogeneity statistics displayed
-
-2. **Funnel Plot** (REQUIRED):
-   - Publication bias assessment
-   - Pseudo-95% CI limits
-   - Egger's test result if sufficient studies
-
-3. **Subgroup Analyses**:
-   - Stratified forest plots by key variables
-   - Interaction p-values between subgroups
-
-### When Meta-Analysis Not Feasible
-1. **Explain Why**: Document the specific reasons (heterogeneity, insufficient data, incompatible outcomes)
-2. **Narrative Synthesis**: Provide qualitative summary describing findings across studies
-3. **Vote Counting**: Summarize direction of effects across studies if appropriate
-
----
-
-## References Requirements
-
-### Citation Format
-- **Default Style**: APA 7th Edition
-- **Configurable**: Support for Vancouver, Harvard, Chicago styles
-- **In-text Format**: Author (Year)
-  - Example: "Smith et al. (2024) found..." or "...was observed (Smith et al., 2024)"
-
-### Reference List
-- **Location**: End of manuscript
-- **Format**: APA 7th Edition default
-  ```
-  Author, A. A., Author, B. B., & Author, C. C. (Year). Title of article.
-  Journal Name, Volume(Issue), pages. https://doi.org/xxxxx
-  ```
-- **Validation**: All in-text citations must have corresponding reference list entry
-- **Ordering**: Alphabetical by first author surname
-
-### Citation Tracking
-- Register all cited papers in ReferenceManager
-- Validate citations against registered papers
-- Flag any unmatched citations
-
----
-
-## Output Requirements
-
-### File Format
-- **Primary**: Markdown (.md)
-- **Structure**: Single document with clear section headers
-
-### Figure/Table Placement
-- **Location**: End of document (journal submission style)
-- **Format**:
-  ```markdown
-  ---
-  ## Figures
-
-  ### Figure 1: PRISMA Flow Diagram
-  ![PRISMA Flow Diagram](figures/prisma.png)
-
-  **Figure 1.** PRISMA 2020 flow diagram showing...
-
-  ---
-  ## Tables
-
-  ### Table 1: Characteristics of Included Studies
-  | Author | Year | Design | ... |
-  |--------|------|--------|-----|
-  ```
-
-### Figure Files
-- **Format**: PNG (300 DPI)
-- **Location**: `./figures/` subdirectory
-- **Naming**: Descriptive names (e.g., `forest_plot_mortality.png`)
-
----
-
-## Progress and Logging Requirements
-
-### Verbosity Level
-- **Default**: Full verbosity
-- **Display**: Every action with details
-  - Which paper is being processed
-  - What decision was made
-  - Which database is being queried
-  - Current counts (e.g., "Processing paper 15/50")
-
-### Progress Reporting
+    __table_args__ = (UniqueConstraint('workflow_id', 'stage'),)
 ```
-[SEARCH] Querying PubMed... found 234 records
-[SEARCH] Querying OpenAlex... found 456 records
-[DEDUP] Removing duplicates... 543 unique papers
-[SCREEN] Processing paper 1/543: "Title of paper..."
-[SCREEN] Decision: INCLUDE (confidence: 0.92)
-[SCREEN] Matched criteria: RCT, Human participants
-...
+
+### New Table: `workflow_figures`
+
+```python
+class WorkflowFigure(Base):
+    __tablename__ = "workflow_figures"
+
+    id = Column(Integer, primary_key=True)
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"))
+    figure_type = Column(String(50))  # forest_plot, funnel_plot, prisma, rob_summary
+    title = Column(String(255))
+    caption = Column(Text)
+    r2_key = Column(String(500))
+    r2_url = Column(String(1000))
+    file_size_bytes = Column(Integer)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+```
+
+### New Table: `workflow_tables`
+
+```python
+class WorkflowTable(Base):
+    __tablename__ = "workflow_tables"
+
+    id = Column(Integer, primary_key=True)
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"))
+    table_type = Column(String(50))  # study_characteristics, risk_of_bias, grade_sof
+    title = Column(String(255))
+    caption = Column(Text)
+    headers = Column(JSON)
+    rows = Column(JSON)
+    footnotes = Column(JSON)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+```
+
+### Modify `workflows` Table
+
+Add columns:
+```python
+needs_user_action = Column(Boolean, default=False)
+action_required = Column(Text)  # What action user needs to take
+meta_analysis_feasible = Column(Boolean)
 ```
 
 ---
 
-## Error Handling Requirements
+## Backend Architecture
 
-### Behavior
-- **Mode**: Interactive prompts
-- **On Error**: Pause execution and prompt user for decision
+### New Module Structure
 
-### User Options When Error Occurs
-1. Retry the failed operation
-2. Skip and continue with remaining items
-3. Provide manual input/override
-4. Abort workflow
+```
+src/arakis/workflow/
+├── __init__.py
+├── orchestrator.py          # WorkflowOrchestrator class
+└── stages/
+    ├── __init__.py
+    ├── base.py              # BaseStageExecutor abstract class
+    ├── search.py            # SearchStageExecutor
+    ├── screen.py            # ScreenStageExecutor (NO 50-paper LIMIT)
+    ├── pdf_fetch.py         # PDFFetchStageExecutor (extract_text=True)
+    ├── extract.py           # ExtractStageExecutor (use_full_text=True)
+    ├── rob.py               # RiskOfBiasStageExecutor (NEW)
+    ├── analysis.py          # AnalysisStageExecutor (full meta-analysis + R2)
+    ├── prisma.py            # PRISMAStageExecutor
+    ├── tables.py            # TablesStageExecutor (3 tables)
+    ├── introduction.py      # IntroductionStageExecutor
+    ├── methods.py           # MethodsStageExecutor (NEW)
+    ├── results.py           # ResultsStageExecutor
+    └── discussion.py        # DiscussionStageExecutor
+```
 
-### Error Logging
-- Log all errors with full context
-- Include: timestamp, operation, input data, error message, stack trace
+### BaseStageExecutor Pattern
 
----
+```python
+@dataclass
+class StageResult:
+    success: bool
+    output_data: dict[str, Any]
+    cost: float
+    error: Optional[str] = None
+    needs_user_action: bool = False
+    action_required: Optional[str] = None
 
-## State Management Requirements
+class BaseStageExecutor(ABC):
+    MAX_RETRIES = 3
 
-### Resume Capability
-- **Mode**: Full state saving
-- **Checkpoints**: Save state after each operation
-- **Resume**: Exact continuation from point of interruption
+    @abstractmethod
+    async def execute(self, input_data: dict) -> StageResult:
+        pass
 
-### State File
-- **Format**: JSON
-- **Location**: Output directory
-- **Content**:
-  - Current stage
-  - Processed paper IDs
-  - Screening decisions
-  - Extraction results
-  - Any intermediate data
+    @abstractmethod
+    def get_required_stages(self) -> list[str]:
+        pass
 
-### Resume Command
-```bash
-arakis workflow --resume ./my_review/state.json
+    async def run_with_retry(self, input_data: dict) -> StageResult:
+        for attempt in range(self.MAX_RETRIES):
+            result = await self.execute(input_data)
+            if result.success or not self._is_retryable(result.error):
+                return result
+            await asyncio.sleep(2 ** attempt)  # Exponential backoff
+        return StageResult(
+            success=False,
+            needs_user_action=True,
+            action_required="Stage failed after 3 attempts. Please review."
+        )
+```
+
+### WorkflowOrchestrator
+
+```python
+class WorkflowOrchestrator:
+    STAGE_ORDER = [
+        "search", "screen", "pdf_fetch", "extract", "rob",
+        "analysis", "prisma", "tables", "introduction",
+        "methods", "results", "discussion"
+    ]
+
+    STAGE_EXECUTORS = {
+        "search": SearchStageExecutor,
+        "screen": ScreenStageExecutor,
+        "pdf_fetch": PDFFetchStageExecutor,
+        "extract": ExtractStageExecutor,
+        "rob": RiskOfBiasStageExecutor,
+        "analysis": AnalysisStageExecutor,
+        "prisma": PRISMAStageExecutor,
+        "tables": TablesStageExecutor,
+        "introduction": IntroductionStageExecutor,
+        "methods": MethodsStageExecutor,
+        "results": ResultsStageExecutor,
+        "discussion": DiscussionStageExecutor,
+    }
+
+    async def execute_workflow(self, workflow_id: str, start_from: str = None):
+        """Execute workflow stages with checkpointing."""
+        pass
+
+    async def rerun_stage(self, workflow_id: str, stage: str):
+        """Re-run a specific stage independently."""
+        pass
 ```
 
 ---
 
-## User Interface Requirements
+## Key Code Changes
 
-### Primary Interface
-- **Type**: Web UI Dashboard
-- **Features**:
-  - Real-time progress visualization
-  - Paper screening supervision
-  - Decision override capability
-  - Error handling prompts
-  - Results preview
+### 1. Remove 50-Paper Screening Limit
 
-### Dashboard Components
-1. **Progress Panel**: Current stage, completion percentage, time elapsed
-2. **Paper Queue**: List of papers being processed with status
-3. **Decision Log**: Audit trail of all decisions
-4. **Error Panel**: Any errors requiring attention
-5. **Results Preview**: Live preview of generated content
+**File:** `src/arakis/api/routers/workflows.py` (Line 396)
 
-### CLI Fallback
-- Maintain CLI functionality for headless/scripted operation
-- CLI should support all features available in web UI
+```python
+# REMOVE THIS LINE:
+max_screen = min(len(search_results.papers), 50)  # Limit for cost control
 
----
+# REPLACE WITH:
+# Process ALL papers - no artificial limit
+for paper in search_results.papers:
+    decision = await screener.screen_paper(paper, criteria, dual_review)
+```
 
-## Quality Assessment Requirements
+### 2. Enable PDF Text Extraction
 
-### Risk of Bias Tools
-Auto-detect and apply appropriate tool:
+**File:** `src/arakis/api/routers/workflows.py` (Line 545)
 
-| Study Type | Assessment Tool |
-|------------|-----------------|
-| RCTs | Cochrane RoB 2 |
-| Non-randomized interventions | ROBINS-I |
-| Diagnostic accuracy | QUADAS-2 |
-| Cohort/Case-control | Newcastle-Ottawa Scale |
-| Cross-sectional | Adapted NOS or JBI checklist |
+```python
+# CHANGE FROM:
+use_full_text=False,  # Use abstracts for API workflow
 
-### Assessment Output
-- Domain-level judgments
-- Overall risk judgment
-- Supporting justification for each judgment
-- Visual summary (traffic light plot)
+# CHANGE TO:
+use_full_text=True,  # Use full text from PDFs
+```
 
----
+### 3. Add R2 Figure Upload
 
-## Acceptance Criteria
+**File:** `src/arakis/workflow/stages/analysis.py`
 
-### Screening
-- [x] All papers are processed (100% completion)
-- [x] Full audit trail recorded for each paper
-- [x] Progress displayed in real-time
-- [x] Batch processing with configurable size
+```python
+async def _upload_to_r2(self, local_path: str, figure_type: str) -> str:
+    """Upload figure to R2 and return URL."""
+    with open(local_path, "rb") as f:
+        content = f.read()
 
-### Data Extraction
-- [x] Retry logic implemented for failures
-- [x] Low-confidence fields flagged
-- [x] Failure reasons logged
-- [x] Schema validation enforced
+    key = f"workflows/{self.workflow_id}/figures/{figure_type}.png"
+    result = self.storage_client.upload_bytes(
+        data=content,
+        key=key,
+        content_type="image/png",
+    )
 
-### Meta-Analysis
-- [x] Forest plot generated with all required statistics
-- [x] Funnel plot generated
-- [x] Heterogeneity metrics displayed (I², τ², Q)
-- [x] Individual study weights shown
-- [x] Subgroup analyses performed when applicable
-- [x] Narrative synthesis when meta-analysis not feasible
-
-### PRISMA
-- [x] Flow diagram generated (PNG, 300 DPI)
-- [x] Narrative description in Results section
-- [x] All numbers accurate and traceable
-
-### Tables
-- [x] Table 1 populated with correct study characteristics
-- [x] Risk of bias table with appropriate tool
-- [x] GRADE summary of findings table
-
-### References
-- [x] All citations properly formatted (APA 7th)
-- [x] All in-text citations have reference list entries
-- [x] No orphaned references
-
-### Output
-- [x] Markdown file generated
-- [x] Figures/tables at end of document
-- [x] All figures saved to ./figures/ directory
-
-### State Management
-- [x] State saved after each operation
-- [x] Resume from any point possible
-- [x] No data loss on interruption
+    # Save figure record to database
+    await self._save_figure_record(figure_type, key, result.url)
+    return result.url
+```
 
 ---
 
-## Implementation Priority
+## API Endpoint Changes
 
-### Phase 1: Critical Fixes
-1. Fix screening to process ALL papers
-2. Fix data extraction reliability
-3. Fix meta-analysis completion and statistics display
-4. Fix PRISMA diagram generation
+### File: `src/arakis/api/routers/workflows.py`
 
-### Phase 2: Quality Improvements
-1. Implement full audit trails
-2. Add interactive error handling
-3. Improve table population
-4. Fix reference formatting
+**Refactor `execute_workflow()`** to use orchestrator:
+```python
+async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
+    orchestrator = WorkflowOrchestrator()
+    await orchestrator.execute_workflow(workflow_id)
+```
 
-### Phase 3: New Features
-1. Web UI dashboard
-2. Full state saving and resume
-3. Real-time supervision mode
-4. Custom table column configuration
+**New Endpoints:**
+
+```python
+@router.post("/{workflow_id}/stages/{stage}/rerun")
+async def rerun_stage(workflow_id: str, stage: str):
+    """Re-run a specific stage."""
+
+@router.post("/{workflow_id}/resume")
+async def resume_workflow(workflow_id: str):
+    """Resume workflow after user action."""
+
+@router.get("/{workflow_id}/stages")
+async def get_stage_checkpoints(workflow_id: str):
+    """Get all stage checkpoints."""
+```
+
+### File: `src/arakis/api/schemas/workflow.py`
+
+**Enhanced Response:**
+```python
+class StageCheckpoint(BaseModel):
+    stage: str
+    status: str  # pending, in_progress, completed, failed, skipped
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    retry_count: int = 0
+    error_message: Optional[str]
+    cost: float = 0.0
+
+class WorkflowResponse(BaseModel):
+    # Existing fields...
+    stages: list[StageCheckpoint] = []
+    needs_user_action: bool = False
+    action_required: Optional[str]
+    forest_plot_url: Optional[str]
+    funnel_plot_url: Optional[str]
+    prisma_url: Optional[str]
+```
 
 ---
 
-## Document History
+## Frontend Changes
 
-| Version | Date | Author | Changes |
-|---------|------|--------|---------|
-| 1.0 | 2026-01-20 | User/Claude | Initial requirements gathering |
+### File: `frontend-next/src/types/workflow.ts`
+
+```typescript
+export type WorkflowStage =
+  | 'search' | 'screen' | 'pdf_fetch' | 'extract' | 'rob'
+  | 'analysis' | 'prisma' | 'tables' | 'introduction'
+  | 'methods' | 'results' | 'discussion' | 'completed';
+
+export interface StageCheckpoint {
+  stage: WorkflowStage;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+  started_at: string | null;
+  completed_at: string | null;
+  retry_count: number;
+  error_message: string | null;
+  cost: number;
+}
+
+export interface WorkflowResponse {
+  // ... existing fields
+  stages: StageCheckpoint[];
+  needs_user_action: boolean;
+  action_required: string | null;
+  forest_plot_url: string | null;
+  funnel_plot_url: string | null;
+  prisma_url: string | null;
+}
+```
+
+### File: `frontend-next/src/components/workflow/WorkflowDetailView.tsx`
+
+Update STAGES constant to 12 stages:
+```typescript
+const STAGES = [
+  { key: 'search', label: 'Searching databases', icon: Search },
+  { key: 'screen', label: 'Screening papers', icon: FileText },
+  { key: 'pdf_fetch', label: 'Fetching PDFs', icon: Download },
+  { key: 'extract', label: 'Extracting data', icon: ClipboardList },
+  { key: 'rob', label: 'Risk of Bias', icon: Shield },
+  { key: 'analysis', label: 'Meta-analysis', icon: BarChart3 },
+  { key: 'prisma', label: 'PRISMA diagram', icon: GitBranch },
+  { key: 'tables', label: 'Generating tables', icon: Table },
+  { key: 'introduction', label: 'Writing introduction', icon: BookOpen },
+  { key: 'methods', label: 'Writing methods', icon: FileCode },
+  { key: 'results', label: 'Writing results', icon: FileBarChart },
+  { key: 'discussion', label: 'Writing discussion', icon: MessageSquare },
+] as const;
+```
+
+---
+
+## Implementation Tasks
+
+### Phase 1: Database (Tasks 1-3)
+- [ ] **Task 1:** Create Alembic migration for `workflow_stage_checkpoints` table
+- [ ] **Task 2:** Create Alembic migration for `workflow_figures` table
+- [ ] **Task 3:** Create Alembic migration for `workflow_tables` table
+- [ ] **Task 4:** Add `needs_user_action`, `action_required`, `meta_analysis_feasible` columns to `workflows`
+- [ ] **Task 5:** Add SQLAlchemy models to `src/arakis/database/models.py`
+
+### Phase 2: Stage Executors (Tasks 6-17)
+- [ ] **Task 6:** Create `src/arakis/workflow/stages/base.py` with BaseStageExecutor
+- [ ] **Task 7:** Create SearchStageExecutor
+- [ ] **Task 8:** Create ScreenStageExecutor (NO 50-paper limit)
+- [ ] **Task 9:** Create PDFFetchStageExecutor (extract_text=True)
+- [ ] **Task 10:** Create ExtractStageExecutor (use_full_text=True)
+- [ ] **Task 11:** Create RiskOfBiasStageExecutor (NEW)
+- [ ] **Task 12:** Create AnalysisStageExecutor (full meta-analysis + R2 upload)
+- [ ] **Task 13:** Create PRISMAStageExecutor
+- [ ] **Task 14:** Create TablesStageExecutor (3 tables)
+- [ ] **Task 15:** Create IntroductionStageExecutor
+- [ ] **Task 16:** Create MethodsStageExecutor (NEW)
+- [ ] **Task 17:** Create ResultsStageExecutor
+- [ ] **Task 18:** Create DiscussionStageExecutor
+
+### Phase 3: Orchestrator (Tasks 19-22)
+- [ ] **Task 19:** Create WorkflowOrchestrator class
+- [ ] **Task 20:** Implement checkpoint saving/loading
+- [ ] **Task 21:** Implement retry logic with exponential backoff
+- [ ] **Task 22:** Implement stage re-run functionality
+
+### Phase 4: API Updates (Tasks 23-27)
+- [ ] **Task 23:** Refactor `execute_workflow()` to use orchestrator
+- [ ] **Task 24:** Add `POST /{id}/stages/{stage}/rerun` endpoint
+- [ ] **Task 25:** Add `POST /{id}/resume` endpoint
+- [ ] **Task 26:** Add `GET /{id}/stages` endpoint
+- [ ] **Task 27:** Update WorkflowResponse schema with stages array
+
+### Phase 5: Frontend (Tasks 28-32)
+- [ ] **Task 28:** Update TypeScript types in `workflow.ts`
+- [ ] **Task 29:** Update WorkflowDetailView with 12 stages
+- [ ] **Task 30:** Add stage retry button component
+- [ ] **Task 31:** Add user action prompt component
+- [ ] **Task 32:** Add figure preview components (forest/funnel plots)
+
+### Phase 6: Testing (Tasks 33-35)
+- [ ] **Task 33:** Unit tests for each stage executor
+- [ ] **Task 34:** Integration tests for full workflow
+- [ ] **Task 35:** E2E test with frontend
+
+---
+
+## Critical Files
+
+| File | Purpose |
+|------|---------|
+| `src/arakis/database/models.py` | Add new SQLAlchemy models |
+| `src/arakis/models/workflow_state.py` | Update WorkflowStage enum |
+| `src/arakis/api/routers/workflows.py` | Refactor execute_workflow, add endpoints |
+| `src/arakis/api/schemas/workflow.py` | Update response schemas |
+| `src/arakis/workflow/orchestrator.py` | NEW: Main orchestrator |
+| `src/arakis/workflow/stages/*.py` | NEW: 12 stage executors |
+| `frontend-next/src/types/workflow.ts` | Update TypeScript types |
+| `frontend-next/src/components/workflow/WorkflowDetailView.tsx` | Update UI for 12 stages |
+
+---
+
+## Verification Steps
+
+1. **Database:** Run migrations, verify tables created
+2. **Backend:** Run `pytest tests/workflow/` - all tests pass
+3. **API:** Test endpoints with curl/Postman
+4. **Frontend:** Run `npm run build` - no TypeScript errors
+5. **E2E:** Create workflow, watch 12 stages complete, verify figures in R2

@@ -1503,6 +1503,17 @@ def write_intro(
             )
         )
 
+    # Display warnings if any
+    if writer.warnings:
+        console.print("\n[yellow]Warnings during generation:[/yellow]")
+        for warning in writer.warnings:
+            console.print(f"  [yellow]⚠ {warning}[/yellow]")
+
+    # Display literature sources used
+    if writer.literature_sources:
+        sources_str = ", ".join(set(s.split(":")[1] for s in writer.literature_sources if ":" in s))
+        console.print(f"\n[dim]Literature sources used: {sources_str}[/dim]")
+
     # Display results
     console.print("\n[bold green]Introduction Section Generated![/bold green]\n")
 

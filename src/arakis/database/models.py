@@ -45,7 +45,7 @@ class Workflow(Base):
     )  # "pending", "running", "needs_review", "completed", "failed"
     current_stage = Column(
         String(50), nullable=True
-    )  # "searching", "screening", "analyzing", "writing", "finalizing"
+    )  # 12 stages: search, screen, pdf_fetch, extract, rob, analysis, prisma, tables, introduction, methods, results, discussion
 
     # Statistics
     papers_found = Column(Integer, default=0)
@@ -59,6 +59,13 @@ class Workflow(Base):
 
     # Error tracking
     error_message = Column(Text, nullable=True)
+
+    # User action tracking (for retry prompts)
+    needs_user_action = Column(Boolean, default=False)
+    action_required = Column(Text, nullable=True)
+
+    # Meta-analysis tracking
+    meta_analysis_feasible = Column(Boolean, nullable=True)
 
     # User and trial tracking
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
@@ -75,6 +82,15 @@ class Workflow(Base):
     )
     manuscript = relationship(
         "Manuscript", back_populates="workflow", uselist=False, cascade="all, delete-orphan"
+    )
+    stage_checkpoints = relationship(
+        "WorkflowStageCheckpoint", back_populates="workflow", cascade="all, delete-orphan"
+    )
+    figures = relationship(
+        "WorkflowFigure", back_populates="workflow", cascade="all, delete-orphan"
+    )
+    tables = relationship(
+        "WorkflowTable", back_populates="workflow", cascade="all, delete-orphan"
     )
 
 
@@ -284,3 +300,104 @@ class RefreshToken(Base):
 
     # Relationships
     user = relationship("User", back_populates="refresh_tokens")
+
+
+class WorkflowStageCheckpoint(Base):
+    """Checkpoint for a workflow stage with status, timing, and output data."""
+
+    __tablename__ = "workflow_stage_checkpoints"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(
+        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    stage = Column(String(50), nullable=False)  # search, screen, pdf_fetch, etc.
+    status = Column(
+        String(20), default="pending", nullable=False
+    )  # pending, in_progress, completed, failed, skipped
+
+    # Timing
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Retry tracking
+    retry_count = Column(Integer, default=0, nullable=False)
+
+    # Stage output data (JSON blob with stage-specific results)
+    output_data = Column(JSON, nullable=True)
+
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+
+    # Cost tracking
+    cost = Column(Float, default=0.0, nullable=False)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), onupdate=utc_now, nullable=True)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="stage_checkpoints")
+
+    # Unique constraint on workflow_id + stage
+    __table_args__ = (
+        {"sqlite_autoincrement": True},
+    )
+
+
+class WorkflowFigure(Base):
+    """Generated figure stored in R2/S3."""
+
+    __tablename__ = "workflow_figures"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(
+        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    figure_type = Column(
+        String(50), nullable=False
+    )  # forest_plot, funnel_plot, prisma, rob_summary, rob_traffic_light
+
+    # Metadata
+    title = Column(String(255), nullable=True)
+    caption = Column(Text, nullable=True)
+
+    # R2/S3 storage
+    r2_key = Column(String(500), nullable=True)  # Object key in bucket
+    r2_url = Column(String(1000), nullable=True)  # Public URL
+    file_size_bytes = Column(Integer, nullable=True)
+
+    # Timestamp
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="figures")
+
+
+class WorkflowTable(Base):
+    """Generated table (study characteristics, RoB, GRADE SoF)."""
+
+    __tablename__ = "workflow_tables"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    workflow_id = Column(
+        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
+    )
+    table_type = Column(
+        String(50), nullable=False
+    )  # study_characteristics, risk_of_bias, grade_sof
+
+    # Metadata
+    title = Column(String(255), nullable=True)
+    caption = Column(Text, nullable=True)
+
+    # Table content
+    headers = Column(JSON, nullable=True)  # List of column headers
+    rows = Column(JSON, nullable=True)  # List of row data (each row is a list or dict)
+    footnotes = Column(JSON, nullable=True)  # List of footnotes
+
+    # Timestamp
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Relationships
+    workflow = relationship("Workflow", back_populates="tables")

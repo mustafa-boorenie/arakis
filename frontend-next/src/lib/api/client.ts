@@ -8,6 +8,8 @@ import type {
   User,
   TokenResponse,
   OAuthLoginResponse,
+  StageCheckpoint,
+  StageRerunResponse,
 } from '@/types';
 import { ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY } from '@/types';
 
@@ -228,6 +230,25 @@ class ApiClient {
 
   async deleteWorkflow(id: string): Promise<void> {
     return this.request(`/api/workflows/${id}`, { method: 'DELETE' });
+  }
+
+  async resumeWorkflow(id: string): Promise<WorkflowResponse> {
+    return this.request(`/api/workflows/${id}/resume`, { method: 'POST' });
+  }
+
+  async rerunStage(
+    workflowId: string,
+    stage: string,
+    inputOverride?: Record<string, unknown>
+  ): Promise<StageRerunResponse> {
+    return this.request(`/api/workflows/${workflowId}/stages/${stage}/rerun`, {
+      method: 'POST',
+      body: JSON.stringify({ input_override: inputOverride }),
+    });
+  }
+
+  async getStageCheckpoints(workflowId: string): Promise<StageCheckpoint[]> {
+    return this.request(`/api/workflows/${workflowId}/stages`);
   }
 
   // ============= Manuscript Endpoints =============

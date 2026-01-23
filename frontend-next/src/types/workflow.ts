@@ -3,13 +3,33 @@
 
 export type WorkflowStatus = 'pending' | 'running' | 'needs_review' | 'completed' | 'failed';
 
+// 12 comprehensive workflow stages
 export type WorkflowStage =
-  | 'searching'
-  | 'screening'
-  | 'analyzing'
-  | 'writing'
-  | 'finalizing'
+  | 'search'
+  | 'screen'
+  | 'pdf_fetch'
+  | 'extract'
+  | 'rob'
+  | 'analysis'
+  | 'prisma'
+  | 'tables'
+  | 'introduction'
+  | 'methods'
+  | 'results'
+  | 'discussion'
   | 'completed';
+
+export type StageStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+
+export interface StageCheckpoint {
+  stage: string;
+  status: StageStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  retry_count: number;
+  error_message: string | null;
+  cost: number;
+}
 
 export interface WorkflowCreateRequest {
   research_question: string;
@@ -37,6 +57,17 @@ export interface WorkflowResponse {
   created_at: string;
   completed_at: string | null;
   error_message: string | null;
+
+  // New fields for unified workflow
+  needs_user_action: boolean;
+  action_required: string | null;
+  meta_analysis_feasible: boolean | null;
+  stages: StageCheckpoint[];
+
+  // Figure URLs from R2
+  forest_plot_url: string | null;
+  funnel_plot_url: string | null;
+  prisma_url: string | null;
 }
 
 export interface WorkflowListResponse {
@@ -44,8 +75,36 @@ export interface WorkflowListResponse {
   total: number;
 }
 
+export interface StageRerunRequest {
+  input_override?: Record<string, unknown>;
+}
+
+export interface StageRerunResponse {
+  success: boolean;
+  stage: string;
+  output_data: Record<string, unknown> | null;
+  error: string | null;
+  cost: number;
+}
+
 export const AVAILABLE_DATABASES = [
   { id: 'pubmed', label: 'PubMed', description: 'NCBI biomedical literature (recommended, most reliable)' },
   { id: 'openalex', label: 'OpenAlex', description: 'Open scholarly metadata (reliable)' },
   { id: 'semantic_scholar', label: 'Semantic Scholar', description: 'AI-powered search (strict rate limits)' },
+] as const;
+
+// Stage configuration for UI display
+export const WORKFLOW_STAGES = [
+  { key: 'search', label: 'Searching databases', description: 'Finding relevant papers' },
+  { key: 'screen', label: 'Screening papers', description: 'AI-powered paper screening (no limit)' },
+  { key: 'pdf_fetch', label: 'Fetching PDFs', description: 'Downloading full texts' },
+  { key: 'extract', label: 'Extracting data', description: 'Structured data extraction' },
+  { key: 'rob', label: 'Risk of Bias', description: 'Quality assessment (RoB 2/ROBINS-I/QUADAS-2)' },
+  { key: 'analysis', label: 'Meta-analysis', description: 'Statistical synthesis with plots' },
+  { key: 'prisma', label: 'PRISMA diagram', description: 'Flow diagram generation' },
+  { key: 'tables', label: 'Generating tables', description: 'Characteristics, RoB, GRADE' },
+  { key: 'introduction', label: 'Writing introduction', description: 'Background and objectives' },
+  { key: 'methods', label: 'Writing methods', description: 'PRISMA-compliant methods' },
+  { key: 'results', label: 'Writing results', description: 'Synthesis and findings' },
+  { key: 'discussion', label: 'Writing discussion', description: 'Interpretation and implications' },
 ] as const;

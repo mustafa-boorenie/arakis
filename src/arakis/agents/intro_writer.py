@@ -9,18 +9,26 @@ than the specific papers being reviewed.
 """
 
 import json
+import logging
 import time
 from typing import Any, Optional, Union
 
 from openai import AsyncOpenAI
 
-from arakis.clients.perplexity import PerplexityClient
+from arakis.clients.perplexity import (
+    PerplexityClient,
+    PerplexityClientError,
+    PerplexityNotConfiguredError,
+    PerplexityRateLimitError,
+)
 from arakis.config import get_settings
 from arakis.models.paper import Paper
 from arakis.models.writing import Section, WritingResult
 from arakis.rag import Retriever
 from arakis.references import CitationExtractor, ReferenceManager
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
+
+logger = logging.getLogger(__name__)
 
 
 class IntroductionWriterAgent:
@@ -76,6 +84,10 @@ class IntroductionWriterAgent:
         # Initialize reference management
         self.reference_manager = ReferenceManager()
         self._citation_extractor = CitationExtractor()
+
+        # Track warnings across all writing operations
+        self._accumulated_warnings: list[str] = []
+        self._literature_sources: list[str] = []
 
     @retry_with_exponential_backoff(
         max_retries=8, initial_delay=2.0, max_delay=90.0, use_rate_limiter=True
@@ -188,6 +200,8 @@ class IntroductionWriterAgent:
 
         papers: list[Paper] = []
         perplexity_summary = ""
+        warnings: list[str] = []
+        literature_source = "none"
 
         # Priority: Perplexity > RAG > provided literature
         if use_perplexity and self.perplexity.is_configured:
@@ -198,19 +212,36 @@ class IntroductionWriterAgent:
                 )
                 perplexity_summary = summary
                 papers = fetched_papers
+                literature_source = "perplexity"
 
                 # Register papers with reference manager
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except Exception:
-                # Fall back to other methods if Perplexity fails
-                pass
+            except PerplexityNotConfiguredError as e:
+                warning_msg = f"Perplexity not configured: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except PerplexityRateLimitError as e:
+                warning_msg = f"Perplexity rate limited: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except PerplexityClientError as e:
+                warning_msg = f"Perplexity API error: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except Exception as e:
+                warning_msg = f"Unexpected error fetching literature from Perplexity: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
 
         if not papers and literature_context:
             # Use provided papers
             papers = literature_context[:5]
+            literature_source = "provided"
             for p in papers:
                 self.reference_manager.register_paper(p)
+            if warnings:
+                warnings.append("Falling back to provided literature context")
 
         # Format papers with numeric IDs for the prompt
         papers_formatted = self._format_papers_for_prompt(papers)
@@ -260,12 +291,19 @@ Write only the background text, no headings."""
         section = Section(title="Background", content=content)
         section.citations = self._citation_extractor.extract_unique_paper_ids(content)
 
+        # Accumulate warnings for agent-level tracking
+        self._accumulated_warnings.extend(warnings)
+        if literature_source:
+            self._literature_sources.append(f"background:{literature_source}")
+
         return WritingResult(
             section=section,
             generation_time_ms=elapsed_ms,
             tokens_used=0,  # Can't track across retries easily
             cost_usd=0.0,
             success=True,
+            warnings=warnings,
+            literature_source=literature_source,
         )
 
     async def write_rationale(
@@ -290,6 +328,8 @@ Write only the background text, no headings."""
 
         papers: list[Paper] = []
         perplexity_summary = ""
+        warnings: list[str] = []
+        literature_source = "none"
 
         # Priority: Perplexity > RAG > provided literature
         if use_perplexity and self.perplexity.is_configured:
@@ -300,16 +340,34 @@ Write only the background text, no headings."""
                 )
                 perplexity_summary = summary
                 papers = fetched_papers
+                literature_source = "perplexity"
 
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except Exception:
-                pass
+            except PerplexityNotConfiguredError as e:
+                warning_msg = f"Perplexity not configured: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except PerplexityRateLimitError as e:
+                warning_msg = f"Perplexity rate limited: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except PerplexityClientError as e:
+                warning_msg = f"Perplexity API error: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
+            except Exception as e:
+                warning_msg = f"Unexpected error fetching literature from Perplexity: {e}"
+                logger.warning(warning_msg)
+                warnings.append(warning_msg)
 
         if not papers and existing_reviews:
             papers = existing_reviews[:3]
+            literature_source = "provided"
             for r in papers:
                 self.reference_manager.register_paper(r)
+            if warnings:
+                warnings.append("Falling back to provided literature context")
 
         # Format papers with numeric IDs for the prompt
         papers_formatted = self._format_papers_for_prompt(papers)
@@ -360,12 +418,19 @@ Write only the rationale text, no headings."""
         section = Section(title="Rationale", content=content)
         section.citations = self._citation_extractor.extract_unique_paper_ids(content)
 
+        # Accumulate warnings for agent-level tracking
+        self._accumulated_warnings.extend(warnings)
+        if literature_source:
+            self._literature_sources.append(f"rationale:{literature_source}")
+
         return WritingResult(
             section=section,
             generation_time_ms=elapsed_ms,
             tokens_used=0,  # Can't track across retries easily
             cost_usd=0.0,
             success=True,
+            warnings=warnings,
+            literature_source=literature_source,
         )
 
     async def write_objectives(
@@ -462,8 +527,9 @@ Write only the objectives text, no headings."""
         Returns:
             Tuple of (introduction_section, list_of_cited_papers)
         """
-        # Clear reference manager for fresh start
+        # Clear reference manager and warnings for fresh start
         self.reference_manager.clear()
+        self.clear_warnings()
 
         # Create main introduction section
         intro_section = Section(title="Introduction", content="")
@@ -501,6 +567,29 @@ Write only the objectives text, no headings."""
             List of all registered papers
         """
         return self.reference_manager.all_papers
+
+    @property
+    def warnings(self) -> list[str]:
+        """Get all accumulated warnings from writing operations.
+
+        Returns:
+            List of warning messages
+        """
+        return list(self._accumulated_warnings)
+
+    @property
+    def literature_sources(self) -> list[str]:
+        """Get literature sources used for each section.
+
+        Returns:
+            List of "section:source" strings (e.g., "background:perplexity")
+        """
+        return list(self._literature_sources)
+
+    def clear_warnings(self) -> None:
+        """Clear accumulated warnings."""
+        self._accumulated_warnings.clear()
+        self._literature_sources.clear()
 
     def validate_citations(self, section: Section) -> dict[str, Any]:
         """Validate that all citations in a section have registered papers.

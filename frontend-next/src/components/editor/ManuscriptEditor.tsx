@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -20,10 +20,10 @@ import { editorConfig } from '@/lib/editor/config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AIChatPanel } from './AIChatPanel';
 import {
   ArrowLeft,
   Check,
-  Sparkles,
   Share2,
   Bold,
   Italic,
@@ -40,6 +40,8 @@ import {
   FileText,
   Loader2,
   Send,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 
 // Plugin to load manuscript content
@@ -213,8 +215,9 @@ function EditorToolbarNew() {
 }
 
 export function ManuscriptEditor() {
-  const { editor: editorStore, setEditorDirty, setLayoutMode, setViewMode } = useStore();
+  const { editor: editorStore, setEditorDirty, setLayoutMode, setViewMode, setCurrentView, toggleEditorChatPanel } = useStore();
   const { manuscript, isLoading } = editorStore;
+  const isEditorChatPanelOpen = useStore((state) => state.layout.isEditorChatPanelOpen);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [wordCount] = useState(340);
   const [aiPrompt, setAiPrompt] = useState('');
@@ -228,8 +231,23 @@ export function ManuscriptEditor() {
 
   const handleBack = () => {
     setLayoutMode('chat-fullscreen');
-    setViewMode('viewing-workflow');
+    setCurrentView('history');
   };
+
+  // Generate manuscript content for AI context
+  const manuscriptContent = useMemo(() => {
+    if (!manuscript) return '';
+    const ms = manuscript.manuscript;
+    return [
+      ms.title && `# ${ms.title}`,
+      ms.abstract && `## Abstract\n${ms.abstract}`,
+      ms.introduction && `## Introduction\n${ms.introduction}`,
+      ms.methods && `## Methods\n${ms.methods}`,
+      ms.results && `## Results\n${ms.results}`,
+      ms.discussion && `## Discussion\n${ms.discussion}`,
+      ms.conclusions && `## Conclusions\n${ms.conclusions}`,
+    ].filter(Boolean).join('\n\n');
+  }, [manuscript]);
 
   // Show loading state
   if (isLoading) {
@@ -277,12 +295,21 @@ export function ManuscriptEditor() {
 
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-2">
-            <Sparkles className="w-4 h-4 text-purple-600" />
-            AI Generate
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2">
             <Share2 className="w-4 h-4" />
             Share
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleEditorChatPanel}
+            className="gap-2"
+          >
+            {isEditorChatPanelOpen ? (
+              <PanelRightClose className="w-4 h-4" />
+            ) : (
+              <PanelRightOpen className="w-4 h-4" />
+            )}
+            AI Chat
           </Button>
         </div>
       </header>
@@ -294,7 +321,7 @@ export function ManuscriptEditor() {
       <div className="flex-1 min-h-0 overflow-hidden flex">
         <div className="flex-1 overflow-y-auto" ref={scrollRef}>
           <LexicalComposer initialConfig={editorConfig}>
-            <div className="max-w-3xl mx-auto p-8">
+            <div className="w-full px-8 lg:px-16 xl:px-24">
               {/* Section Headers */}
               <div className="space-y-8">
                 <div>
@@ -348,26 +375,32 @@ export function ManuscriptEditor() {
         </div>
       </div>
 
-      {/* AI Chat Input */}
+      {/* AI Chat Input - Opens panel on focus */}
       <div className="border-t border-gray-200 p-4 bg-white">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-4 py-2">
+        <div className="w-full px-8 lg:px-16 xl:px-24">
+          <div
+            className="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-4 py-2 cursor-pointer hover:border-purple-300 transition-colors"
+            onClick={toggleEditorChatPanel}
+          >
             <Input
               type="text"
-              placeholder="Ask AI for Help"
+              placeholder="Ask AI for Help..."
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
-              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+              className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0 cursor-pointer"
+              readOnly
             />
             <button
               className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-              disabled={!aiPrompt.trim()}
             >
-              <Send className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4" />
             </button>
           </div>
         </div>
       </div>
+
+      {/* AI Chat Panel */}
+      <AIChatPanel manuscriptContent={manuscriptContent} />
     </div>
   );
 }

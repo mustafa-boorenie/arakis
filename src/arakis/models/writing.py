@@ -394,3 +394,5 @@ class WritingResult:
     cost_usd: float
     success: bool
     error_message: str = ""
+    warnings: list[str] = field(default_factory=list)
+    literature_source: str = ""  # "perplexity", "rag", "provided", "none"
