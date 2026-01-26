@@ -892,3 +892,94 @@ class TestRateLimiting:
             await client._rate_limit()
 
             assert client._last_request_time > 0
+
+
+# ============================================================================
+# Test Debug Mode
+# ============================================================================
+
+
+class TestDebugMode:
+    """Tests for debug mode functionality."""
+
+    def test_debug_mode_disabled_by_default(self):
+        """Test debug mode is disabled by default."""
+        with patch("arakis.clients.perplexity.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(perplexity_api_key="test_key", debug=False)
+            client = PerplexityClient()
+            assert client.debug is False
+
+    def test_debug_mode_enabled_via_param(self):
+        """Test debug mode can be enabled via parameter."""
+        with patch("arakis.clients.perplexity.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(perplexity_api_key="test_key", debug=False)
+            client = PerplexityClient(debug=True)
+            assert client.debug is True
+
+    def test_debug_mode_enabled_via_settings(self):
+        """Test debug mode inherits from settings."""
+        with patch("arakis.clients.perplexity.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(perplexity_api_key="test_key", debug=True)
+            client = PerplexityClient()
+            assert client.debug is True
+
+
+# ============================================================================
+# Test Search Mode Parameter
+# ============================================================================
+
+
+class TestSearchMode:
+    """Tests for search_mode parameter."""
+
+    @pytest.mark.asyncio
+    async def test_request_includes_search_mode(self):
+        """Test request includes search_mode parameter."""
+        with patch("arakis.clients.perplexity.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(perplexity_api_key="test_key", debug=False)
+            client = PerplexityClient()
+
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
+
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
+
+                await client._request(
+                    [{"role": "user", "content": "test"}],
+                    search_mode="web"
+                )
+
+                # Verify the call included search_mode
+                call_args = mock_client.post.call_args
+                payload = call_args.kwargs["json"]
+                assert payload["search_mode"] == "web"
+
+    @pytest.mark.asyncio
+    async def test_request_excludes_search_mode_when_off(self):
+        """Test request excludes search_mode when set to 'off'."""
+        with patch("arakis.clients.perplexity.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(perplexity_api_key="test_key", debug=False)
+            client = PerplexityClient()
+
+            mock_response = MagicMock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {"choices": [{"message": {"content": "OK"}}]}
+
+            with patch("httpx.AsyncClient") as mock_client_class:
+                mock_client = AsyncMock()
+                mock_client.post.return_value = mock_response
+                mock_client_class.return_value.__aenter__.return_value = mock_client
+
+                await client._request(
+                    [{"role": "user", "content": "test"}],
+                    search_mode="off"
+                )
+
+                # Verify search_mode is NOT in payload
+                call_args = mock_client.post.call_args
+                payload = call_args.kwargs["json"]
+                assert "search_mode" not in payload
