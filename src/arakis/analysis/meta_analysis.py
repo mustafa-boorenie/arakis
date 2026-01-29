@@ -26,7 +26,7 @@ from arakis.models.analysis import (
     MetaAnalysisResult,
     StudyData,
 )
-from arakis.traceability import AuditTrail, DEFAULT_PRECISION
+from arakis.traceability import DEFAULT_PRECISION, AuditTrail
 
 
 class MetaAnalysisEngine:

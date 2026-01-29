@@ -12,7 +12,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.analysis.risk_of_bias import RiskOfBiasAssessor, RiskOfBiasTableGenerator
-from arakis.models.extraction import ExtractionResult, ExtractedData
+from arakis.config import ModeConfig
+from arakis.models.extraction import ExtractedData, ExtractionResult
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,8 @@ class RiskOfBiasStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "rob"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.assessor = RiskOfBiasAssessor()
         self.table_generator = RiskOfBiasTableGenerator()
 

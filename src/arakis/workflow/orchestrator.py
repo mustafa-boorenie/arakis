@@ -16,23 +16,23 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arakis.config import get_mode_config, ModeConfig, get_default_mode_config
+from arakis.config import ModeConfig, get_mode_config
 from arakis.database.models import Workflow, WorkflowStageCheckpoint
 from arakis.workflow.stages import (
-    BaseStageExecutor,
-    StageResult,
-    SearchStageExecutor,
-    ScreenStageExecutor,
-    PDFFetchStageExecutor,
-    ExtractStageExecutor,
-    RiskOfBiasStageExecutor,
     AnalysisStageExecutor,
-    PRISMAStageExecutor,
-    TablesStageExecutor,
+    BaseStageExecutor,
+    DiscussionStageExecutor,
+    ExtractStageExecutor,
     IntroductionStageExecutor,
     MethodsStageExecutor,
+    PDFFetchStageExecutor,
+    PRISMAStageExecutor,
     ResultsStageExecutor,
-    DiscussionStageExecutor,
+    RiskOfBiasStageExecutor,
+    ScreenStageExecutor,
+    SearchStageExecutor,
+    StageResult,
+    TablesStageExecutor,
 )
 
 logger = logging.getLogger(__name__)

@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arakis.config import ModeConfig
 from arakis.models.paper import Paper, PaperSource
 from arakis.retrieval.fetcher import PaperFetcher
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
@@ -26,8 +27,8 @@ class PDFFetchStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "pdf_fetch"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.fetcher = PaperFetcher(cache_pdfs=True)
 
     def get_required_stages(self) -> list[str]:

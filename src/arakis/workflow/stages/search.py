@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arakis.config import ModeConfig
 from arakis.orchestrator import SearchOrchestrator
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
@@ -20,8 +21,8 @@ class SearchStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "search"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.orchestrator = SearchOrchestrator()
 
     def get_required_stages(self) -> list[str]:

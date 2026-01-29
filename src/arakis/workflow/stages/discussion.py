@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.agents.discussion_writer import DiscussionWriterAgent
+from arakis.config import ModeConfig
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,8 @@ class DiscussionStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "discussion"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.writer = DiscussionWriterAgent()
 
     def get_required_stages(self) -> list[str]:

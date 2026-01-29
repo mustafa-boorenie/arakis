@@ -1105,17 +1105,17 @@ def analyze(
         console.print(summary_table)
 
         # Summary of findings
-        console.print(f"\n[bold]Summary of Findings:[/bold]")
+        console.print("\n[bold]Summary of Findings:[/bold]")
         console.print(synthesis_result.summary_of_findings)
 
         # Heterogeneity explanation
         if synthesis_result.heterogeneity_explanation:
-            console.print(f"\n[bold]Heterogeneity:[/bold]")
+            console.print("\n[bold]Heterogeneity:[/bold]")
             console.print(synthesis_result.heterogeneity_explanation)
 
         # Evidence quality
         if synthesis_result.evidence_quality_assessment:
-            console.print(f"\n[bold]Evidence Quality:[/bold]")
+            console.print("\n[bold]Evidence Quality:[/bold]")
             console.print(synthesis_result.evidence_quality_assessment)
 
         # Patterns identified
@@ -2519,7 +2519,7 @@ def workflow(
         if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.ANALYSIS):
             console.print("[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis [dim](cached)[/dim]")
             stage_data = state_manager.state.get_stage_data(WorkflowStage.ANALYSIS)
-            console.print(f"[green]✓ Analysis loaded from cache[/green]\n")
+            console.print("[green]✓ Analysis loaded from cache[/green]\n")
             workflow_results["stages"]["analysis"] = stage_data
         else:
             console.print("[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis")
@@ -2663,7 +2663,7 @@ def workflow(
 
     if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.PRISMA):
         console.print("[bold cyan]Stage 6/8:[/bold cyan] PRISMA Diagram [dim](cached)[/dim]")
-        console.print(f"[green]✓ PRISMA diagram loaded from cache[/green]\n")
+        console.print("[green]✓ PRISMA diagram loaded from cache[/green]\n")
         workflow_results["stages"]["prisma"] = {"file": str(prisma_file)}
     else:
         console.print("[bold cyan]Stage 6/8:[/bold cyan] PRISMA Diagram")

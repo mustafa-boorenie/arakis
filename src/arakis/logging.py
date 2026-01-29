@@ -11,7 +11,6 @@ import logging
 import sys
 from typing import Any
 
-
 # Create the main logger for the arakis package
 logger = logging.getLogger("arakis")
 

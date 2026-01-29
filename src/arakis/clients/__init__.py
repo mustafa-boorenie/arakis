@@ -7,10 +7,10 @@ from arakis.clients.base import (
     SearchClientError,
 )
 from arakis.clients.openai_literature import (
+    LiteratureResponse,
     OpenAILiteratureClient,
     OpenAILiteratureClientError,
     OpenAILiteratureRateLimitError,
-    LiteratureResponse,
     WebSearchResult,
 )
 

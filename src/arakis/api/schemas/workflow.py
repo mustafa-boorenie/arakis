@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from arakis.config import CostMode
+
 
 class WorkflowStatus(str, Enum):
     """Workflow execution status."""
@@ -103,6 +105,10 @@ class WorkflowCreate(BaseModel):
         default=False,
         description="Skip manuscript writing",
     )
+    cost_mode: CostMode = Field(
+        default=CostMode.BALANCED,
+        description="Cost/quality optimization mode (QUALITY, BALANCED, FAST, ECONOMY)",
+    )
 
     class Config:
         json_schema_extra = {
@@ -115,6 +121,7 @@ class WorkflowCreate(BaseModel):
                 "fast_mode": False,
                 "skip_analysis": False,
                 "skip_writing": False,
+                "cost_mode": "BALANCED",
             }
         }
 
@@ -142,6 +149,7 @@ class WorkflowResponse(BaseModel):
     action_required: Optional[str] = None
     meta_analysis_feasible: Optional[bool] = None
     stages: list[StageCheckpoint] = []
+    cost_mode: str = "BALANCED"
 
     # Figure URLs from R2
     forest_plot_url: Optional[str] = None

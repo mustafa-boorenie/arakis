@@ -14,8 +14,8 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO
-from arakis.config import get_settings, ModeConfig, get_default_mode_config
+from arakis.agents.models import REASONING_MODEL_PRO
+from arakis.config import ModeConfig, get_default_mode_config, get_settings
 from arakis.models.writing import Section, WritingResult
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 

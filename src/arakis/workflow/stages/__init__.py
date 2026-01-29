@@ -15,19 +15,19 @@ Each stage executor handles a specific phase of the systematic review workflow:
 12. Discussion - Write discussion, conclusions, abstract
 """
 
-from arakis.workflow.stages.base import BaseStageExecutor, StageResult
-from arakis.workflow.stages.search import SearchStageExecutor
-from arakis.workflow.stages.screen import ScreenStageExecutor
-from arakis.workflow.stages.pdf_fetch import PDFFetchStageExecutor
-from arakis.workflow.stages.extract import ExtractStageExecutor
-from arakis.workflow.stages.rob import RiskOfBiasStageExecutor
 from arakis.workflow.stages.analysis import AnalysisStageExecutor
-from arakis.workflow.stages.prisma import PRISMAStageExecutor
-from arakis.workflow.stages.tables import TablesStageExecutor
+from arakis.workflow.stages.base import BaseStageExecutor, StageResult
+from arakis.workflow.stages.discussion import DiscussionStageExecutor
+from arakis.workflow.stages.extract import ExtractStageExecutor
 from arakis.workflow.stages.introduction import IntroductionStageExecutor
 from arakis.workflow.stages.methods import MethodsStageExecutor
+from arakis.workflow.stages.pdf_fetch import PDFFetchStageExecutor
+from arakis.workflow.stages.prisma import PRISMAStageExecutor
 from arakis.workflow.stages.results import ResultsStageExecutor
-from arakis.workflow.stages.discussion import DiscussionStageExecutor
+from arakis.workflow.stages.rob import RiskOfBiasStageExecutor
+from arakis.workflow.stages.screen import ScreenStageExecutor
+from arakis.workflow.stages.search import SearchStageExecutor
+from arakis.workflow.stages.tables import TablesStageExecutor
 
 __all__ = [
     "BaseStageExecutor",

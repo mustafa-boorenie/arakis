@@ -11,7 +11,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from arakis.config import get_settings, ModeConfig, get_default_mode_config
+from arakis.config import ModeConfig, get_default_mode_config, get_settings
 from arakis.extraction.validator import validate_extraction
 from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.audit import AuditEventType
@@ -111,6 +111,14 @@ class DataExtractionAgent:
         _logger.info(f"[extractor] Initialized with mode: {self.mode_config.name}, "
                     f"model: {self.model}, triple_review: {self.triple_review}")
 
+    def _supports_temperature(self) -> bool:
+        """Check if current model supports temperature parameter.
+        
+        o-series and gpt-5 models don't support temperature.
+        """
+        non_temp_models = ["o1", "o3", "o3-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
+        return not any(self.model.startswith(m) for m in non_temp_models)
+
     @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0)
     async def _call_openai(
         self,
@@ -134,8 +142,12 @@ class DataExtractionAgent:
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
         }
+        
+        # Only add temperature for models that support it
+        if self._supports_temperature():
+            kwargs["temperature"] = temperature
+        
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice

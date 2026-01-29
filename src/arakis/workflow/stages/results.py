@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.agents.results_writer import ResultsWriterAgent
+from arakis.config import ModeConfig
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -31,8 +32,8 @@ class ResultsStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "results"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.writer = ResultsWriterAgent()
 
     def get_required_stages(self) -> list[str]:
@@ -283,9 +284,9 @@ class ResultsStageExecutor(BaseStageExecutor):
 
         # Summarize individual study findings
         content = (
-            f"Individual study results are summarized in Table 1. "
-            f"Effect estimates and confidence intervals for each study are "
-            f"presented in the forest plot (Figure 2)."
+            "Individual study results are summarized in Table 1. "
+            "Effect estimates and confidence intervals for each study are "
+            "presented in the forest plot (Figure 2)."
         )
 
         return {

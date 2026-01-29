@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,8 +15,7 @@ from arakis.models.workflow_state import (
 )
 
 if TYPE_CHECKING:
-    from arakis.models.paper import Paper
-    from arakis.models.screening import ScreeningDecision
+    pass
 
 
 class WorkflowStateManager:
@@ -359,7 +357,7 @@ class WorkflowStateManager:
 
         for required_stage in required_stages:
             if self._state is None:
-                missing.append(f"No state loaded")
+                missing.append("No state loaded")
                 break
 
             checkpoint = self._state.stages.get(required_stage.value)

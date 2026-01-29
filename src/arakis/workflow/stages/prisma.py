@@ -15,8 +15,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from arakis.visualization.prisma import PRISMADiagramGenerator
 from arakis.models.visualization import PRISMAFlow
+from arakis.visualization.prisma import PRISMADiagramGenerator
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)

@@ -175,8 +175,8 @@ class TestIntroductionWriter:
 
         # Test cost calculation
         cost = writer._estimate_cost(1000, 500)
-        # o1 pricing (default): $15/1M input, $60/1M output
-        expected = (1000 / 1_000_000) * 15.00 + (500 / 1_000_000) * 60.00
+        # o3-mini pricing (default): $1.10/1M input, $4.40/1M output
+        expected = (1000 / 1_000_000) * 1.10 + (500 / 1_000_000) * 4.40
         assert cost == pytest.approx(expected, rel=1e-6)
 
     def test_cost_estimation_non_o1_model(self):
@@ -329,8 +329,8 @@ class TestDiscussionWriter:
 
         # Test cost calculation
         cost = writer._estimate_cost(2000, 1000)
-        # o1 pricing (default): $15/1M input, $60/1M output
-        expected = (2000 / 1_000_000) * 15.00 + (1000 / 1_000_000) * 60.00
+        # o3-mini pricing (default): $1.10/1M input, $4.40/1M output
+        expected = (2000 / 1_000_000) * 1.10 + (1000 / 1_000_000) * 4.40
         assert cost == pytest.approx(expected, rel=1e-6)
 
     def test_cost_estimation_non_o1_model(self):

@@ -13,16 +13,16 @@ from typing import Any, Optional, Union
 
 from openai import AsyncOpenAI
 
+from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO
 from arakis.clients.openai_literature import (
     OpenAILiteratureClient,
     OpenAILiteratureClientError,
     OpenAILiteratureRateLimitError,
 )
-from arakis.config import get_settings, ModeConfig, get_default_mode_config
+from arakis.config import ModeConfig, get_default_mode_config, get_settings
 from arakis.models.paper import Paper
 from arakis.models.writing import Section, WritingResult
 from arakis.rag import Retriever
-from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO, FAST_MODEL
 from arakis.references import CitationExtractor, ReferenceManager
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 

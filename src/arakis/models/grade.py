@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
-from arakis.models.analysis import ConfidenceInterval, EffectMeasure, MetaAnalysisResult
+from arakis.models.analysis import ConfidenceInterval, EffectMeasure
 
 
 def _utc_now() -> datetime:

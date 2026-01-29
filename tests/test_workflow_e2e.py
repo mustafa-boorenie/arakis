@@ -53,6 +53,7 @@ def mock_workflow():
     workflow.needs_user_action = False
     workflow.action_required = None
     workflow.meta_analysis_feasible = None
+    workflow.cost_mode = "BALANCED"
     return workflow
 
 

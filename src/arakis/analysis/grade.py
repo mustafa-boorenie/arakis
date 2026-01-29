@@ -12,26 +12,23 @@ Reference:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from arakis.models.analysis import (
     ConfidenceInterval,
     EffectMeasure,
     MetaAnalysisResult,
-    NarrativeSynthesisResult,
 )
 from arakis.models.grade import (
-    CertaintyLevel,
     DomainRating,
     GRADEAssessment,
     GRADEDomain,
-    GRADEEvidenceProfile,
     OutcomeData,
     RatingAction,
     SummaryOfFindings,
 )
-from arakis.models.risk_of_bias import RiskLevel, RiskOfBiasSummary
+from arakis.models.risk_of_bias import RiskOfBiasSummary
 from arakis.models.visualization import Table
 from arakis.traceability import DEFAULT_PRECISION
 

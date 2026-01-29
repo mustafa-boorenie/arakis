@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from arakis.config import get_default_mode_config
 from arakis.workflow.orchestrator import WorkflowOrchestrator
 from arakis.workflow.stages.base import StageResult
 
@@ -55,6 +56,7 @@ def mock_workflow():
     workflow.needs_user_action = False
     workflow.action_required = None
     workflow.meta_analysis_feasible = None
+    workflow.cost_mode = "BALANCED"
     return workflow
 
 
@@ -126,8 +128,9 @@ class TestWorkflowOrchestratorBasics:
     def test_get_executor(self, mock_db):
         """Test getting executor for a stage."""
         orchestrator = WorkflowOrchestrator(mock_db)
+        mode_config = get_default_mode_config()
 
-        executor = orchestrator._get_executor("test-123", "search")
+        executor = orchestrator._get_executor("test-123", "search", mode_config)
 
         assert executor is not None
         assert executor.STAGE_NAME == "search"
@@ -136,9 +139,10 @@ class TestWorkflowOrchestratorBasics:
     def test_get_executor_invalid_stage(self, mock_db):
         """Test getting executor for invalid stage raises error."""
         orchestrator = WorkflowOrchestrator(mock_db)
+        mode_config = get_default_mode_config()
 
         with pytest.raises(ValueError, match="No executor found"):
-            orchestrator._get_executor("test-123", "invalid_stage")
+            orchestrator._get_executor("test-123", "invalid_stage", mode_config)
 
 
 # ==============================================================================

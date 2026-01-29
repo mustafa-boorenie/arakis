@@ -17,7 +17,7 @@ from arakis.api.schemas.workflow import (
     WorkflowList,
     WorkflowResponse,
 )
-from arakis.database.models import User, Workflow, WorkflowStageCheckpoint, WorkflowFigure
+from arakis.database.models import User, Workflow, WorkflowFigure, WorkflowStageCheckpoint
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -87,6 +87,7 @@ async def create_workflow(
         exclusion_criteria=workflow_data.exclusion_criteria,
         databases=workflow_data.databases,
         status="pending",
+        cost_mode=workflow_data.cost_mode.value,
         created_at=datetime.now(timezone.utc),
         user_id=user_id,
         session_id=session_id,
@@ -352,6 +353,7 @@ async def _build_workflow_response(workflow: Workflow, db: AsyncSession) -> Work
         forest_plot_url=forest_plot_url,
         funnel_plot_url=funnel_plot_url,
         prisma_url=prisma_url,
+        cost_mode=workflow.cost_mode or "BALANCED",
     )
 
 

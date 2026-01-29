@@ -9,15 +9,15 @@ Generates:
 """
 
 import logging
-import os
 import tempfile
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.analysis.meta_analysis import MetaAnalysisEngine
 from arakis.analysis.recommender import AnalysisRecommenderAgent
 from arakis.analysis.visualizer import VisualizationGenerator
+from arakis.config import ModeConfig
 from arakis.models.analysis import AnalysisMethod, EffectMeasure, StudyData
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
@@ -39,8 +39,8 @@ class AnalysisStageExecutor(BaseStageExecutor):
 
     STAGE_NAME = "analysis"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
         self.recommender = AnalysisRecommenderAgent()
         self.meta_engine = MetaAnalysisEngine()
 
