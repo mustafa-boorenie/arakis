@@ -175,12 +175,12 @@ class TestIntroductionWriter:
 
         # Test cost calculation
         cost = writer._estimate_cost(1000, 500)
-        # o3-pro pricing (default): $10/1M input, $40/1M output
-        expected = (1000 / 1_000_000) * 10.00 + (500 / 1_000_000) * 40.00
+        # o1 pricing (default): $15/1M input, $60/1M output
+        expected = (1000 / 1_000_000) * 15.00 + (500 / 1_000_000) * 60.00
         assert cost == pytest.approx(expected, rel=1e-6)
 
-    def test_cost_estimation_non_o3_model(self):
-        """Test cost estimation for non-o3 models."""
+    def test_cost_estimation_non_o1_model(self):
+        """Test cost estimation for non-o1 models."""
         writer = IntroductionWriterAgent(use_extended_thinking=False, model="gpt-4o")
 
         # Test cost calculation
@@ -329,12 +329,12 @@ class TestDiscussionWriter:
 
         # Test cost calculation
         cost = writer._estimate_cost(2000, 1000)
-        # o3-pro pricing (default): $10/1M input, $40/1M output
-        expected = (2000 / 1_000_000) * 10.00 + (1000 / 1_000_000) * 40.00
+        # o1 pricing (default): $15/1M input, $60/1M output
+        expected = (2000 / 1_000_000) * 15.00 + (1000 / 1_000_000) * 60.00
         assert cost == pytest.approx(expected, rel=1e-6)
 
-    def test_cost_estimation_non_o3_model(self):
-        """Test cost estimation for non-o3 models."""
+    def test_cost_estimation_non_o1_model(self):
+        """Test cost estimation for non-o1 models."""
         writer = DiscussionWriterAgent(use_extended_thinking=False, model="gpt-4o")
 
         # Test cost calculation

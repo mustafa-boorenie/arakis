@@ -27,15 +27,11 @@ from arakis.config import get_settings
 from arakis.models.paper import Paper
 from arakis.models.writing import Section, WritingResult
 from arakis.rag import Retriever
+from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO, FAST_MODEL
 from arakis.references import CitationExtractor, ReferenceManager
 from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 
 logger = logging.getLogger(__name__)
-
-# Model configurations
-REASONING_MODEL = "o3"  # Extended thinking model for complex writing
-REASONING_MODEL_PRO = "o3-pro"  # Even more extended thinking (slower, more reliable)
-FAST_MODEL = "gpt-4o"  # Fast model for simpler tasks
 
 
 class IntroductionWriterAgent:
@@ -658,11 +654,10 @@ Write only the objectives text, no headings."""
         Returns:
             Estimated cost in USD
         """
-        # o3 pricing (approximate): $10/1M input, $40/1M output
-        # o3-pro pricing: Higher due to extended thinking
-        if self.model.startswith("o3"):
-            input_cost = (prompt_tokens / 1_000_000) * 10.00
-            output_cost = (completion_tokens / 1_000_000) * 40.00
+        # o1 pricing: $15/1M input, $60/1M output (extended thinking model)
+        if self.model.startswith("o1"):
+            input_cost = (prompt_tokens / 1_000_000) * 15.00
+            output_cost = (completion_tokens / 1_000_000) * 60.00
         else:
             # GPT-4o pricing: $2.50/1M input, $10/1M output
             input_cost = (prompt_tokens / 1_000_000) * 2.50

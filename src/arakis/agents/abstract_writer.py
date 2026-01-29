@@ -102,11 +102,10 @@ class AbstractWriterAgent:
         Returns:
             Estimated cost in USD
         """
-        # o3 pricing (approximate): $10/1M input, $40/1M output
-        # o3-pro pricing: Higher due to extended thinking
-        if self.model.startswith("o3"):
-            input_cost = (input_tokens / 1_000_000) * 10.00
-            output_cost = (output_tokens / 1_000_000) * 40.00
+        # o1 pricing: $15/1M input, $60/1M output (extended thinking model)
+        if self.model.startswith("o1"):
+            input_cost = (input_tokens / 1_000_000) * 15.00
+            output_cost = (output_tokens / 1_000_000) * 60.00
         else:
             # GPT-4o pricing: $2.50/1M input, $10/1M output
             input_cost = (input_tokens / 1_000_000) * 2.50

@@ -1,12 +1,13 @@
 """Model configurations for writing agents.
 
 This module defines the model configurations used across all writing agents.
-Uses OpenAI's extended thinking models (o3/o3-pro) for high-quality reasoning.
+Uses OpenAI's extended thinking models (o1) for high-quality reasoning.
 """
 
 # Extended thinking models for complex writing tasks
-REASONING_MODEL = "o3"  # Default reasoning model
-REASONING_MODEL_PRO = "o3-pro"  # More thorough reasoning (slower, more reliable)
+# o1 is OpenAI's current extended thinking model with deep reasoning capabilities
+REASONING_MODEL = "o1"  # Default reasoning model with extended thinking
+REASONING_MODEL_PRO = "o1"  # Same as REASONING_MODEL (o1 is the most capable)
 
 # Fast model for simpler tasks
 FAST_MODEL = "gpt-4o"

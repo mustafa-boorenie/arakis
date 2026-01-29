@@ -1433,7 +1433,7 @@ def write_intro(
         False, "--use-rag", help="Use RAG system to retrieve literature context"
     ),
     use_perplexity: bool = typer.Option(
-        True, "--use-perplexity/--no-perplexity", help="Use Perplexity API for deep research (default: enabled)"
+        True, "--use-web-search/--no-web-search", help="Use OpenAI web search for literature research (default: enabled)"
     ),
     save_references: bool = typer.Option(
         True, "--save-references/--no-references", help="Save references to separate file"
@@ -1443,7 +1443,7 @@ def write_intro(
     Write introduction section for a systematic review.
 
     Generates background, rationale, and objectives subsections.
-    Uses Perplexity API by default to fetch relevant background literature
+    Uses OpenAI web search by default to fetch relevant background literature
     (separate from systematic review search results).
     """
     import json
@@ -1454,15 +1454,15 @@ def write_intro(
 
     console.print("[bold]Writing Introduction Section...[/bold]\n")
 
-    # Check Perplexity configuration
+    # Check OpenAI web search configuration
     writer = IntroductionWriterAgent()
-    if use_perplexity:
-        if writer.perplexity.is_configured:
-            console.print("[cyan]Using Perplexity API for literature research[/cyan]\n")
+    if use_perplexity:  # Parameter still named use_perplexity for backward compatibility
+        if writer.literature_client.is_configured:
+            console.print("[cyan]Using OpenAI web search for literature research[/cyan]\n")
         else:
             console.print(
-                "[yellow]Warning: Perplexity API key not configured. "
-                "Set PERPLEXITY_API_KEY in your environment.[/yellow]\n"
+                "[yellow]Warning: OpenAI API key not configured. "
+                "Set OPENAI_API_KEY in your environment.[/yellow]\n"
             )
             use_perplexity = False
 
@@ -2704,12 +2704,12 @@ def workflow(
 
             intro_writer = IntroductionWriterAgent()
 
-            # Check if Perplexity is configured
-            use_perplexity = intro_writer.perplexity.is_configured
-            if use_perplexity:
-                console.print("[cyan]Using Perplexity API for literature research[/cyan]")
+            # Check if OpenAI web search is configured
+            use_web_search = intro_writer.literature_client.is_configured
+            if use_web_search:
+                console.print("[cyan]Using OpenAI web search for literature research[/cyan]")
             else:
-                console.print("[dim]Perplexity API not configured - using provided context[/dim]")
+                console.print("[dim]OpenAI API not configured - using provided context[/dim]")
 
             with Progress(
                 SpinnerColumn(),
@@ -2722,7 +2722,7 @@ def workflow(
                         research_question=research_question,
                         literature_context=None,
                         retriever=None,
-                        use_perplexity=use_perplexity,
+                        use_web_search=use_web_search,
                     )
                 )
 
