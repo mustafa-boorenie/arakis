@@ -254,7 +254,7 @@ arakis version
 - Professional formatting suitable for publication
 
 **12. ResultsWriterAgent** (`agents/results_writer.py`)
-- LLM-powered results section writer using o1 extended thinking models
+- LLM-powered results section writer using reasoning models (o3-mini default, gpt-5.2 for quality mode)
 - Generates three subsections:
   - **Study Selection**: Search results and PRISMA narrative
   - **Study Characteristics**: Summary of included studies
@@ -262,7 +262,7 @@ arakis version
 - References figures and tables appropriately
 - Follows PRISMA 2020 guidelines
 - Tool functions: `write_study_selection`, `write_study_characteristics`, `write_synthesis_of_results`
-- Cost: ~$2.00-4.00 per complete results section (o1 model)
+- Cost: ~$0.50-2.00 per complete results section (o3-mini default)
 
 **13. Embedder** (`rag/embedder.py`)
 - Generates text embeddings using OpenAI's text-embedding-3-small model
@@ -300,7 +300,7 @@ arakis version
 
 **17. OpenAILiteratureClient** (`clients/openai_literature.py`)
 - Literature research client using OpenAI Responses API with web search
-- Uses o1 extended thinking models for high-quality research
+- Uses reasoning models for high-quality research (o3-mini default)
 - **Purpose**: Fetches background literature SEPARATE from systematic review search
 - Key methods:
   - `research_topic(topic)` → AI-generated summary with citations
@@ -308,7 +308,7 @@ arakis version
   - `get_literature_context(question, max_papers)` → (summary, papers) tuple
 - Converts search results to `Paper` objects for ReferenceManager
 - Rate limiting: 1 request/second
-- Cost: ~$0.10-0.50 per research query (o1 model)
+- Cost: ~$0.05-0.20 per research query (o3-mini default)
 
 **18. ReferenceManager** (`references/manager.py`)
 - Central coordinator for citation management in manuscripts
@@ -341,7 +341,7 @@ arakis version
   - `replace_citations_with_numbers(text, order)` → `[1]`, `[2]` format
 
 **21. IntroductionWriterAgent** (`agents/intro_writer.py`)
-- LLM-powered introduction section writer using o1 extended thinking models
+- LLM-powered introduction section writer using reasoning models
 - Generates three subsections:
   - **Background**: Broad context → specific problem (200-250 words)
   - **Rationale**: Gaps in literature, justification for review (100-150 words)
@@ -353,10 +353,10 @@ arakis version
 - Fallback chain: OpenAI Web Search → RAG → provided literature
 - Returns `tuple[Section, list[Paper]]` with cited papers for reference section
 - Tool functions: `write_background`, `write_rationale`, `write_objectives`
-- Cost: ~$2.00-5.00 per complete introduction (o1 model)
+- Cost: ~$0.50-2.00 per complete introduction (o3-mini default)
 
 **22. DiscussionWriterAgent** (`agents/discussion_writer.py`)
-- LLM-powered discussion section writer using o1 extended thinking models
+- LLM-powered discussion section writer using reasoning models
 - Generates four subsections:
   - **Summary of Main Findings**: Interpret results (150-200 words)
   - **Comparison with Existing Literature**: Compare with previous work (250-300 words)
@@ -365,10 +365,10 @@ arakis version
 - Uses RAG system for literature comparison (optional)
 - Accepts user input for interpretation and opinions
 - Tool functions: `write_key_findings`, `write_comparison_to_literature`, `write_limitations`, `write_implications`
-- Cost: ~$2.00-4.00 per complete discussion (o1 model)
+- Cost: ~$0.50-1.50 per complete discussion (o3-mini default)
 
 **23. MethodsWriterAgent** (`agents/methods_writer.py`)
-- LLM-powered methods section writer using o1 extended thinking models
+- LLM-powered methods section writer using reasoning models
 - Generates systematic review methods subsections:
   - **Protocol and Registration**: Review protocol details
   - **Eligibility Criteria**: PICO components with inclusion/exclusion
@@ -381,10 +381,10 @@ arakis version
   - **Synthesis Methods**: Statistical analysis approach
 - Follows PRISMA 2020 checklist requirements
 - Tool functions: `write_protocol`, `write_eligibility`, `write_information_sources`, etc.
-- Cost: ~$2.00-4.00 per complete methods section (o1 model)
+- Cost: ~$0.50-1.50 per complete methods section (o3-mini default)
 
 **24. AbstractWriterAgent** (`agents/abstract_writer.py`)
-- LLM-powered abstract writer using o1 extended thinking models
+- LLM-powered abstract writer using reasoning models
 - Extracts key components from complete manuscript
 - Supports two formats:
   - **Structured (IMRAD)**: Background/Objective, Methods, Results, Conclusions
@@ -394,16 +394,22 @@ arakis version
   - Includes specific statistics (effect sizes, CIs, p-values, I²)
   - Targets 250-300 words
 - Tool functions: `extract_objective`, `extract_methods`, `extract_results`, `extract_conclusions`
-- Cost: ~$1.00-2.00 per abstract (o1 model)
+- Cost: ~$0.20-0.50 per abstract (o3-mini default)
 
 **25. Model Configuration** (`agents/models.py`)
-- Shared model constants for all writing agents
+- Shared model constants for all agents with cost mode support
 - Available models:
-  - `REASONING_MODEL = "o1"`: Default reasoning model with extended thinking
-  - `REASONING_MODEL_PRO = "o1"`: Same as REASONING_MODEL (o1 is the most capable)
-  - `FAST_MODEL = "gpt-4o"`: Fast model for simpler tasks
-- All writing agents default to `use_extended_thinking=True` (o1)
-- Set `use_extended_thinking=False` to use gpt-4o model
+  - `REASONING_MODEL = "o3-mini"`: Default reasoning model for complex tasks
+  - `REASONING_MODEL_PRO = "gpt-5.2-2025-12-11"`: High-quality reasoning with max effort
+  - `FAST_MODEL = "gpt-5-nano"`: Fast model for simpler tasks
+  - `SCREENING_MODEL = "gpt-5-nano"`: Default screening model (overridden by cost mode)
+  - `EXTRACTION_MODEL = "gpt-5-nano"`: Default extraction model (overridden by cost mode)
+  - `QUALITY_SCREENING_MODEL = "gpt-5-mini"`: Quality mode screening
+  - `QUALITY_EXTRACTION_MODEL = "gpt-5-mini"`: Quality mode extraction
+  - `QUALITY_WRITING_MODEL = "gpt-5.2-2025-12-11"`: Quality mode writing
+- Model pricing dict for cost estimation
+- Helper functions: `get_model_pricing()`, `estimate_cost()`
+- Cost modes (in progress): QUALITY, BALANCED, FAST, ECONOMY
 
 **26. Retry Logic with Exponential Backoff** (`utils.py`)
 - `@retry_with_exponential_backoff` decorator for OpenAI API calls
@@ -537,7 +543,7 @@ arakis version
 - Uses pydantic-settings with `.env` file support
 - Required: `OPENAI_API_KEY`, `UNPAYWALL_EMAIL`
 - Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`
-- Writing uses o1 extended thinking models by default
+- Writing uses o3-mini reasoning model by default (gpt-5.2 for quality mode)
 - Rate limits: `pubmed_requests_per_second`, `scholarly_min_delay`, `scholarly_max_delay`
 - Access via: `get_settings()` (cached singleton)
 
@@ -625,33 +631,35 @@ Each client implements `normalize_paper()` to convert raw API responses to the c
 Introduction writing uses OpenAI Responses API with web search for background literature (separate from review search):
 1. `OpenAILiteratureClient.get_literature_context(question)` fetches papers using web search
 2. Papers registered with `ReferenceManager.register_paper(paper)`
-3. o1 extended thinking model generates text with `[paper_id]` citations
+3. Reasoning model generates text with `[paper_id]` citations
 4. `CitationExtractor` validates citations against registered papers
 5. LLM is restricted to citing ONLY provided papers (no training data citations)
 6. `CitationFormatter` generates APA 7 reference list
 
 **Key Design Decision**: Introduction references come from OpenAI web search, NOT from the systematic review search results. This ensures proper separation between background context and reviewed papers.
 
-### Extended Thinking Models
-All writing agents use o1 extended thinking model by default:
-- `o1`: OpenAI's extended thinking model with deep reasoning capabilities
-- Key differences from GPT-4o:
-  - Uses `max_completion_tokens` instead of `max_tokens`
-  - Does not support `temperature` parameter
-  - Takes longer but produces higher quality output
-  - Higher cost: ~$15/1M input tokens, ~$60/1M output tokens (vs $2.50/$10 for GPT-4o)
+### Model Tiers and Cost Modes
+The system supports multiple model tiers for different use cases:
 
-**Cost Summary (o1 default):**
-| Agent | Estimated Cost |
-|-------|----------------|
-| IntroductionWriterAgent | ~$3.00-8.00 |
-| MethodsWriterAgent | ~$3.00-6.00 |
-| ResultsWriterAgent | ~$3.00-6.00 |
-| DiscussionWriterAgent | ~$3.00-6.00 |
-| AbstractWriterAgent | ~$1.50-3.00 |
-| OpenAILiteratureClient | ~$0.15-0.75 per query |
+**Reasoning Models:**
+- `o3-mini`: Default reasoning model ($1.10/$4.40 per 1M tokens)
+- `gpt-5.2-2025-12-11`: Pro reasoning with max effort ($10/$30 per 1M tokens)
+- `o1`: Extended thinking model ($15/$60 per 1M tokens)
 
-To reduce costs, set `use_extended_thinking=False` to use gpt-4o model.
+**Fast Models:**
+- `gpt-5-nano`: Ultra-fast, lowest cost ($0.10/$0.40 per 1M tokens)
+- `gpt-5-mini`: Balanced speed/quality ($0.50/$2.00 per 1M tokens)
+- `gpt-4o`: Legacy fast model ($2.50/$10 per 1M tokens)
+
+**Cost Modes (in progress):**
+| Mode | Screening | Extraction | Writing | Est. Cost/Review |
+|------|-----------|------------|---------|------------------|
+| QUALITY | gpt-5-mini (dual) | gpt-5-mini (triple) | gpt-5.2 | ~$15 |
+| BALANCED | gpt-5-nano (single) | gpt-5-nano (single) | o3-mini | ~$4 |
+| FAST | gpt-5-nano (single) | gpt-5-nano (single) | o3-mini | ~$1.50 |
+| ECONOMY | gpt-5-nano (single) | gpt-5-nano (single) | gpt-5-nano | ~$0.80 |
+
+**Note:** PRISMA diagram generation is always programmatic (no LLM cost) in all modes.
 
 ### Retry Pattern with Exponential Backoff
 OpenAI API calls use `@retry_with_exponential_backoff` decorator:
@@ -696,3 +704,24 @@ When adding tests:
 - Edit `Deduplicator._find_match()` to add new matching strategies
 - Adjust `title_similarity_threshold` in `Deduplicator.__init__()`
 - Update `_merge_papers()` to handle new metadata fields
+
+## Current Development State
+
+### Cost Optimization (In Progress)
+
+**Completed:**
+- ✅ PRISMA diagram generation is 100% programmatic (no LLM cost)
+- ✅ Database schema updated with `cost_mode` column
+- ✅ Migration created: `2026_01_29_1531_add_cost_mode_to_workflows.py`
+- ✅ Model constants defined in `agents/models.py`
+
+**In Progress:**
+- ⏳ Cost mode configuration system (`src/arakis/config/cost_modes.py`)
+- ⏳ Agent integration to read from cost mode config
+- ⏳ Orchestrator integration to pass cost mode to agents
+- ⏳ Frontend settings UI for cost mode selection
+
+**Cost Mode Design:**
+- Workflows store `cost_mode` (QUALITY, BALANCED, FAST, ECONOMY)
+- Each mode maps to specific models, review passes, and features
+- PRISMA is always programmatic regardless of mode
