@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Set turbopack root to avoid workspace detection issues
+  turbopack: {
+    root: __dirname,
+  },
+
   output: 'export',
 
   // Disable image optimization for static export

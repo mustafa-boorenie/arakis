@@ -148,3 +148,62 @@ def decode_refresh_token(token: str) -> dict[str, Any]:
 def hash_token(token: str) -> str:
     """Create a SHA256 hash of a token for storage."""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_oauth_state(data: dict[str, Any] | None = None) -> str:
+    """
+    Create a signed OAuth state token.
+
+    This is a short-lived JWT that encodes OAuth state data (like redirect_url)
+    directly in the token, making it stateless and surviving server restarts.
+
+    Args:
+        data: Optional data to encode in the state (e.g., redirect_url)
+
+    Returns:
+        Encoded JWT state token
+    """
+    settings = get_settings()
+
+    # OAuth state tokens are short-lived (5 minutes)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+    payload = {
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "oauth_state",
+        "nonce": secrets.token_urlsafe(16),  # Prevent replay attacks
+        **(data or {}),
+    }
+
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def decode_oauth_state(state: str) -> dict[str, Any]:
+    """
+    Decode and validate an OAuth state token.
+
+    Args:
+        state: The JWT state token
+
+    Returns:
+        Decoded state payload
+
+    Raises:
+        TokenExpiredError: If the state has expired
+        InvalidCredentialsError: If the state is invalid
+    """
+    settings = get_settings()
+
+    try:
+        payload = jwt.decode(state, settings.secret_key, algorithms=[settings.algorithm])
+
+        if payload.get("type") != "oauth_state":
+            raise InvalidCredentialsError("Invalid state token type")
+
+        return payload
+
+    except jwt.ExpiredSignatureError:
+        raise TokenExpiredError("OAuth state has expired")
+    except jwt.InvalidTokenError as e:
+        raise InvalidCredentialsError(f"Invalid state: {str(e)}")

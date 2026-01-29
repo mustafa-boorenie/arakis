@@ -9,7 +9,7 @@ import { History, FileQuestion, RefreshCw, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api/client';
 
 export function WorkflowHistory() {
-  const { workflow, addToHistory } = useStore();
+  const { workflow, setHistory } = useStore();
   const { loadWorkflow, deleteWorkflow } = useWorkflow();
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -21,10 +21,8 @@ export function WorkflowHistory() {
       setIsLoading(true);
       try {
         const response = await api.listWorkflows();
-        // Add any workflows from API that aren't in local history
-        for (const w of response.workflows) {
-          addToHistory(w);
-        }
+        // Replace history with fresh data from API
+        setHistory(response.workflows);
         setHasLoaded(true);
       } catch (error) {
         console.error('Failed to load workflows:', error);
@@ -33,15 +31,14 @@ export function WorkflowHistory() {
       }
     };
     loadFromApi();
-  }, [addToHistory, hasLoaded]);
+  }, [setHistory, hasLoaded]);
 
   const handleRefresh = async () => {
     setIsLoading(true);
     try {
       const response = await api.listWorkflows();
-      for (const w of response.workflows) {
-        addToHistory(w);
-      }
+      // Replace history with fresh data from API
+      setHistory(response.workflows);
     } catch (error) {
       console.error('Failed to refresh workflows:', error);
     } finally {

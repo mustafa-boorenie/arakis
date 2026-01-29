@@ -26,6 +26,14 @@ export class ApiError extends Error {
   }
 }
 
+// Thrown when session has expired and user needs to re-authenticate
+export class SessionExpiredError extends Error {
+  constructor(message: string = 'Session expired. Please sign in again.') {
+    super(message);
+    this.name = 'SessionExpiredError';
+  }
+}
+
 class ApiClient {
   private baseUrl: string;
   private onTrialLimitReached?: (message: string) => void;
@@ -91,6 +99,9 @@ class ApiClient {
         // Retry the request with new token
         return this.request(endpoint, options);
       }
+      // Refresh failed - session expired, throw specific error
+      // This is expected and should be handled gracefully by callers
+      throw new SessionExpiredError();
     }
 
     // Handle 402 Payment Required (trial limit)

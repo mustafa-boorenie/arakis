@@ -1,7 +1,6 @@
 """OAuth authentication endpoints."""
 
 import json
-import secrets
 from typing import Optional
 from urllib.parse import urlencode
 
@@ -26,7 +25,7 @@ from arakis.auth.exceptions import (
     OAuthError,
     TokenExpiredError,
 )
-from arakis.auth.jwt import decode_refresh_token
+from arakis.auth.jwt import create_oauth_state, decode_oauth_state, decode_refresh_token
 from arakis.auth.providers.apple import AppleOAuthProvider
 from arakis.auth.providers.google import GoogleOAuthProvider
 from arakis.auth.service import AuthService
@@ -34,24 +33,6 @@ from arakis.config import get_settings
 from arakis.database.models import User
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
-
-# In-memory state storage (use Redis in production)
-_oauth_states: dict[str, dict] = {}
-
-
-def _generate_state() -> str:
-    """Generate a secure random state for CSRF protection."""
-    return secrets.token_urlsafe(32)
-
-
-def _store_state(state: str, data: dict | None = None) -> None:
-    """Store OAuth state temporarily."""
-    _oauth_states[state] = data or {}
-
-
-def _validate_state(state: str) -> dict | None:
-    """Validate and consume OAuth state."""
-    return _oauth_states.pop(state, None)
 
 
 # ============================================================
@@ -76,8 +57,8 @@ async def google_login(request: Request, redirect_url: Optional[str] = None):
             detail="Google OAuth is not configured",
         )
 
-    state = _generate_state()
-    _store_state(state, {"redirect_url": redirect_url})
+    # Create signed JWT state token (survives server restarts)
+    state = create_oauth_state({"redirect_url": redirect_url})
 
     provider = GoogleOAuthProvider()
     auth_url = provider.get_authorization_url(state)
@@ -101,10 +82,11 @@ async def google_callback(
     """
     settings = get_settings()
 
-    # Validate state
-    state_data = _validate_state(state)
-    if state_data is None:
-        return _redirect_with_error("Invalid or expired state", settings)
+    # Validate signed JWT state
+    try:
+        state_data = decode_oauth_state(state)
+    except (TokenExpiredError, InvalidCredentialsError) as e:
+        return _redirect_with_error(f"Invalid or expired state: {e}", settings)
 
     try:
         # Exchange code for user info
@@ -156,8 +138,8 @@ async def apple_login(request: Request, redirect_url: Optional[str] = None):
             detail="Apple OAuth is not configured",
         )
 
-    state = _generate_state()
-    _store_state(state, {"redirect_url": redirect_url})
+    # Create signed JWT state token (survives server restarts)
+    state = create_oauth_state({"redirect_url": redirect_url})
 
     provider = AppleOAuthProvider()
     auth_url = provider.get_authorization_url(state)
@@ -183,10 +165,11 @@ async def apple_callback(
     """
     settings = get_settings()
 
-    # Validate state
-    state_data = _validate_state(state)
-    if state_data is None:
-        return _redirect_with_error("Invalid or expired state", settings)
+    # Validate signed JWT state
+    try:
+        state_data = decode_oauth_state(state)
+    except (TokenExpiredError, InvalidCredentialsError) as e:
+        return _redirect_with_error(f"Invalid or expired state: {e}", settings)
 
     try:
         # Parse user data if provided (only on first login)

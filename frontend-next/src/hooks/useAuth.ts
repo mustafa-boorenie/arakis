@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useStore } from '@/store';
-import { api } from '@/lib/api/client';
+import { api, SessionExpiredError } from '@/lib/api/client';
 import type { AuthProvider } from '@/types';
 
 export function useAuth() {
@@ -29,6 +29,13 @@ export function useAuth() {
           const user = await api.getCurrentUser();
           setUser(user);
         } catch (error) {
+          // Session expired is expected - just logout silently
+          if (error instanceof SessionExpiredError) {
+            console.log('[Auth] Session expired, logging out');
+            storeLogout();
+            return;
+          }
+          // Other errors are unexpected
           console.error('Failed to fetch user:', error);
           setAuthError('Failed to load user profile');
           storeLogout();

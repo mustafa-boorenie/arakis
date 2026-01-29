@@ -140,12 +140,12 @@ arakis write-results --search search_results.json --screening screening_results.
 # Include meta-analysis results
 arakis write-results --search search.json --screening screening.json --analysis analysis.json --output results.md
 
-# Write introduction section (uses Perplexity API by default for literature)
+# Write introduction section (uses OpenAI web search by default for literature)
 arakis write-intro "Effect of antihypertensive therapy on blood pressure" --output intro.md
-# Disable Perplexity (use provided literature or RAG instead)
-arakis write-intro "Research question" --no-perplexity --literature papers.json --output intro.md
-# With RAG for automatic literature retrieval (when Perplexity disabled)
-arakis write-intro "Research question" --no-perplexity --literature papers.json --use-rag --output intro.md
+# Disable web search (use provided literature or RAG instead)
+arakis write-intro "Research question" --no-web-search --literature papers.json --output intro.md
+# With RAG for automatic literature retrieval (when web search disabled)
+arakis write-intro "Research question" --no-web-search --literature papers.json --use-rag --output intro.md
 # Don't save separate references file
 arakis write-intro "Research question" --no-references --output intro.md
 
@@ -254,7 +254,7 @@ arakis version
 - Professional formatting suitable for publication
 
 **12. ResultsWriterAgent** (`agents/results_writer.py`)
-- LLM-powered results section writer
+- LLM-powered results section writer using o3/o3-pro extended thinking models
 - Generates three subsections:
   - **Study Selection**: Search results and PRISMA narrative
   - **Study Characteristics**: Summary of included studies
@@ -262,7 +262,7 @@ arakis version
 - References figures and tables appropriately
 - Follows PRISMA 2020 guidelines
 - Tool functions: `write_study_selection`, `write_study_characteristics`, `write_synthesis_of_results`
-- Cost: ~$0.50-0.70 per complete results section
+- Cost: ~$2.00-4.00 per complete results section (o3-pro model)
 
 **13. Embedder** (`rag/embedder.py`)
 - Generates text embeddings using OpenAI's text-embedding-3-small model
@@ -298,17 +298,17 @@ arakis version
 - Stores: embeddings, metadata, token counts, creation timestamps
 - Provides statistics: cache size, hit rate, total tokens embedded
 
-**17. PerplexityClient** (`clients/perplexity.py`)
-- Deep research API client for introduction literature retrieval
-- Uses Perplexity Sonar model for web-grounded research with citations
+**17. OpenAILiteratureClient** (`clients/openai_literature.py`)
+- Literature research client using OpenAI Responses API with web search
+- Uses o3 extended thinking models for high-quality research
 - **Purpose**: Fetches background literature SEPARATE from systematic review search
 - Key methods:
   - `research_topic(topic)` → AI-generated summary with citations
   - `search_for_papers(query, max_results)` → list of Paper objects
   - `get_literature_context(question, max_papers)` → (summary, papers) tuple
 - Converts search results to `Paper` objects for ReferenceManager
-- Rate limiting: 1 request/second with tenacity retry
-- Cost: ~$0.01-0.05 per research query
+- Rate limiting: 1 request/second
+- Cost: ~$0.10-0.50 per research query (o3 model)
 
 **18. ReferenceManager** (`references/manager.py`)
 - Central coordinator for citation management in manuscripts
@@ -334,29 +334,29 @@ arakis version
 **20. CitationExtractor** (`references/extractor.py`)
 - Regex-based extraction of `[Paper ID]` citations from text
 - Validates IDs (filters out `[Figure 1]`, `[Table 2]`, `[1]`, etc.)
-- Supports: DOI, PMID, Semantic Scholar, OpenAlex, Perplexity IDs
+- Supports: DOI, PMID, Semantic Scholar, OpenAlex, OpenAI IDs
 - Methods:
   - `extract_citations(text)` → list of ExtractedCitation with positions
   - `extract_unique_paper_ids(text)` → unique IDs in order of appearance
   - `replace_citations_with_numbers(text, order)` → `[1]`, `[2]` format
 
 **21. IntroductionWriterAgent** (`agents/intro_writer.py`)
-- LLM-powered introduction section writer
+- LLM-powered introduction section writer using o3/o3-pro extended thinking models
 - Generates three subsections:
   - **Background**: Broad context → specific problem (200-250 words)
   - **Rationale**: Gaps in literature, justification for review (100-150 words)
   - **Objectives**: Clear, specific aims (80-120 words)
-- **Perplexity Integration** (default): Uses Perplexity API for background literature
+- **OpenAI Web Search Integration** (default): Uses Responses API with web search
   - Literature is separate from systematic review search results
   - Papers automatically registered with ReferenceManager
   - Citations validated against provided papers only
-- Fallback chain: Perplexity → RAG → provided literature
+- Fallback chain: OpenAI Web Search → RAG → provided literature
 - Returns `tuple[Section, list[Paper]]` with cited papers for reference section
 - Tool functions: `write_background`, `write_rationale`, `write_objectives`
-- Cost: ~$1.00 per complete introduction (+ Perplexity API costs)
+- Cost: ~$2.00-5.00 per complete introduction (o3-pro model)
 
 **22. DiscussionWriterAgent** (`agents/discussion_writer.py`)
-- LLM-powered discussion section writer
+- LLM-powered discussion section writer using o3/o3-pro extended thinking models
 - Generates four subsections:
   - **Summary of Main Findings**: Interpret results (150-200 words)
   - **Comparison with Existing Literature**: Compare with previous work (250-300 words)
@@ -365,9 +365,47 @@ arakis version
 - Uses RAG system for literature comparison (optional)
 - Accepts user input for interpretation and opinions
 - Tool functions: `write_key_findings`, `write_comparison_to_literature`, `write_limitations`, `write_implications`
-- Cost: ~$1.00 per complete discussion
+- Cost: ~$2.00-4.00 per complete discussion (o3-pro model)
 
-**23. Retry Logic with Exponential Backoff** (`utils.py`)
+**23. MethodsWriterAgent** (`agents/methods_writer.py`)
+- LLM-powered methods section writer using o3/o3-pro extended thinking models
+- Generates systematic review methods subsections:
+  - **Protocol and Registration**: Review protocol details
+  - **Eligibility Criteria**: PICO components with inclusion/exclusion
+  - **Information Sources**: Databases searched with dates
+  - **Search Strategy**: Query construction methodology
+  - **Selection Process**: Screening and selection workflow
+  - **Data Collection Process**: Extraction methodology
+  - **Data Items**: Variables and outcomes extracted
+  - **Risk of Bias Assessment**: Bias assessment tools used
+  - **Synthesis Methods**: Statistical analysis approach
+- Follows PRISMA 2020 checklist requirements
+- Tool functions: `write_protocol`, `write_eligibility`, `write_information_sources`, etc.
+- Cost: ~$2.00-4.00 per complete methods section (o3-pro model)
+
+**24. AbstractWriterAgent** (`agents/abstract_writer.py`)
+- LLM-powered abstract writer using o3/o3-pro extended thinking models
+- Extracts key components from complete manuscript
+- Supports two formats:
+  - **Structured (IMRAD)**: Background/Objective, Methods, Results, Conclusions
+  - **Unstructured**: Single flowing paragraph
+- Features:
+  - Extracts objectives, methods, results, conclusions using tool functions
+  - Includes specific statistics (effect sizes, CIs, p-values, I²)
+  - Targets 250-300 words
+- Tool functions: `extract_objective`, `extract_methods`, `extract_results`, `extract_conclusions`
+- Cost: ~$1.00-2.00 per abstract (o3-pro model)
+
+**25. Model Configuration** (`agents/models.py`)
+- Shared model constants for all writing agents
+- Available models:
+  - `REASONING_MODEL = "o3"`: Default reasoning model
+  - `REASONING_MODEL_PRO = "o3-pro"`: Extended thinking (default for writing)
+  - `FAST_MODEL = "gpt-4o"`: Fast model for simpler tasks
+- All writing agents default to `use_extended_thinking=True` (o3-pro)
+- Set `use_extended_thinking=False` to use standard o3 model
+
+**26. Retry Logic with Exponential Backoff** (`utils.py`)
 - `@retry_with_exponential_backoff` decorator for OpenAI API calls
 - Handles rate limits (429) and transient errors (5xx) automatically
 - Exponential backoff with jitter prevents overwhelming the API
@@ -498,10 +536,61 @@ arakis version
 **Settings** (`config.py`)
 - Uses pydantic-settings with `.env` file support
 - Required: `OPENAI_API_KEY`, `UNPAYWALL_EMAIL`
-- Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`, `PERPLEXITY_API_KEY`
-- Perplexity settings: `perplexity_api_key`, `perplexity_model` ("sonar" or "sonar-pro")
+- Optional: `NCBI_API_KEY`, `ELSEVIER_API_KEY`, `SERPAPI_KEY`
+- Writing uses o3/o3-pro extended thinking models by default
 - Rate limits: `pubmed_requests_per_second`, `scholarly_min_delay`, `scholarly_max_delay`
 - Access via: `get_settings()` (cached singleton)
+
+### Frontend Architecture
+
+**Stack:**
+- Next.js 16 with Turbopack
+- TypeScript with strict mode
+- Zustand for state management with localStorage persistence
+- Shadcn/ui components with Tailwind CSS
+
+**Key Files:**
+- `frontend-next/src/store/index.ts` - Global Zustand store with auth, workflow, layout state
+- `frontend-next/src/lib/api/client.ts` - API client with automatic token refresh
+- `frontend-next/src/hooks/useAuth.ts` - Authentication hook for OAuth flow
+- `frontend-next/src/hooks/useWorkflow.ts` - Workflow management with polling
+
+**State Management:**
+- Workflow history persisted to localStorage via Zustand persist middleware
+- Auth tokens stored in localStorage (`arakis_access_token`, `arakis_refresh_token`)
+- Workflow polling uses `updateWorkflow()` to sync both `current` and `history` state
+
+### Authentication Architecture
+
+**OAuth Flow (Google/Apple):**
+1. Frontend calls `/api/auth/{provider}/login` to get authorization URL
+2. User redirected to OAuth provider
+3. Provider redirects back to `/api/auth/{provider}/callback` with code
+4. Backend exchanges code for tokens and creates/updates user
+5. Backend redirects to `/auth/success` with JWT tokens in URL fragment
+6. Frontend extracts tokens, stores in localStorage, fetches user profile
+
+**JWT Tokens:**
+- `create_access_token()` - Short-lived (default 15 min), contains user_id and email
+- `create_refresh_token()` - Long-lived (default 30 days), stored hashed in DB
+- `create_oauth_state()` - 5-minute JWT for OAuth CSRF protection (stateless, survives server restarts)
+
+**Key Files:**
+- `src/arakis/auth/jwt.py` - JWT creation and validation utilities
+- `src/arakis/api/routers/auth.py` - OAuth endpoints for Google/Apple
+- `src/arakis/auth/service.py` - User management and token operations
+- `src/arakis/auth/providers/` - OAuth provider implementations
+
+**Token Refresh:**
+- API client automatically attempts refresh on 401 responses
+- If refresh fails, throws `SessionExpiredError` for graceful logout
+- Frontend catches `SessionExpiredError` and logs out silently
+
+**OAuth State (CSRF Protection):**
+- Uses signed JWT tokens instead of in-memory storage
+- State contains: expiration, nonce, redirect_url
+- Survives server restarts (unlike in-memory dict)
+- 5-minute expiration prevents replay attacks
 
 ## Key Patterns
 
@@ -532,16 +621,38 @@ Each client implements `normalize_paper()` to convert raw API responses to the c
 - Consistent screening regardless of origin
 - Simplified downstream processing
 
-### Perplexity Integration Pattern
-Introduction writing uses Perplexity for background literature (separate from review search):
-1. `PerplexityClient.get_literature_context(question)` fetches papers
+### OpenAI Web Search Integration Pattern
+Introduction writing uses OpenAI Responses API with web search for background literature (separate from review search):
+1. `OpenAILiteratureClient.get_literature_context(question)` fetches papers using web search
 2. Papers registered with `ReferenceManager.register_paper(paper)`
-3. OpenAI generates text with `[paper_id]` citations
+3. o3/o3-pro extended thinking model generates text with `[paper_id]` citations
 4. `CitationExtractor` validates citations against registered papers
 5. LLM is restricted to citing ONLY provided papers (no training data citations)
 6. `CitationFormatter` generates APA 7 reference list
 
-**Key Design Decision**: Introduction references come from Perplexity deep research, NOT from the systematic review search results. This ensures proper separation between background context and reviewed papers.
+**Key Design Decision**: Introduction references come from OpenAI web search, NOT from the systematic review search results. This ensures proper separation between background context and reviewed papers.
+
+### Extended Thinking Models
+All writing agents use o3/o3-pro extended thinking models by default:
+- `o3`: Default reasoning model for complex writing tasks
+- `o3-pro`: More thorough reasoning (slower, more reliable) - used by default when `use_extended_thinking=True`
+- Key differences from GPT-4o:
+  - Uses `max_completion_tokens` instead of `max_tokens`
+  - Does not support `temperature` parameter
+  - Takes longer but produces higher quality output
+  - Higher cost: ~$10/1M input tokens, ~$40/1M output tokens (vs $2.50/$10 for GPT-4o)
+
+**Cost Summary (o3-pro default):**
+| Agent | Estimated Cost |
+|-------|----------------|
+| IntroductionWriterAgent | ~$2.00-5.00 |
+| MethodsWriterAgent | ~$2.00-4.00 |
+| ResultsWriterAgent | ~$2.00-4.00 |
+| DiscussionWriterAgent | ~$2.00-4.00 |
+| AbstractWriterAgent | ~$1.00-2.00 |
+| OpenAILiteratureClient | ~$0.10-0.50 per query |
+
+To reduce costs, set `use_extended_thinking=False` to use standard o3 model.
 
 ### Retry Pattern with Exponential Backoff
 OpenAI API calls use `@retry_with_exponential_backoff` decorator:
