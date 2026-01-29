@@ -1,6 +1,8 @@
 """Results section writer agent.
 
 LLM-powered agent that writes the results section of a systematic review.
+
+Uses o3/o3-pro extended thinking models for high-quality reasoning.
 """
 
 import json
@@ -9,6 +11,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO
 from arakis.config import get_settings
 from arakis.models.analysis import MetaAnalysisResult, NarrativeSynthesisResult
 from arakis.models.paper import Paper
@@ -19,19 +22,35 @@ from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 
 
 class ResultsWriterAgent:
-    """LLM agent that writes results section for systematic reviews."""
+    """LLM agent that writes results section for systematic reviews.
 
-    def __init__(self, model: str = "gpt-4o", temperature: float = 0.5, max_tokens: int = 4000):
+    Uses OpenAI's extended thinking models (o3/o3-pro) for high-quality output.
+    """
+
+    def __init__(
+        self,
+        model: str = REASONING_MODEL,
+        temperature: float = 0.5,
+        max_tokens: int = 4000,
+        use_extended_thinking: bool = True,
+    ):
         """Initialize the results writer agent.
 
         Args:
-            model: OpenAI model to use
-            temperature: Sampling temperature
+            model: OpenAI model to use (default: o3)
+            temperature: Sampling temperature (ignored for o-series models)
             max_tokens: Maximum tokens in response
+            use_extended_thinking: Use o3-pro for more thorough reasoning
         """
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        self.model = model
+
+        # Select model based on extended thinking preference
+        if use_extended_thinking:
+            self.model = REASONING_MODEL_PRO
+        else:
+            self.model = model
+
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
@@ -52,7 +71,7 @@ class ResultsWriterAgent:
             messages: Chat messages
             tools: Tool definitions (optional)
             tool_choice: Tool choice strategy
-            temperature: Override default temperature
+            temperature: Override default temperature (ignored for o-series)
 
         Returns:
             OpenAI completion response
@@ -62,9 +81,14 @@ class ResultsWriterAgent:
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature if temperature is not None else self.temperature,
-            "max_tokens": self.max_tokens,
         }
+
+        # o-series models use max_completion_tokens and don't support temperature
+        if self.model.startswith("o"):
+            kwargs["max_completion_tokens"] = self.max_tokens
+        else:
+            kwargs["max_tokens"] = self.max_tokens
+            kwargs["temperature"] = temperature if temperature is not None else self.temperature
 
         if tools:
             kwargs["tools"] = tools
@@ -541,7 +565,13 @@ Write only the paragraph text, no headings."""
         Returns:
             Estimated cost in USD
         """
-        # GPT-4o pricing: $2.50/1M input, $10/1M output
-        input_cost = (prompt_tokens / 1_000_000) * 2.50
-        output_cost = (completion_tokens / 1_000_000) * 10.00
+        # o3 pricing (approximate): $10/1M input, $40/1M output
+        # o3-pro pricing: Higher due to extended thinking
+        if self.model.startswith("o3"):
+            input_cost = (prompt_tokens / 1_000_000) * 10.00
+            output_cost = (completion_tokens / 1_000_000) * 40.00
+        else:
+            # GPT-4o pricing: $2.50/1M input, $10/1M output
+            input_cost = (prompt_tokens / 1_000_000) * 2.50
+            output_cost = (completion_tokens / 1_000_000) * 10.00
         return input_cost + output_cost

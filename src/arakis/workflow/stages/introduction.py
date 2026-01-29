@@ -4,6 +4,9 @@ Generates:
 - Background subsection
 - Rationale subsection
 - Objectives subsection
+
+Uses OpenAI Responses API with web search for background literature.
+Uses o3/o3-pro extended thinking models for high-quality writing.
 """
 
 import logging
@@ -25,7 +28,8 @@ class IntroductionStageExecutor(BaseStageExecutor):
     2. Rationale (gaps in literature, justification)
     3. Objectives (clear, specific aims)
 
-    Uses Perplexity API by default for background literature.
+    Uses OpenAI's Responses API with web search for background literature.
+    Uses o3/o3-pro extended thinking models for high-quality writing.
     """
 
     STAGE_NAME = "introduction"
@@ -45,15 +49,17 @@ class IntroductionStageExecutor(BaseStageExecutor):
             input_data: Should contain:
                 - research_question: str
                 - inclusion_criteria: list[str]
-                - use_perplexity: bool (default True)
-                - literature: list[dict] (optional, for non-Perplexity mode)
+                - use_web_search: bool (default True) - uses OpenAI web search
+                - use_perplexity: bool (deprecated, use use_web_search)
+                - literature: list[dict] (optional, for fallback mode)
 
         Returns:
             StageResult with introduction section
         """
         research_question = input_data.get("research_question", "")
         inclusion_criteria = input_data.get("inclusion_criteria", [])
-        use_perplexity = input_data.get("use_perplexity", True)
+        # Support both new and deprecated parameter names
+        use_web_search = input_data.get("use_web_search", input_data.get("use_perplexity", True))
         literature = input_data.get("literature", [])
 
         if not research_question:
@@ -72,11 +78,11 @@ class IntroductionStageExecutor(BaseStageExecutor):
 
         try:
             # Write introduction section
-            section, cited_papers = await self.writer.write_introduction(
+            section, cited_papers = await self.writer.write_complete_introduction(
                 research_question=research_question,
                 inclusion_criteria=inclusion_criteria,
-                use_perplexity=use_perplexity,
-                literature=literature,
+                use_web_search=use_web_search,
+                literature_context=literature,
             )
 
             # Build output data

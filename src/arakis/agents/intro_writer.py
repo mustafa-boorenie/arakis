@@ -2,24 +2,26 @@
 
 LLM-powered agent that writes the introduction section of a systematic review.
 
-This module uses the Perplexity API to fetch background literature for the
-introduction, which is separate from the systematic review search results.
-This ensures the introduction references general academic literature rather
-than the specific papers being reviewed.
+This module uses OpenAI's Responses API with web search to fetch background
+literature for the introduction, which is separate from the systematic review
+search results. This ensures the introduction references general academic
+literature rather than the specific papers being reviewed.
+
+Uses o3/o3-pro extended thinking models for high-quality reasoning.
 """
 
 import json
 import logging
+import re
 import time
 from typing import Any, Optional, Union
 
 from openai import AsyncOpenAI
 
-from arakis.clients.perplexity import (
-    PerplexityClient,
-    PerplexityClientError,
-    PerplexityNotConfiguredError,
-    PerplexityRateLimitError,
+from arakis.clients.openai_literature import (
+    OpenAILiteratureClient,
+    OpenAILiteratureClientError,
+    OpenAILiteratureRateLimitError,
 )
 from arakis.config import get_settings
 from arakis.models.paper import Paper
@@ -30,14 +32,19 @@ from arakis.utils import get_openai_rate_limiter, retry_with_exponential_backoff
 
 logger = logging.getLogger(__name__)
 
+# Model configurations
+REASONING_MODEL = "o3"  # Extended thinking model for complex writing
+REASONING_MODEL_PRO = "o3-pro"  # Even more extended thinking (slower, more reliable)
+FAST_MODEL = "gpt-4o"  # Fast model for simpler tasks
+
 
 class IntroductionWriterAgent:
     """LLM agent that writes introduction sections for systematic reviews.
 
-    This agent uses the Perplexity API (when configured) to fetch background
-    literature for the introduction. This is intentionally separate from the
-    systematic review search results to ensure proper separation between
-    background context and reviewed papers.
+    This agent uses OpenAI's extended thinking models (o3/o3-pro) for writing
+    and the Responses API with web search for literature research. This is
+    intentionally separate from the systematic review search results to ensure
+    proper separation between background context and reviewed papers.
 
     The agent tracks all citations made in the introduction and provides them
     for inclusion in the reference section.
@@ -45,10 +52,10 @@ class IntroductionWriterAgent:
     Example usage:
         agent = IntroductionWriterAgent()
 
-        # Write complete introduction with Perplexity research
+        # Write complete introduction with web search
         intro, papers = await agent.write_complete_introduction(
             research_question="Effect of aspirin on cardiovascular mortality",
-            use_perplexity=True
+            use_web_search=True
         )
 
         # Get papers for reference section
@@ -58,28 +65,38 @@ class IntroductionWriterAgent:
 
     def __init__(
         self,
-        model: str = "gpt-4o",
+        model: str = REASONING_MODEL,
         temperature: float = 0.6,
         max_tokens: int = 4000,
-        perplexity_client: Optional[PerplexityClient] = None,
+        literature_client: Optional[OpenAILiteratureClient] = None,
+        use_extended_thinking: bool = True,
     ):
         """Initialize the introduction writer agent.
 
         Args:
-            model: OpenAI model to use for writing
-            temperature: Sampling temperature (higher = more creative)
+            model: OpenAI model to use for writing (default: o3)
+            temperature: Sampling temperature (ignored for o-series models)
             max_tokens: Maximum tokens in response
-            perplexity_client: Optional pre-configured Perplexity client
+            literature_client: Optional pre-configured literature client
+            use_extended_thinking: Use o3-pro for more thorough reasoning
         """
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
-        self.model = model
+
+        # Select model based on extended thinking preference
+        if use_extended_thinking:
+            self.model = REASONING_MODEL_PRO
+        else:
+            self.model = model
+
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.rate_limiter = get_openai_rate_limiter()
 
-        # Initialize Perplexity client for literature research
-        self.perplexity = perplexity_client or PerplexityClient()
+        # Initialize OpenAI literature client for research
+        self.literature_client = literature_client or OpenAILiteratureClient(
+            model=REASONING_MODEL
+        )
 
         # Initialize reference management
         self.reference_manager = ReferenceManager()
@@ -105,19 +122,26 @@ class IntroductionWriterAgent:
             messages: Chat messages
             tools: Tool definitions (optional)
             tool_choice: Tool choice strategy
-            temperature: Override default temperature
+            temperature: Override default temperature (ignored for o-series)
 
         Returns:
             OpenAI completion response
         """
         await self.rate_limiter.wait()
 
+        # Build kwargs based on model type
         kwargs = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature if temperature is not None else self.temperature,
-            "max_tokens": self.max_tokens,
         }
+
+        # o-series models use max_completion_tokens, not max_tokens
+        # and don't support temperature
+        if self.model.startswith("o"):
+            kwargs["max_completion_tokens"] = self.max_tokens
+        else:
+            kwargs["max_tokens"] = self.max_tokens
+            kwargs["temperature"] = temperature if temperature is not None else self.temperature
 
         if tools:
             kwargs["tools"] = tools
@@ -183,15 +207,15 @@ class IntroductionWriterAgent:
         topic: str,
         literature_context: Optional[list[Paper]] = None,
         retriever: Optional[Retriever] = None,
-        use_perplexity: bool = True,
+        use_web_search: bool = True,
     ) -> WritingResult:
         """Write the background subsection.
 
         Args:
             topic: Main topic or research question
-            literature_context: Relevant papers for context (optional, ignored if use_perplexity=True)
-            retriever: RAG retriever (optional, ignored if use_perplexity=True)
-            use_perplexity: Use Perplexity API for literature (default: True)
+            literature_context: Relevant papers for context (optional)
+            retriever: RAG retriever (optional)
+            use_web_search: Use OpenAI web search for literature (default: True)
 
         Returns:
             WritingResult with generated background
@@ -199,38 +223,33 @@ class IntroductionWriterAgent:
         start_time = time.time()
 
         papers: list[Paper] = []
-        perplexity_summary = ""
+        research_summary = ""
         warnings: list[str] = []
         literature_source = "none"
 
-        # Priority: Perplexity > RAG > provided literature
-        if use_perplexity and self.perplexity.is_configured:
-            # Use Perplexity for deep research
+        # Priority: Web search > RAG > provided literature
+        if use_web_search and self.literature_client.is_configured:
             try:
-                summary, fetched_papers = await self.perplexity.get_literature_context(
+                summary, fetched_papers = await self.literature_client.get_literature_context(
                     topic, max_papers=5
                 )
-                perplexity_summary = summary
+                research_summary = summary
                 papers = fetched_papers
-                literature_source = "perplexity"
+                literature_source = "openai_web_search"
 
                 # Register papers with reference manager
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except PerplexityNotConfiguredError as e:
-                warning_msg = f"Perplexity not configured: {e}"
+            except OpenAILiteratureRateLimitError as e:
+                warning_msg = f"OpenAI rate limited: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
-            except PerplexityRateLimitError as e:
-                warning_msg = f"Perplexity rate limited: {e}"
-                logger.warning(warning_msg)
-                warnings.append(warning_msg)
-            except PerplexityClientError as e:
-                warning_msg = f"Perplexity API error: {e}"
+            except OpenAILiteratureClientError as e:
+                warning_msg = f"OpenAI literature API error: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
             except Exception as e:
-                warning_msg = f"Unexpected error fetching literature from Perplexity: {e}"
+                warning_msg = f"Unexpected error fetching literature: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
 
@@ -255,7 +274,7 @@ class IntroductionWriterAgent:
 **Topic:** {topic}
 
 **Research Summary:**
-{perplexity_summary if perplexity_summary else "No additional research summary available."}
+{research_summary if research_summary else "No additional research summary available."}
 
 **Available Papers to Cite (use ONLY these numeric citations):**
 {papers_formatted}
@@ -311,7 +330,7 @@ Write only the background text, no headings."""
         research_question: str,
         existing_reviews: Optional[list[Paper]] = None,
         retriever: Optional[Retriever] = None,
-        use_perplexity: bool = True,
+        use_web_search: bool = True,
     ) -> WritingResult:
         """Write the rationale subsection.
 
@@ -319,7 +338,7 @@ Write only the background text, no headings."""
             research_question: The research question for the review
             existing_reviews: Previous systematic reviews on topic (optional)
             retriever: RAG retriever for fetching context (optional)
-            use_perplexity: Use Perplexity API for literature (default: True)
+            use_web_search: Use OpenAI web search for literature (default: True)
 
         Returns:
             WritingResult with generated rationale
@@ -327,37 +346,33 @@ Write only the background text, no headings."""
         start_time = time.time()
 
         papers: list[Paper] = []
-        perplexity_summary = ""
+        research_summary = ""
         warnings: list[str] = []
         literature_source = "none"
 
-        # Priority: Perplexity > RAG > provided literature
-        if use_perplexity and self.perplexity.is_configured:
+        # Priority: Web search > RAG > provided literature
+        if use_web_search and self.literature_client.is_configured:
             try:
                 query = f"systematic review meta-analysis {research_question}"
-                summary, fetched_papers = await self.perplexity.get_literature_context(
+                summary, fetched_papers = await self.literature_client.get_literature_context(
                     query, max_papers=3
                 )
-                perplexity_summary = summary
+                research_summary = summary
                 papers = fetched_papers
-                literature_source = "perplexity"
+                literature_source = "openai_web_search"
 
                 for paper in papers:
                     self.reference_manager.register_paper(paper)
-            except PerplexityNotConfiguredError as e:
-                warning_msg = f"Perplexity not configured: {e}"
+            except OpenAILiteratureRateLimitError as e:
+                warning_msg = f"OpenAI rate limited: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
-            except PerplexityRateLimitError as e:
-                warning_msg = f"Perplexity rate limited: {e}"
-                logger.warning(warning_msg)
-                warnings.append(warning_msg)
-            except PerplexityClientError as e:
-                warning_msg = f"Perplexity API error: {e}"
+            except OpenAILiteratureClientError as e:
+                warning_msg = f"OpenAI literature API error: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
             except Exception as e:
-                warning_msg = f"Unexpected error fetching literature from Perplexity: {e}"
+                warning_msg = f"Unexpected error fetching literature: {e}"
                 logger.warning(warning_msg)
                 warnings.append(warning_msg)
 
@@ -381,7 +396,7 @@ Write only the background text, no headings."""
 **Research Question:** {research_question}
 
 **Research Summary:**
-{perplexity_summary if perplexity_summary else "No additional research summary available."}
+{research_summary if research_summary else "No additional research summary available."}
 
 **Available Papers to Cite (use ONLY these numeric citations):**
 {papers_formatted}
@@ -426,7 +441,7 @@ Write only the rationale text, no headings."""
         return WritingResult(
             section=section,
             generation_time_ms=elapsed_ms,
-            tokens_used=0,  # Can't track across retries easily
+            tokens_used=0,
             cost_usd=0.0,
             success=True,
             warnings=warnings,
@@ -489,7 +504,10 @@ Write only the objectives text, no headings."""
 
         elapsed_ms = int((time.time() - start_time) * 1000)
         tokens_used = response.usage.total_tokens if response.usage else 0
-        cost = self._estimate_cost(response.usage.prompt_tokens, response.usage.completion_tokens)
+        cost = self._estimate_cost(
+            response.usage.prompt_tokens if response.usage else 0,
+            response.usage.completion_tokens if response.usage else 0,
+        )
 
         section = Section(title="Objectives", content=content)
 
@@ -508,7 +526,8 @@ Write only the objectives text, no headings."""
         primary_outcome: Optional[str] = None,
         literature_context: Optional[list[Paper]] = None,
         retriever: Optional[Retriever] = None,
-        use_perplexity: bool = True,
+        use_web_search: bool = True,
+        use_perplexity: bool = False,  # Deprecated, kept for compatibility
     ) -> tuple[Section, list[Paper]]:
         """Write complete introduction section with all subsections.
 
@@ -522,11 +541,20 @@ Write only the objectives text, no headings."""
             primary_outcome: Primary outcome of interest (optional)
             literature_context: Relevant papers for context (optional)
             retriever: RAG retriever for fetching literature (optional)
-            use_perplexity: Use Perplexity API for literature (default: True)
+            use_web_search: Use OpenAI web search for literature (default: True)
+            use_perplexity: Deprecated, use use_web_search instead
 
         Returns:
             Tuple of (introduction_section, list_of_cited_papers)
         """
+        # Handle deprecated parameter
+        if use_perplexity:
+            logger.warning(
+                "use_perplexity is deprecated, using use_web_search instead. "
+                "Perplexity has been replaced with OpenAI web search."
+            )
+            use_web_search = True
+
         # Clear reference manager and warnings for fresh start
         self.reference_manager.clear()
         self.clear_warnings()
@@ -536,13 +564,13 @@ Write only the objectives text, no headings."""
 
         # 1. Background
         background_result = await self.write_background(
-            research_question, literature_context, retriever, use_perplexity
+            research_question, literature_context, retriever, use_web_search
         )
         intro_section.add_subsection(background_result.section)
 
         # 2. Rationale
         rationale_result = await self.write_rationale(
-            research_question, literature_context, retriever, use_perplexity
+            research_question, literature_context, retriever, use_web_search
         )
         intro_section.add_subsection(rationale_result.section)
 
@@ -582,7 +610,7 @@ Write only the objectives text, no headings."""
         """Get literature sources used for each section.
 
         Returns:
-            List of "section:source" strings (e.g., "background:perplexity")
+            List of "section:source" strings (e.g., "background:openai_web_search")
         """
         return list(self._literature_sources)
 
@@ -630,9 +658,15 @@ Write only the objectives text, no headings."""
         Returns:
             Estimated cost in USD
         """
-        # GPT-4o pricing: $2.50/1M input, $10/1M output
-        input_cost = (prompt_tokens / 1_000_000) * 2.50
-        output_cost = (completion_tokens / 1_000_000) * 10.00
+        # o3 pricing (approximate): $10/1M input, $40/1M output
+        # o3-pro pricing: Higher due to extended thinking
+        if self.model.startswith("o3"):
+            input_cost = (prompt_tokens / 1_000_000) * 10.00
+            output_cost = (completion_tokens / 1_000_000) * 40.00
+        else:
+            # GPT-4o pricing: $2.50/1M input, $10/1M output
+            input_cost = (prompt_tokens / 1_000_000) * 2.50
+            output_cost = (completion_tokens / 1_000_000) * 10.00
         return input_cost + output_cost
 
     # ==================== Numeric Citation Helper Methods ====================
@@ -721,8 +755,6 @@ Write only the objectives text, no headings."""
         Returns:
             Tuple of (validated_content, used_citation_numbers)
         """
-        import re
-
         max_valid = len(papers)
         num_to_id = self._get_numeric_id_mapping(papers)
 
@@ -775,29 +807,26 @@ Write only the objectives text, no headings."""
         )
 
         # Final cleanup: remove any DOI-style citations that shouldn't be there
-        # These can come from Perplexity's response content being included
-        # Pattern matches: [10.1234/...], [doi:10.1234/...], DOI with nested brackets
         doi_patterns = [
-            re.compile(r"\[10\.\d{4,}/[^\]]*\]"),  # [10.1234/...]
-            re.compile(r"\[doi:10\.\d{4,}/[^\]]*\]", re.IGNORECASE),  # [doi:10.1234/...]
-            re.compile(r"10\.\d{4,}/[^\s\[\]]+\[\d+\]"),  # DOI with trailing [1]
-            re.compile(r"10\.\d{4,}/[^\s\[\]]+"),  # Bare DOI without brackets
+            re.compile(r"\[10\.\d{4,}/[^\]]*\]"),
+            re.compile(r"\[doi:10\.\d{4,}/[^\]]*\]", re.IGNORECASE),
+            re.compile(r"10\.\d{4,}/[^\s\[\]]+\[\d+\]"),
+            re.compile(r"10\.\d{4,}/[^\s\[\]]+"),
         ]
         for pattern in doi_patterns:
             content = pattern.sub("", content)
 
-        # Clean up orphaned brackets (left behind after removing citations)
-        content = re.sub(r"\[\s*\]", "", content)  # Empty brackets []
-        content = re.sub(r"\s+\]", "", content)  # Space before closing bracket
-        content = re.sub(r"\[\s+", "", content)  # Opening bracket with only space
+        # Clean up orphaned brackets
+        content = re.sub(r"\[\s*\]", "", content)
+        content = re.sub(r"\s+\]", "", content)
+        content = re.sub(r"\[\s+", "", content)
 
-        # Clean up any double spaces or spaces before punctuation
+        # Clean up spaces
         content = re.sub(r"  +", " ", content)
         content = re.sub(r" ([.,;:])", r"\1", content)
-        content = re.sub(r"\s+\n", "\n", content)  # Trailing spaces before newlines
+        content = re.sub(r"\s+\n", "\n", content)
 
-        # Normalize paragraph breaks for proper markdown formatting
-        # Single newlines between paragraphs should become double newlines
+        # Normalize paragraph breaks
         content = self._normalize_paragraph_breaks(content)
 
         # Return the valid citation numbers that were used
@@ -806,19 +835,7 @@ Write only the objectives text, no headings."""
         return content, used_numbers
 
     def _normalize_paragraph_breaks(self, content: str) -> str:
-        """Normalize paragraph breaks for markdown formatting.
-
-        Converts single newlines between paragraphs to double newlines,
-        which is required for proper paragraph separation in markdown.
-
-        Args:
-            content: Text content that may have single newlines between paragraphs
-
-        Returns:
-            Content with proper paragraph breaks (double newlines)
-        """
-        import re
-
+        """Normalize paragraph breaks for markdown formatting."""
         # First, normalize any existing multiple newlines to exactly two
         content = re.sub(r"\n{3,}", "\n\n", content)
 
@@ -829,21 +846,16 @@ Write only the objectives text, no headings."""
         for i, line in enumerate(lines):
             result_lines.append(line)
 
-            # If this line ends a paragraph (non-empty, ends with sentence-ending punctuation)
-            # and the next line starts a new paragraph (non-empty, starts with capital letter)
-            # then we need a blank line between them
             if i < len(lines) - 1:
                 current_line = line.strip()
                 next_line = lines[i + 1].strip()
 
-                # Check if we're between two paragraphs
                 if (
                     current_line
                     and next_line
                     and current_line[-1] in ".!?])"
                     and next_line[0].isupper()
                 ):
-                    # Add blank line if not already present
                     if result_lines and result_lines[-1] != "":
                         result_lines.append("")
 
