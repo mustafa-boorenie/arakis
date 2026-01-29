@@ -5,14 +5,15 @@ import { useStore } from '@/store';
 import { useWorkflow } from '@/hooks';
 import { WorkflowCard } from './WorkflowCard';
 import { Button } from '@/components/ui/button';
-import { History, FileQuestion, RefreshCw, Loader2 } from 'lucide-react';
+import { History, FileQuestion, RefreshCw, Loader2, Archive, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '@/lib/api/client';
 
 export function WorkflowHistory() {
-  const { workflow, setHistory } = useStore();
+  const { workflow, setHistory, archiveWorkflow, unarchiveWorkflow } = useStore();
   const { loadWorkflow, deleteWorkflow } = useWorkflow();
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   // Load workflows from API on mount
   useEffect(() => {
@@ -55,12 +56,34 @@ export function WorkflowHistory() {
   };
 
   const handleDelete = async (id: string) => {
+    // Find the workflow to show in confirmation
+    const workflowToDelete = workflow.history.find((w) => w.id === id);
+    const question = workflowToDelete?.research_question || 'this review';
+
+    if (!window.confirm(`Are you sure you want to delete "${question}"?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+
     try {
       await deleteWorkflow(id);
     } catch (error) {
       console.error('Failed to delete workflow:', error);
     }
   };
+
+  const handleArchive = (id: string) => {
+    const isCurrentlyArchived = workflow.archived?.includes(id);
+    if (isCurrentlyArchived) {
+      unarchiveWorkflow(id);
+    } else {
+      archiveWorkflow(id);
+    }
+  };
+
+  // Separate active and archived workflows
+  const archivedIds = workflow.archived || [];
+  const activeWorkflows = workflow.history.filter((w) => !archivedIds.includes(w.id));
+  const archivedWorkflows = workflow.history.filter((w) => archivedIds.includes(w.id));
 
   if (isLoading && workflow.history.length === 0) {
     return (
@@ -129,15 +152,63 @@ export function WorkflowHistory() {
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-3 max-w-4xl mx-auto">
-          {workflow.history.map((w) => (
+          {/* Active workflows */}
+          {activeWorkflows.map((w) => (
             <WorkflowCard
               key={w.id}
               workflow={w}
               isActive={workflow.current?.id === w.id}
+              isArchived={false}
               onClick={() => handleSelect(w.id)}
               onDelete={() => handleDelete(w.id)}
+              onArchive={() => handleArchive(w.id)}
             />
           ))}
+
+          {/* Archived section */}
+          {archivedWorkflows.length > 0 && (
+            <div className="pt-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-between text-muted-foreground hover:text-foreground"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                <span className="flex items-center gap-2">
+                  <Archive className="w-4 h-4" />
+                  Archived ({archivedWorkflows.length})
+                </span>
+                {showArchived ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+
+              {showArchived && (
+                <div className="mt-3 space-y-3">
+                  {archivedWorkflows.map((w) => (
+                    <WorkflowCard
+                      key={w.id}
+                      workflow={w}
+                      isActive={workflow.current?.id === w.id}
+                      isArchived={true}
+                      onClick={() => handleSelect(w.id)}
+                      onDelete={() => handleDelete(w.id)}
+                      onArchive={() => handleArchive(w.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty state for active workflows */}
+          {activeWorkflows.length === 0 && archivedWorkflows.length > 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              All reviews are archived
+            </p>
+          )}
         </div>
       </div>
     </div>

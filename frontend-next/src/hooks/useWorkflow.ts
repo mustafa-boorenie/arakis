@@ -128,9 +128,19 @@ export function useWorkflow() {
         setCurrentWorkflow(workflowData);
 
         if (workflowData.status === 'completed') {
+          // For completed workflows, fetch manuscript and show split-view editor
           const manuscript = await api.getManuscript(id);
           setManuscript(manuscript);
           setLayoutMode('split-view');
+        } else {
+          // For running/pending/failed workflows, show the detail view
+          setLayoutMode('chat-fullscreen');
+          setViewMode('viewing-workflow');
+
+          // Start polling if workflow is still running
+          if (workflowData.status === 'running' || workflowData.status === 'pending') {
+            setIsPolling(true);
+          }
         }
       } catch (error) {
         console.error('Failed to load workflow:', error);
@@ -139,7 +149,7 @@ export function useWorkflow() {
         setEditorLoading(false);
       }
     },
-    [setCurrentWorkflow, setManuscript, setLayoutMode, setEditorLoading]
+    [setCurrentWorkflow, setManuscript, setLayoutMode, setEditorLoading, setViewMode, setIsPolling]
   );
 
   const deleteWorkflow = useCallback(
