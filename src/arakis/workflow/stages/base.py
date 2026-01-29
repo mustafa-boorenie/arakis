@@ -5,6 +5,7 @@ Provides common functionality for all stage executors:
 - Checkpoint saving/loading
 - Error handling with user prompts
 - R2 figure upload helper
+- Cost mode configuration support
 """
 
 import asyncio
@@ -17,6 +18,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arakis.config import ModeConfig, get_default_mode_config
 from arakis.database.models import (
     Workflow,
     WorkflowFigure,
@@ -59,6 +61,7 @@ class BaseStageExecutor(ABC):
     - Checkpoint saving to database
     - Error handling with user action prompts
     - R2 figure upload helper
+    - Cost mode configuration support
     """
 
     MAX_RETRIES = 3
@@ -67,15 +70,22 @@ class BaseStageExecutor(ABC):
     # Subclasses must define these
     STAGE_NAME: str = ""  # e.g., "search", "screen", "pdf_fetch"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
+    def __init__(
+        self,
+        workflow_id: str,
+        db: AsyncSession,
+        mode_config: Optional[ModeConfig] = None,
+    ):
         """Initialize the stage executor.
 
         Args:
             workflow_id: The workflow ID to execute for
             db: Async database session
+            mode_config: Cost mode configuration. If None, uses default (BALANCED).
         """
         self.workflow_id = workflow_id
         self.db = db
+        self.mode_config = mode_config or get_default_mode_config()
         self._storage_client = None
 
     @property

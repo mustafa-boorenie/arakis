@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 from enum import Enum
 
 
+from typing import Any
+
+
 def _utc_now() -> datetime:
     """Return current UTC time as timezone-aware datetime."""
     return datetime.now(timezone.utc)
-from typing import Any
 
 
 class FieldType(str, Enum):

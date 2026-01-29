@@ -1,5 +1,7 @@
 """Configuration management for Arakis."""
 
+from dataclasses import dataclass
+from enum import Enum
 from functools import lru_cache
 from typing import Optional
 
@@ -148,3 +150,191 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get cached settings instance."""
     return Settings()
+
+
+# =============================================================================
+# Cost Mode Configuration
+# =============================================================================
+
+class CostMode(str, Enum):
+    """Cost/quality optimization modes.
+    
+    All modes use full text for screening and extraction.
+    Cost savings come from cheaper models and fewer review passes.
+    """
+    QUALITY = "QUALITY"       # Maximum accuracy - gpt-5-mini dual/triple + gpt-5.2-max reasoning
+    BALANCED = "BALANCED"     # Good quality at reasonable cost - gpt-5-nano single + o3-mini (DEFAULT)
+    FAST = "FAST"             # Speed focused - gpt-5-nano single, skips RoB/Analysis
+    ECONOMY = "ECONOMY"       # Minimum cost - gpt-5-nano single, minimal prompts, skips RoB/Analysis
+
+
+@dataclass(frozen=True)
+class ModeConfig:
+    """Configuration for a specific cost mode.
+    
+    Attributes:
+        name: Mode name for display
+        description: Human-readable description
+        screening_model: Model for screening agent
+        screening_dual_review: Whether to use dual-review (2 passes)
+        extraction_model: Model for extraction agent
+        extraction_triple_review: Whether to use triple-review (3 passes)
+        use_full_text: Whether to use full text (ALWAYS True in all modes)
+        writing_model: Model for writing agents
+        max_reasoning_effort: For reasoning models, use max effort (QUALITY mode only)
+        skip_rob: Skip Risk of Bias stage
+        skip_analysis: Skip meta-analysis stage
+        minimal_writing: Use minimal prompts for writing
+    """
+    name: str
+    description: str
+    screening_model: str
+    screening_dual_review: bool
+    extraction_model: str
+    extraction_triple_review: bool
+    use_full_text: bool  # Always True - we never use abstracts only
+    writing_model: str
+    max_reasoning_effort: bool
+    skip_rob: bool
+    skip_analysis: bool
+    minimal_writing: bool
+
+
+# Mode configurations
+# PRISMA is ALWAYS programmatic SVG in ALL modes (no LLM cost)
+MODE_CONFIGS: dict[CostMode, ModeConfig] = {
+    CostMode.QUALITY: ModeConfig(
+        name="Quality",
+        description="Maximum accuracy for publication-quality reviews. Uses best models with multiple review passes.",
+        screening_model="gpt-5-mini",
+        screening_dual_review=True,  # 2 passes at different temperatures
+        extraction_model="gpt-5-mini",
+        extraction_triple_review=True,  # 3 passes at different temperatures
+        use_full_text=True,  # Always True
+        writing_model="gpt-5.2-2025-12-11",
+        max_reasoning_effort=True,  # Use max reasoning effort
+        skip_rob=False,
+        skip_analysis=False,
+        minimal_writing=False,
+    ),
+    
+    CostMode.BALANCED: ModeConfig(
+        name="Balanced",
+        description="Good quality at reasonable cost. Recommended for most systematic reviews.",
+        screening_model="gpt-5-nano",
+        screening_dual_review=False,  # Single pass
+        extraction_model="gpt-5-nano",
+        extraction_triple_review=False,  # Single pass
+        use_full_text=True,  # Always True
+        writing_model="o3-mini",
+        max_reasoning_effort=False,
+        skip_rob=False,
+        skip_analysis=False,
+        minimal_writing=False,
+    ),
+    
+    CostMode.FAST: ModeConfig(
+        name="Fast",
+        description="Speed focused. Skips RoB and Analysis stages for faster results.",
+        screening_model="gpt-5-nano",
+        screening_dual_review=False,
+        extraction_model="gpt-5-nano",
+        extraction_triple_review=False,
+        use_full_text=True,  # Always True
+        writing_model="o3-mini",
+        max_reasoning_effort=False,
+        skip_rob=True,  # Skip Risk of Bias
+        skip_analysis=True,  # Skip meta-analysis
+        minimal_writing=False,
+    ),
+    
+    CostMode.ECONOMY: ModeConfig(
+        name="Economy",
+        description="Minimum cost for proof of concept or very large reviews. Skips non-essential stages.",
+        screening_model="gpt-5-nano",
+        screening_dual_review=False,
+        extraction_model="gpt-5-nano",
+        extraction_triple_review=False,
+        use_full_text=True,  # Always True
+        writing_model="o3-mini",
+        max_reasoning_effort=False,
+        skip_rob=True,  # Skip Risk of Bias
+        skip_analysis=True,  # Skip meta-analysis
+        minimal_writing=True,  # Use minimal writing prompts
+    ),
+}
+
+
+def get_mode_config(mode: CostMode | str) -> ModeConfig:
+    """Get configuration for a cost mode.
+    
+    Args:
+        mode: Cost mode enum or string name
+        
+    Returns:
+        ModeConfig for the specified mode
+        
+    Raises:
+        ValueError: If mode is not recognized
+    """
+    if isinstance(mode, str):
+        try:
+            mode = CostMode(mode.upper())
+        except ValueError:
+            valid_modes = [m.value for m in CostMode]
+            raise ValueError(f"Invalid cost mode: {mode}. Valid modes: {valid_modes}")
+    
+    return MODE_CONFIGS[mode]
+
+
+def get_default_mode() -> CostMode:
+    """Get the default cost mode.
+    
+    Returns:
+        Default cost mode (BALANCED)
+    """
+    return CostMode.BALANCED
+
+
+def get_default_mode_config() -> ModeConfig:
+    """Get configuration for the default cost mode.
+    
+    Returns:
+        ModeConfig for BALANCED mode
+    """
+    return MODE_CONFIGS[CostMode.BALANCED]
+
+
+def list_modes() -> list[dict[str, str]]:
+    """List all available modes with descriptions.
+    
+    Returns:
+        List of mode info dictionaries
+    """
+    return [
+        {
+            "value": mode.value,
+            "name": config.name,
+            "description": config.description,
+        }
+        for mode, config in MODE_CONFIGS.items()
+    ]
+
+
+def validate_mode(mode: str) -> CostMode:
+    """Validate and normalize a cost mode string.
+    
+    Args:
+        mode: Mode string to validate
+        
+    Returns:
+        Normalized CostMode enum
+        
+    Raises:
+        ValueError: If mode is invalid
+    """
+    try:
+        return CostMode(mode.upper())
+    except ValueError:
+        valid = [m.value for m in CostMode]
+        raise ValueError(f"Invalid cost mode '{mode}'. Must be one of: {', '.join(valid)}")

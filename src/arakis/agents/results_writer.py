@@ -3,6 +3,7 @@
 LLM-powered agent that writes the results section of a systematic review.
 
 Uses o3/o3-pro extended thinking models for high-quality reasoning.
+Supports cost mode configuration.
 """
 
 import json
@@ -12,7 +13,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO
-from arakis.config import get_settings
+from arakis.config import get_settings, ModeConfig, get_default_mode_config
 from arakis.models.analysis import MetaAnalysisResult, NarrativeSynthesisResult
 from arakis.models.paper import Paper
 from arakis.models.screening import ScreeningDecision
@@ -25,31 +26,39 @@ class ResultsWriterAgent:
     """LLM agent that writes results section for systematic reviews.
 
     Uses OpenAI's extended thinking models (o3/o3-pro) for high-quality output.
+    Supports cost mode configuration.
     """
 
     def __init__(
         self,
-        model: str = REASONING_MODEL,
+        model: str | None = None,
         temperature: float = 0.5,
         max_tokens: int = 4000,
         use_extended_thinking: bool = True,
+        mode_config: ModeConfig | None = None,
     ):
         """Initialize the results writer agent.
 
         Args:
-            model: OpenAI model to use (default: o3)
+            model: OpenAI model to use (overrides mode_config if provided)
             temperature: Sampling temperature (ignored for o-series models)
             max_tokens: Maximum tokens in response
             use_extended_thinking: Use o3-pro for more thorough reasoning
+            mode_config: Cost mode configuration. If None, uses default (BALANCED).
         """
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-        # Select model based on extended thinking preference
-        if use_extended_thinking:
+        # Use mode config if no explicit model provided
+        self.mode_config = mode_config or get_default_mode_config()
+
+        # Select model: explicit > mode_config > default
+        if model:
+            self.model = model
+        elif use_extended_thinking and self.mode_config.max_reasoning_effort:
             self.model = REASONING_MODEL_PRO
         else:
-            self.model = model
+            self.model = self.mode_config.writing_model
 
         self.temperature = temperature
         self.max_tokens = max_tokens

@@ -6,6 +6,7 @@ Manages:
 - Retry logic with user prompts
 - Stage re-runs
 - Resume from any point
+- Cost mode configuration
 """
 
 import logging
@@ -15,6 +16,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from arakis.config import get_mode_config, ModeConfig, get_default_mode_config
 from arakis.database.models import Workflow, WorkflowStageCheckpoint
 from arakis.workflow.stages import (
     BaseStageExecutor,
@@ -107,12 +109,20 @@ class WorkflowOrchestrator:
             workflow_id: The workflow ID
             initial_data: Initial input data (research question, criteria, etc.)
             start_from: Stage to start from (None = beginning)
-            skip_stages: List of stages to skip
+            skip_stages: List of stages to skip (in addition to mode-based skips)
 
         Returns:
             Dict with workflow results and status
         """
         skip_stages = skip_stages or []
+
+        # Load workflow to get cost_mode
+        workflow = await self._get_workflow(workflow_id)
+        mode_config = get_mode_config(workflow.cost_mode)
+        
+        logger.info(
+            f"[orchestrator] Workflow {workflow_id} using cost mode: {mode_config.name}"
+        )
 
         # Determine starting index
         start_index = 0
@@ -125,6 +135,14 @@ class WorkflowOrchestrator:
             f"[orchestrator] Starting workflow {workflow_id} from stage "
             f"'{self.STAGE_ORDER[start_index]}'"
         )
+
+        # Add mode-based stage skips
+        if mode_config.skip_rob and "rob" not in skip_stages:
+            skip_stages.append("rob")
+            logger.info("[orchestrator] Skipping RoB stage (mode config)")
+        if mode_config.skip_analysis and "analysis" not in skip_stages:
+            skip_stages.append("analysis")
+            logger.info("[orchestrator] Skipping Analysis stage (mode config)")
 
         # Initialize input data with initial data
         accumulated_data = dict(initial_data)
@@ -142,8 +160,8 @@ class WorkflowOrchestrator:
 
             logger.info(f"[orchestrator] Executing stage: {stage}")
 
-            # Get or create executor
-            executor = self._get_executor(workflow_id, stage)
+            # Get or create executor with mode config
+            executor = self._get_executor(workflow_id, stage, mode_config)
 
             # Run stage with retry
             result = await executor.run_with_retry(accumulated_data)
@@ -316,12 +334,23 @@ class WorkflowOrchestrator:
 
         return stages
 
-    def _get_executor(self, workflow_id: str, stage: str) -> BaseStageExecutor:
-        """Get the executor for a stage."""
+    def _get_executor(
+        self, workflow_id: str, stage: str, mode_config: ModeConfig
+    ) -> BaseStageExecutor:
+        """Get the executor for a stage.
+        
+        Args:
+            workflow_id: The workflow ID
+            stage: Stage name
+            mode_config: Cost mode configuration
+            
+        Returns:
+            Stage executor instance
+        """
         executor_class = self.STAGE_EXECUTORS.get(stage)
         if not executor_class:
             raise ValueError(f"No executor found for stage: {stage}")
-        return executor_class(workflow_id, self.db)
+        return executor_class(workflow_id, self.db, mode_config)
 
     async def _get_workflow(self, workflow_id: str) -> Workflow:
         """Get workflow from database."""

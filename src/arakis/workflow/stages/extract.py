@@ -1,6 +1,8 @@
 """Extract stage executor - structured data extraction from papers.
 
 IMPORTANT: Uses FULL TEXT by default per PRD requirements.
+
+Supports cost mode configuration for quality/cost trade-offs.
 """
 
 import logging
@@ -9,6 +11,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.agents.extractor import DataExtractionAgent
+from arakis.config import ModeConfig
 from arakis.extraction.schemas import detect_schema, get_schema
 from arakis.models.paper import Paper, PaperSource
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
@@ -20,16 +23,19 @@ class ExtractStageExecutor(BaseStageExecutor):
     """Extract structured data from papers.
 
     Uses AI to extract study characteristics, outcomes, and other
-    structured data from paper full text (or abstracts as fallback).
+    structured data from paper full text.
 
-    FULL TEXT extraction is ENABLED by default.
+    FULL TEXT extraction is ENABLED by default in all modes.
+    Uses cost mode configuration for triple/single review selection.
     """
 
     STAGE_NAME = "extract"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
-        self.extractor = DataExtractionAgent()
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
+        self.extractor = DataExtractionAgent(mode_config=self.mode_config)
+        logger.info(f"[extract] Using model: {self.mode_config.extraction_model}, "
+                   f"triple_review: {self.mode_config.extraction_triple_review}")
 
     def get_required_stages(self) -> list[str]:
         """Extract requires search, screen, and pdf_fetch."""
@@ -58,12 +64,16 @@ class ExtractStageExecutor(BaseStageExecutor):
         inclusion_criteria = input_data.get("inclusion_criteria", [])
 
         # Filter to papers with data (either full text or abstract)
-        papers_to_extract = [
-            p for p in papers_data
-            if p.get("has_full_text") or p.get("abstract")
-        ]
+        papers_with_text = [p for p in papers_data if p.get("has_full_text") or p.get("abstract")]
+        papers_without_text = [p for p in papers_data if not (p.get("has_full_text") or p.get("abstract"))]
+        
+        if papers_without_text:
+            logger.warning(
+                f"[extract] {len(papers_without_text)} papers have no text and will be skipped: "
+                f"{[p['id'] for p in papers_without_text[:5]]}"
+            )
 
-        if not papers_to_extract:
+        if not papers_with_text:
             return StageResult(
                 success=False,
                 error="No papers with text available for extraction",
@@ -89,7 +99,7 @@ class ExtractStageExecutor(BaseStageExecutor):
 
         # Convert to Paper objects with full text
         papers = []
-        for p in papers_to_extract:
+        for p in papers_with_text:
             paper = Paper(
                 id=p["id"],
                 title=p.get("title", ""),

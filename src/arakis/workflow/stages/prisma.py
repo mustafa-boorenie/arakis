@@ -1,8 +1,12 @@
 """PRISMA stage executor - generates PRISMA 2020 flow diagram.
 
 Generates:
-- PRISMA 2020 flow diagram (PNG uploaded to R2)
+- PRISMA 2020 flow diagram (SVG programmatically generated - NO LLM)
 - Flow data for inclusion in manuscript
+
+NOTE: PRISMA is ALWAYS generated programmatically as SVG.
+NO LLM is used for PRISMA generation in any mode.
+This ensures 100% accuracy and zero API cost.
 """
 
 import logging
@@ -66,14 +70,22 @@ class PRISMAStageExecutor(BaseStageExecutor):
                 search_results, screening_summary, pdfs_fetched, pdfs_failed
             )
 
-            # Generate diagram in temp directory
+            # Generate diagram in temp directory (SVG format - programmatic, no LLM)
             with tempfile.TemporaryDirectory() as temp_dir:
-                diagram_path = f"{temp_dir}/prisma_flow.png"
-                self.diagram_generator.generate(prisma_flow, diagram_path)
+                # Generate SVG (primary format)
+                diagram = self.diagram_generator.generate(
+                    prisma_flow, 
+                    output_filename="prisma_flow",
+                    format="svg"
+                )
+                
+                svg_path = f"{temp_dir}/prisma_flow.svg"
+                with open(svg_path, "w") as f:
+                    f.write(diagram.svg_content)
 
-                # Upload to R2
+                # Upload SVG to R2
                 prisma_url = await self.upload_figure_to_r2(
-                    diagram_path,
+                    svg_path,
                     "prisma_flow",
                     title="PRISMA 2020 Flow Diagram",
                     caption="Flow diagram showing study selection process",
@@ -115,7 +127,7 @@ class PRISMAStageExecutor(BaseStageExecutor):
             return StageResult(
                 success=True,
                 output_data=output_data,
-                cost=0.0,  # No LLM cost for PRISMA
+                cost=0.0,  # PROGRAMMATIC - No LLM cost for PRISMA (always SVG, never LLM)
             )
 
         except Exception as e:

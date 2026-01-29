@@ -2,6 +2,8 @@
 
 IMPORTANT: This stage processes ALL papers - no artificial limit.
 The previous 50-paper limit has been removed per PRD requirements.
+
+Supports cost mode configuration for quality/cost trade-offs.
 """
 
 import logging
@@ -10,6 +12,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.agents.screener import ScreeningAgent
+from arakis.config import ModeConfig
 from arakis.models.paper import Author, Paper, PaperSource
 from arakis.models.screening import ScreeningCriteria
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
@@ -23,15 +26,16 @@ class ScreenStageExecutor(BaseStageExecutor):
     Screens ALL papers against inclusion/exclusion criteria.
     NO ARTIFICIAL LIMIT - processes every paper found.
 
-    Uses dual-review mode by default (two passes with different temperatures)
-    for higher reliability.
+    Uses cost mode configuration for dual/single review selection.
     """
 
     STAGE_NAME = "screen"
 
-    def __init__(self, workflow_id: str, db: AsyncSession):
-        super().__init__(workflow_id, db)
-        self.screener = ScreeningAgent()
+    def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
+        super().__init__(workflow_id, db, mode_config)
+        self.screener = ScreeningAgent(mode_config=self.mode_config)
+        logger.info(f"[screen] Using model: {self.mode_config.screening_model}, "
+                   f"dual_review: {self.mode_config.screening_dual_review}")
 
     def get_required_stages(self) -> list[str]:
         """Screen requires search to be completed."""

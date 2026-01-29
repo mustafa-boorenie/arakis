@@ -1,4 +1,7 @@
-"""LLM-powered paper screening agent."""
+"""LLM-powered paper screening agent.
+
+Supports cost mode configuration for quality/cost trade-offs.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +10,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from arakis.config import get_settings
+from arakis.config import get_settings, ModeConfig, get_default_mode_config
 from arakis.logging import get_logger, log_failure
 from arakis.models.audit import AuditEventType
 from arakis.models.paper import Paper
@@ -60,20 +63,34 @@ class ScreeningAgent:
     """
     LLM-powered agent for screening papers against criteria.
 
-    Default mode: Dual reviewer (two independent passes with conflict detection)
-    for higher reliability and systematic review quality assurance.
+    Supports cost mode configuration for quality/cost trade-offs.
+    
+    QUALITY mode: Dual reviewer (2 passes, gpt-5-mini)
+    BALANCED/FAST/ECONOMY modes: Single reviewer (1 pass, gpt-5-nano)
 
     Features:
-    - Dual reviewer mode (default): Two passes with different temperatures
+    - Dual reviewer mode: Two passes with different temperatures
+    - Single review mode: One pass (faster, cheaper)
     - Automatic conflict detection and flagging
-    - Single review mode: Available for faster processing
     - Batch processing with progress tracking
     """
 
-    def __init__(self):
+    def __init__(self, mode_config: ModeConfig | None = None):
+        """Initialize screening agent.
+        
+        Args:
+            mode_config: Cost mode configuration. If None, uses default (BALANCED).
+        """
         self.settings = get_settings()
         self.client = AsyncOpenAI(api_key=self.settings.openai_api_key)
-        self.model = self.settings.openai_model
+        
+        # Use mode config if provided, otherwise default
+        self.mode_config = mode_config or get_default_mode_config()
+        self.model = self.mode_config.screening_model
+        self.dual_review = self.mode_config.screening_dual_review
+        
+        _logger.info(f"[screener] Initialized with mode: {self.mode_config.name}, "
+                    f"model: {self.model}, dual_review: {self.dual_review}")
 
     @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0)
     async def _call_openai(
@@ -230,7 +247,7 @@ For each paper, call the screen_paper function with your decision."""
         self,
         paper: Paper,
         criteria: ScreeningCriteria,
-        dual_review: bool = True,
+        dual_review: bool | None = None,
         human_review: bool = False,
     ) -> ScreeningDecision:
         """
@@ -239,7 +256,8 @@ For each paper, call the screen_paper function with your decision."""
         Args:
             paper: Paper to screen
             criteria: Inclusion/exclusion criteria
-            dual_review: If True (default), make two independent passes and flag conflicts.
+            dual_review: If True, make two independent passes and flag conflicts.
+                        If None (default), uses mode_config setting.
                         Set to False for single-pass screening (faster but less reliable).
             human_review: If True and dual_review=False, prompt human to review AI decision.
                          Allows human override of AI decisions for quality control.
@@ -247,6 +265,9 @@ For each paper, call the screen_paper function with your decision."""
         Returns:
             ScreeningDecision with status, reason, and confidence
         """
+        # Use mode_config setting if not explicitly overridden
+        if dual_review is None:
+            dual_review = self.dual_review
         # Ensure paper has audit trail
         trail = paper.ensure_audit_trail()
 
@@ -542,7 +563,7 @@ Use the screen_paper function to make your decision."""
         self,
         papers: list[Paper],
         criteria: ScreeningCriteria,
-        dual_review: bool = True,
+        dual_review: bool | None = None,
         human_review: bool = False,
         progress_callback: callable = None,
         batch_size: int | None = None,
@@ -557,7 +578,7 @@ Use the screen_paper function to make your decision."""
         Args:
             papers: List of papers to screen
             criteria: Screening criteria
-            dual_review: Enable dual reviewer mode (default: True).
+            dual_review: Enable dual reviewer mode. If None (default), uses mode_config.
                         Set to False for faster single-pass screening.
             human_review: If True and dual_review=False, prompt human to review each AI decision.
                          Ignored when dual_review=True. Forces sequential processing.
@@ -573,6 +594,9 @@ Use the screen_paper function to make your decision."""
         Returns:
             List of ScreeningDecisions in same order as input papers
         """
+        # Use mode_config setting if not explicitly overridden
+        if dual_review is None:
+            dual_review = self.dual_review
         # Human review requires sequential processing (interactive prompts)
         if human_review and not dual_review:
             results = []

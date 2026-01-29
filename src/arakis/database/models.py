@@ -67,6 +67,9 @@ class Workflow(Base):
     # Meta-analysis tracking
     meta_analysis_feasible = Column(Boolean, nullable=True)
 
+    # Cost optimization mode (QUALITY, BALANCED, FAST, ECONOMY)
+    cost_mode = Column(String(20), default="BALANCED", nullable=False)
+
     # User and trial tracking
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
     session_id = Column(String(64), nullable=True, index=True)  # For anonymous trial tracking

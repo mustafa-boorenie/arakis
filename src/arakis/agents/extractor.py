@@ -1,4 +1,7 @@
-"""Data extraction agent using LLM with triple-review for reliability."""
+"""Data extraction agent using LLM with triple-review for reliability.
+
+Supports cost mode configuration for quality/cost trade-offs.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,7 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
-from arakis.config import get_settings
+from arakis.config import get_settings, ModeConfig, get_default_mode_config
 from arakis.extraction.validator import validate_extraction
 from arakis.logging import get_logger, log_failure, log_warning
 from arakis.models.audit import AuditEventType
@@ -74,22 +77,39 @@ class DataExtractionAgent:
     """
     LLM-powered agent for extracting structured data from papers.
 
+    Supports cost mode configuration for quality/cost trade-offs.
+    
+    QUALITY mode: Triple review (3 passes, gpt-5-mini)
+    BALANCED/FAST/ECONOMY modes: Single pass (1 pass, gpt-5-nano)
+
     Features:
-    - Triple-review mode: 3 independent passes with majority voting (high reliability)
+    - Triple-review mode: 3 independent passes with majority voting
     - Single-pass mode: 1 pass for speed (lower cost)
     - Confidence scoring based on reviewer agreement
     - Automatic conflict detection and resolution
     - Field validation against schema
     - Caching to avoid re-extraction
-
-    Architecture follows existing agents (ScreeningAgent, QueryGeneratorAgent).
     """
 
-    def __init__(self):
+    def __init__(self, mode_config: ModeConfig | None = None):
+        """Initialize extraction agent.
+        
+        Args:
+            mode_config: Cost mode configuration. If None, uses default (BALANCED).
+        """
         self.settings = get_settings()
         self.client = AsyncOpenAI(api_key=self.settings.openai_api_key)
-        self.model = self.settings.openai_model
+        
+        # Use mode config if provided, otherwise default
+        self.mode_config = mode_config or get_default_mode_config()
+        self.model = self.mode_config.extraction_model
+        self.triple_review = self.mode_config.extraction_triple_review
+        self.use_full_text = self.mode_config.use_full_text  # Always True
+        
         self._extraction_cache: dict[str, ExtractedData] = {}  # Cache: paper_id+schema → extraction
+        
+        _logger.info(f"[extractor] Initialized with mode: {self.mode_config.name}, "
+                    f"model: {self.model}, triple_review: {self.triple_review}")
 
     @retry_with_exponential_backoff(max_retries=8, initial_delay=2.0, max_delay=90.0)
     async def _call_openai(
@@ -445,8 +465,8 @@ Use the extract_data function."""
         self,
         paper: Paper,
         schema: ExtractionSchema,
-        triple_review: bool = True,
-        use_full_text: bool = False,
+        triple_review: bool | None = None,
+        use_full_text: bool | None = None,
     ) -> ExtractedData:
         """
         Extract data from a single paper.
@@ -454,12 +474,19 @@ Use the extract_data function."""
         Args:
             paper: Paper to extract from
             schema: Extraction schema
-            triple_review: Use triple-review (True) or single-pass (False)
-            use_full_text: Use full text if available instead of abstract
+            triple_review: Use triple-review (True) or single-pass (False).
+                        If None (default), uses mode_config setting.
+            use_full_text: Use full text if available. If None (default), uses mode_config.
+                          Note: ALL modes use full text - this is always True.
 
         Returns:
             ExtractedData with extracted values and confidence scores
         """
+        # Use mode_config settings if not explicitly overridden
+        if triple_review is None:
+            triple_review = self.triple_review
+        if use_full_text is None:
+            use_full_text = self.use_full_text
         start_time = time.time()
 
         # Ensure paper has audit trail
@@ -687,8 +714,8 @@ Use the extract_data function."""
         self,
         papers: list[Paper],
         schema: ExtractionSchema,
-        triple_review: bool = True,
-        use_full_text: bool = False,
+        triple_review: bool | None = None,
+        use_full_text: bool | None = None,
         progress_callback: callable = None,
         batch_size: int | None = None,
     ) -> ExtractionResult:
@@ -702,8 +729,8 @@ Use the extract_data function."""
         Args:
             papers: List of papers to extract from
             schema: Extraction schema
-            triple_review: Use triple-review mode
-            use_full_text: Use full text if available
+            triple_review: Use triple-review mode. If None (default), uses mode_config.
+            use_full_text: Use full text if available. If None (default), uses mode_config.
             progress_callback: Optional callback(current, total) for progress tracking.
                 Note: For compatibility, this callback only receives (current, total).
             batch_size: Override the default batch size from settings.
@@ -712,6 +739,12 @@ Use the extract_data function."""
         Returns:
             ExtractionResult with all extractions and summary statistics
         """
+        # Use mode_config settings if not explicitly overridden
+        if triple_review is None:
+            triple_review = self.triple_review
+        if use_full_text is None:
+            use_full_text = self.use_full_text
+        
         start_time = time.time()
 
         # Use concurrent batch processing

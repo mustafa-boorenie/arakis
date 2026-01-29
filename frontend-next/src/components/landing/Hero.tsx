@@ -68,67 +68,28 @@ export function Hero({ onStartTrial, onWatchDemo }: HeroProps) {
           </div>
         </div>
 
-        {/* Product Screenshot */}
+        {/* Demo Video */}
         <div className="mt-16 relative">
-          <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent z-10 pointer-events-none" />
-          <div className="relative bg-white rounded-2xl shadow-2xl shadow-purple-500/10 border border-gray-200 overflow-hidden mx-auto max-w-5xl">
-            {/* Browser Chrome */}
-            <div className="bg-gray-100 px-4 py-3 flex items-center gap-2 border-b border-gray-200">
-              <div className="flex gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-red-400" />
-                <div className="w-3 h-3 rounded-full bg-yellow-400" />
-                <div className="w-3 h-3 rounded-full bg-green-400" />
-              </div>
-              <div className="flex-1 mx-4">
-                <div className="bg-white rounded-md px-3 py-1.5 text-sm text-gray-500 max-w-md mx-auto">
-                  app.arakis.ai
-                </div>
-              </div>
-            </div>
+          <div className="relative rounded-2xl shadow-2xl shadow-purple-500/20 overflow-hidden mx-auto max-w-5xl">
+            <video
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="w-full h-auto rounded-2xl"
+              poster="/videos/hero-demo-poster.jpg"
+            >
+              <source src="/videos/hero-demo.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
 
-            {/* App Preview Content */}
-            <div className="bg-gray-50 p-8">
-              <div className="flex gap-4">
-                {/* Sidebar Preview */}
-                <div className="w-64 bg-white rounded-lg border border-gray-200 p-4 hidden sm:block">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg" />
-                    <div className="flex-1">
-                      <div className="h-3 bg-gray-200 rounded w-20 mb-1" />
-                      <div className="h-2 bg-gray-100 rounded w-16" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-10 bg-purple-50 rounded-lg border border-purple-100" />
-                    <div className="h-10 bg-gray-50 rounded-lg" />
-                    <div className="h-10 bg-gray-50 rounded-lg" />
-                  </div>
-                </div>
-
-                {/* Main Content Preview */}
-                <div className="flex-1 bg-white rounded-lg border border-gray-200 p-6">
-                  <div className="text-center mb-6">
-                    <div className="h-6 bg-gray-200 rounded w-64 mx-auto mb-2" />
-                    <div className="h-4 bg-gray-100 rounded w-48 mx-auto" />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="h-12 bg-purple-50 rounded-xl border border-purple-100 flex items-center px-4">
-                      <div className="h-3 bg-purple-200 rounded w-3/4" />
-                    </div>
-                    <div className="flex gap-2 justify-center">
-                      <div className="h-8 bg-gray-100 rounded-full px-4 w-32" />
-                      <div className="h-8 bg-gray-100 rounded-full px-4 w-40" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Gradient overlay with tagline */}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent pt-20 pb-6 px-6 pointer-events-none">
+              <p className="text-center text-lg sm:text-xl text-white font-medium">
+                From research question to <span className="text-purple-300">publication-ready manuscript</span> in minutes
+              </p>
             </div>
           </div>
-
-          {/* Tagline below screenshot */}
-          <p className="text-center mt-8 text-lg text-gray-600 font-medium">
-            Condense <span className="text-purple-600">Hours</span> into <span className="text-purple-600">Minutes</span>
-          </p>
         </div>
       </div>
     </section>

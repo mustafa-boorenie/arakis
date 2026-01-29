@@ -2,12 +2,7 @@
 
 LLM-powered agent that writes the introduction section of a systematic review.
 
-This module uses OpenAI's Responses API with web search to fetch background
-literature for the introduction, which is separate from the systematic review
-search results. This ensures the introduction references general academic
-literature rather than the specific papers being reviewed.
-
-Uses o3/o3-pro extended thinking models for high-quality reasoning.
+Supports cost mode configuration for quality/cost trade-offs.
 """
 
 import json
@@ -23,7 +18,7 @@ from arakis.clients.openai_literature import (
     OpenAILiteratureClientError,
     OpenAILiteratureRateLimitError,
 )
-from arakis.config import get_settings
+from arakis.config import get_settings, ModeConfig, get_default_mode_config
 from arakis.models.paper import Paper
 from arakis.models.writing import Section, WritingResult
 from arakis.rag import Retriever
@@ -37,53 +32,44 @@ logger = logging.getLogger(__name__)
 class IntroductionWriterAgent:
     """LLM agent that writes introduction sections for systematic reviews.
 
-    This agent uses OpenAI's extended thinking models (o3/o3-pro) for writing
-    and the Responses API with web search for literature research. This is
-    intentionally separate from the systematic review search results to ensure
-    proper separation between background context and reviewed papers.
+    Supports cost mode configuration for quality/cost trade-offs.
 
     The agent tracks all citations made in the introduction and provides them
     for inclusion in the reference section.
-
-    Example usage:
-        agent = IntroductionWriterAgent()
-
-        # Write complete introduction with web search
-        intro, papers = await agent.write_complete_introduction(
-            research_question="Effect of aspirin on cardiovascular mortality",
-            use_web_search=True
-        )
-
-        # Get papers for reference section
-        for paper in papers:
-            print(f"- {paper.title}")
     """
 
     def __init__(
         self,
-        model: str = REASONING_MODEL,
+        model: str | None = None,
         temperature: float = 0.6,
         max_tokens: int = 4000,
         literature_client: Optional[OpenAILiteratureClient] = None,
         use_extended_thinking: bool = True,
+        mode_config: ModeConfig | None = None,
     ):
         """Initialize the introduction writer agent.
 
         Args:
-            model: OpenAI model to use for writing (default: o3)
+            model: OpenAI model to use (overrides mode_config if provided)
             temperature: Sampling temperature (ignored for o-series models)
             max_tokens: Maximum tokens in response
             literature_client: Optional pre-configured literature client
-            use_extended_thinking: Use o3-pro for more thorough reasoning
+            use_extended_thinking: Use max reasoning effort (QUALITY mode only)
+            mode_config: Cost mode configuration. If None, uses default (BALANCED).
         """
         settings = get_settings()
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-        # Select model based on extended thinking preference
-        if use_extended_thinking:
+        # Use mode config if no explicit model provided
+        self.mode_config = mode_config or get_default_mode_config()
+        
+        # Select model: explicit > mode_config > default
+        if model:
+            self.model = model
+        elif use_extended_thinking and self.mode_config.max_reasoning_effort:
             self.model = REASONING_MODEL_PRO
         else:
-            self.model = model
+            self.model = self.mode_config.writing_model
 
         self.temperature = temperature
         self.max_tokens = max_tokens
