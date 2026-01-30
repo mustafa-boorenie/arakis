@@ -80,9 +80,7 @@ class PDFFetchStageExecutor(BaseStageExecutor):
             )
             papers.append(paper)
 
-        logger.info(
-            f"[pdf_fetch] Fetching {len(papers)} PDFs (extract_text={extract_text})"
-        )
+        logger.info(f"[pdf_fetch] Fetching {len(papers)} PDFs (extract_text={extract_text})")
 
         # Update workflow stage
         await self.update_workflow_stage("pdf_fetch")
@@ -99,9 +97,7 @@ class PDFFetchStageExecutor(BaseStageExecutor):
 
             # Count successes
             pdfs_fetched = sum(1 for r in fetch_results if r.success)
-            texts_extracted = sum(
-                1 for r in fetch_results if r.success and r.paper.has_full_text
-            )
+            texts_extracted = sum(1 for r in fetch_results if r.success and r.paper.has_full_text)
 
             # Build output data with extracted text
             papers_with_text = []

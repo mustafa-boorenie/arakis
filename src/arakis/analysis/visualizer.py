@@ -8,6 +8,7 @@ to ensure consistency and traceability.
 """
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -19,6 +20,9 @@ from arakis.models.analysis import (
     MetaAnalysisResult,
 )
 from arakis.traceability import DEFAULT_PRECISION
+
+if TYPE_CHECKING:
+    from arakis.models.risk_of_bias import RiskOfBiasSummary
 
 # Set publication-quality defaults
 sns.set_style("whitegrid")
@@ -1012,8 +1016,8 @@ class VisualizationGenerator:
         if show_domains:
             for domain_id, dist in domain_distributions.items():
                 low_count = dist.get(RiskLevel.LOW, 0)
-                concerns_count = (
-                    dist.get(RiskLevel.SOME_CONCERNS, 0) + dist.get(RiskLevel.UNCLEAR, 0)
+                concerns_count = dist.get(RiskLevel.SOME_CONCERNS, 0) + dist.get(
+                    RiskLevel.UNCLEAR, 0
                 )
                 high_count = dist.get(RiskLevel.HIGH, 0)
 
@@ -1038,7 +1042,7 @@ class VisualizationGenerator:
         bar_height = 0.6
 
         # Plot bars (stacked)
-        bars_low = ax.barh(
+        ax.barh(
             y_positions,
             data_low,
             height=bar_height,
@@ -1047,7 +1051,7 @@ class VisualizationGenerator:
             edgecolor="white",
             linewidth=0.5,
         )
-        bars_concerns = ax.barh(
+        ax.barh(
             y_positions,
             data_concerns,
             height=bar_height,
@@ -1057,11 +1061,11 @@ class VisualizationGenerator:
             edgecolor="white",
             linewidth=0.5,
         )
-        bars_high = ax.barh(
+        ax.barh(
             y_positions,
             data_high,
             height=bar_height,
-            left=[l + c for l, c in zip(data_low, data_concerns)],
+            left=[low + concern for low, concern in zip(data_low, data_concerns)],
             color=colors[RiskLevel.HIGH],
             label="High risk",
             edgecolor="white",
@@ -1072,15 +1076,42 @@ class VisualizationGenerator:
         for i, (low, concerns, high) in enumerate(zip(data_low, data_concerns, data_high)):
             # Low risk label
             if low > 10:
-                ax.text(low / 2, i, f"{low:.0f}%", ha="center", va="center", fontsize=9, color="white", fontweight="bold")
+                ax.text(
+                    low / 2,
+                    i,
+                    f"{low:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="white",
+                    fontweight="bold",
+                )
 
             # Some concerns label
             if concerns > 10:
-                ax.text(low + concerns / 2, i, f"{concerns:.0f}%", ha="center", va="center", fontsize=9, color="black", fontweight="bold")
+                ax.text(
+                    low + concerns / 2,
+                    i,
+                    f"{concerns:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="black",
+                    fontweight="bold",
+                )
 
             # High risk label
             if high > 10:
-                ax.text(low + concerns + high / 2, i, f"{high:.0f}%", ha="center", va="center", fontsize=9, color="white", fontweight="bold")
+                ax.text(
+                    low + concerns + high / 2,
+                    i,
+                    f"{high:.0f}%",
+                    ha="center",
+                    va="center",
+                    fontsize=9,
+                    color="white",
+                    fontweight="bold",
+                )
 
         # Customize axes
         ax.set_yticks(y_positions)

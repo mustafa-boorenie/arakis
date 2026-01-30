@@ -141,18 +141,14 @@ class BaseStageExecutor(ABC):
 
                 # Check if error is retryable
                 if not self._is_retryable_error(result.error):
-                    logger.warning(
-                        f"[{self.STAGE_NAME}] Non-retryable error: {result.error}"
-                    )
+                    logger.warning(f"[{self.STAGE_NAME}] Non-retryable error: {result.error}")
                     return result
 
                 last_error = result.error
 
             except Exception as e:
                 last_error = str(e)
-                logger.exception(
-                    f"[{self.STAGE_NAME}] Exception on attempt {attempt + 1}: {e}"
-                )
+                logger.exception(f"[{self.STAGE_NAME}] Exception on attempt {attempt + 1}: {e}")
 
                 if not self._is_retryable_error(str(e)):
                     return StageResult(
@@ -216,9 +212,7 @@ class BaseStageExecutor(ABC):
         Returns:
             Workflow model instance
         """
-        result = await self.db.execute(
-            select(Workflow).where(Workflow.id == self.workflow_id)
-        )
+        result = await self.db.execute(select(Workflow).where(Workflow.id == self.workflow_id))
         return result.scalar_one()
 
     async def update_workflow_stage(self, stage: str) -> None:

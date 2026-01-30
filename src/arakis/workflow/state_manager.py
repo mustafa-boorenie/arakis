@@ -185,13 +185,16 @@ class WorkflowStateManager:
 
         resume_stage = state.get_resume_stage()
         completed_stages = [
-            stage for stage, checkpoint in state.stages.items()
+            stage
+            for stage, checkpoint in state.stages.items()
             if checkpoint.status == StageStatus.COMPLETED
         ]
 
         return {
             "workflow_id": state.workflow_id,
-            "research_question": state.research_question[:100] + "..." if len(state.research_question) > 100 else state.research_question,
+            "research_question": state.research_question[:100] + "..."
+            if len(state.research_question) > 100
+            else state.research_question,
             "started_at": state.started_at.isoformat(),
             "progress": f"{state.progress_percentage:.0f}%",
             "resume_stage": resume_stage.value if resume_stage else None,

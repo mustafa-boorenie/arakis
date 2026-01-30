@@ -58,7 +58,9 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index(op.f("ix_refresh_tokens_token_hash"), "refresh_tokens", ["token_hash"], unique=False)
+    op.create_index(
+        op.f("ix_refresh_tokens_token_hash"), "refresh_tokens", ["token_hash"], unique=False
+    )
 
 
 def downgrade() -> None:

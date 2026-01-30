@@ -45,7 +45,7 @@ class AbstractWriterAgent:
 
         # Use mode config if no explicit model provided
         self.mode_config = mode_config or get_default_mode_config()
-        
+
         # Select model: explicit > mode_config > default
         if model:
             self.model = model

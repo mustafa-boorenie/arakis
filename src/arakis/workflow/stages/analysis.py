@@ -61,7 +61,7 @@ class AnalysisStageExecutor(BaseStageExecutor):
             StageResult with meta-analysis results and figure URLs
         """
         extractions_data = input_data.get("extractions", [])
-        rob_data = input_data.get("rob_summary", {})
+        input_data.get("rob_summary", {})
         outcome_name = input_data.get("outcome_name", "Primary outcome")
 
         if not extractions_data:
@@ -142,9 +142,7 @@ class AnalysisStageExecutor(BaseStageExecutor):
                 visualizer = VisualizationGenerator(output_dir=temp_dir)
 
                 # Generate and upload forest plot
-                forest_path = visualizer.create_forest_plot(
-                    meta_result, "forest_plot.png"
-                )
+                forest_path = visualizer.create_forest_plot(meta_result, "forest_plot.png")
                 forest_url = await self.upload_figure_to_r2(
                     forest_path,
                     "forest_plot",
@@ -155,9 +153,7 @@ class AnalysisStageExecutor(BaseStageExecutor):
                 # Generate and upload funnel plot (if enough studies)
                 funnel_url = None
                 if len(studies) >= 5:
-                    funnel_path = visualizer.create_funnel_plot(
-                        meta_result, "funnel_plot.png"
-                    )
+                    funnel_path = visualizer.create_funnel_plot(meta_result, "funnel_plot.png")
                     funnel_url = await self.upload_figure_to_r2(
                         funnel_path,
                         "funnel_plot",

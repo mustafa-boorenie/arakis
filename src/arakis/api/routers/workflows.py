@@ -314,8 +314,7 @@ async def _build_workflow_response(workflow: Workflow, db: AsyncSession) -> Work
 
     # Get figure URLs
     result = await db.execute(
-        select(WorkflowFigure)
-        .where(WorkflowFigure.workflow_id == workflow.id)
+        select(WorkflowFigure).where(WorkflowFigure.workflow_id == workflow.id)
     )
     figures = result.scalars().all()
 
@@ -453,9 +452,18 @@ async def rerun_stage(
 
     # Validate stage
     valid_stages = [
-        "search", "screen", "pdf_fetch", "extract", "rob",
-        "analysis", "prisma", "tables", "introduction",
-        "methods", "results", "discussion"
+        "search",
+        "screen",
+        "pdf_fetch",
+        "extract",
+        "rob",
+        "analysis",
+        "prisma",
+        "tables",
+        "introduction",
+        "methods",
+        "results",
+        "discussion",
     ]
     if stage not in valid_stages:
         raise HTTPException(
@@ -556,6 +564,7 @@ async def execute_workflow_resume(workflow_id: str):
             await orchestrator.resume_workflow(workflow_id)
         except Exception as e:
             import traceback
+
             print(f"[{workflow_id}] Resume failed: {e}")
             print(traceback.format_exc())
 

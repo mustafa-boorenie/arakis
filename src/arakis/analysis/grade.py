@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 from arakis.models.analysis import (
     ConfidenceInterval,
@@ -77,7 +76,7 @@ class GRADEAssessor:
     for indirectness which requires clinical judgment.
     """
 
-    def __init__(self, config: Optional[GRADEConfig] = None) -> None:
+    def __init__(self, config: GRADEConfig | None = None) -> None:
         """Initialize the GRADE assessor.
 
         Args:
@@ -89,9 +88,9 @@ class GRADEAssessor:
         self,
         meta_analysis: MetaAnalysisResult,
         study_design: str = "RCT",
-        rob_summary: Optional[RiskOfBiasSummary] = None,
-        indirectness_concerns: Optional[str] = None,
-        baseline_risk: Optional[float] = None,
+        rob_summary: RiskOfBiasSummary | None = None,
+        indirectness_concerns: str | None = None,
+        baseline_risk: float | None = None,
     ) -> GRADEAssessment:
         """Perform GRADE assessment on meta-analysis results.
 
@@ -154,7 +153,7 @@ class GRADEAssessor:
     def _assess_risk_of_bias(
         self,
         meta_analysis: MetaAnalysisResult,
-        rob_summary: Optional[RiskOfBiasSummary],
+        rob_summary: RiskOfBiasSummary | None,
     ) -> DomainRating:
         """Assess risk of bias domain.
 
@@ -241,7 +240,7 @@ class GRADEAssessor:
                 supporting_data=supporting_data,
             )
 
-    def _assess_indirectness(self, concerns: Optional[str]) -> DomainRating:
+    def _assess_indirectness(self, concerns: str | None) -> DomainRating:
         """Assess indirectness domain.
 
         Reference: Guyatt GH, et al. J Clin Epidemiol 2011;64:1303-1310
@@ -329,7 +328,11 @@ class GRADEAssessor:
                 supporting_data=supporting_data,
             )
         elif crosses_null or below_ois:
-            reason = "CI crosses the null" if crosses_null else f"sample size ({n}) is below optimal information size"
+            reason = (
+                "CI crosses the null"
+                if crosses_null
+                else f"sample size ({n}) is below optimal information size"
+            )
             return DomainRating(
                 domain=GRADEDomain.IMPRECISION,
                 action=RatingAction.DOWNGRADE_1,
@@ -429,7 +432,9 @@ class GRADEAssessor:
         supporting_data["effect_natural_scale"] = effect_natural
 
         # Very large effect: RR > 5 or < 0.2
-        if effect_natural > self.config.very_large_effect_rr or effect_natural < (1 / self.config.very_large_effect_rr):
+        if effect_natural > self.config.very_large_effect_rr or effect_natural < (
+            1 / self.config.very_large_effect_rr
+        ):
             return DomainRating(
                 domain=GRADEDomain.LARGE_EFFECT,
                 action=RatingAction.UPGRADE_2,
@@ -437,7 +442,9 @@ class GRADEAssessor:
                 supporting_data=supporting_data,
             )
         # Large effect: RR > 2 or < 0.5
-        elif effect_natural > self.config.large_effect_rr or effect_natural < (1 / self.config.large_effect_rr):
+        elif effect_natural > self.config.large_effect_rr or effect_natural < (
+            1 / self.config.large_effect_rr
+        ):
             return DomainRating(
                 domain=GRADEDomain.LARGE_EFFECT,
                 action=RatingAction.UPGRADE_1,
@@ -458,9 +465,7 @@ class GRADEAssessor:
 
         # Starting level
         start_level = "HIGH" if assessment.starting_level == 4 else "LOW"
-        parts.append(
-            f"Starting at {start_level} certainty ({assessment.study_design} evidence)."
-        )
+        parts.append(f"Starting at {start_level} certainty ({assessment.study_design} evidence).")
 
         # Downgrades
         downgrades = assessment.get_downgrade_summary()
@@ -483,7 +488,7 @@ class GRADEAssessor:
         self,
         meta_analysis: MetaAnalysisResult,
         assessment: GRADEAssessment,
-        baseline_risk: Optional[float] = None,
+        baseline_risk: float | None = None,
         outcome_description: str = "",
         importance: str = "important",
     ) -> OutcomeData:
@@ -604,9 +609,11 @@ class SummaryOfFindingsTableGenerator:
         footnotes.extend(sof.footnotes)
 
         # Add certainty rating explanations
-        footnotes.extend([
-            "GRADE certainty ratings: HIGH = very confident effect lies close to estimate; MODERATE = moderately confident, true effect likely close; LOW = limited confidence, true effect may be substantially different; VERY LOW = very little confidence.",
-        ])
+        footnotes.extend(
+            [
+                "GRADE certainty ratings: HIGH = very confident effect lies close to estimate; MODERATE = moderately confident, true effect likely close; LOW = limited confidence, true effect may be substantially different; VERY LOW = very little confidence.",
+            ]
+        )
 
         return Table(
             id="sof_table",
@@ -653,7 +660,14 @@ class SummaryOfFindingsTableGenerator:
         # Comments column
         comments = outcome.comments if outcome.comments else ""
 
-        return [outcome_text, participants, relative_effect, absolute_text, certainty_text, comments]
+        return [
+            outcome_text,
+            participants,
+            relative_effect,
+            absolute_text,
+            certainty_text,
+            comments,
+        ]
 
     def _format_absolute_effects(self, outcome: OutcomeData) -> str:
         """Format the anticipated absolute effects column."""
@@ -667,7 +681,9 @@ class SummaryOfFindingsTableGenerator:
             direction = "fewer" if outcome.absolute_effect < 0 else "more"
             abs_val = abs(outcome.absolute_effect)
 
-            intervention_text = f"{outcome.intervention_risk:.0f} per 1000 ({abs_val:.0f} {direction})"
+            intervention_text = (
+                f"{outcome.intervention_risk:.0f} per 1000 ({abs_val:.0f} {direction})"
+            )
 
             if outcome.absolute_effect_ci:
                 ci_lower = abs(outcome.absolute_effect_ci.lower)
@@ -862,7 +878,9 @@ class SummaryOfFindingsTableGenerator:
         parts.append("")
         for outcome in sof.outcomes:
             if outcome.grade_assessment:
-                parts.append(f"**{outcome.outcome_name}:** {outcome.grade_assessment.overall_explanation}")
+                parts.append(
+                    f"**{outcome.outcome_name}:** {outcome.grade_assessment.overall_explanation}"
+                )
         parts.append("")
 
         return "\n".join(parts)
@@ -884,7 +902,9 @@ class SummaryOfFindingsTableGenerator:
         parts = []
 
         # Title
-        parts.append(f"<h2>Summary of Findings: {sof.intervention} compared to {sof.comparison}</h2>")
+        parts.append(
+            f"<h2>Summary of Findings: {sof.intervention} compared to {sof.comparison}</h2>"
+        )
 
         # Patient/population info
         parts.append("<div class='sof-header'>")

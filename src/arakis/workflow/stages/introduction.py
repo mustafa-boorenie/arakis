@@ -69,9 +69,7 @@ class IntroductionStageExecutor(BaseStageExecutor):
                 error="Research question is required for introduction",
             )
 
-        logger.info(
-            f"[introduction] Writing introduction for: {research_question[:50]}..."
-        )
+        logger.info(f"[introduction] Writing introduction for: {research_question[:50]}...")
 
         # Update workflow stage
         await self.update_workflow_stage("introduction")

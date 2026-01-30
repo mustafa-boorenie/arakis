@@ -98,15 +98,11 @@ class DiscussionStageExecutor(BaseStageExecutor):
             sections.append(implications_section)
 
             # 5. Future Research Directions
-            future_research = self._write_future_research(
-                analysis_results, rob_summary
-            )
+            future_research = self._write_future_research(analysis_results, rob_summary)
             sections.append(future_research)
 
             # Combine sections
-            full_content = "\n\n".join([
-                f"### {s['title']}\n\n{s['content']}" for s in sections
-            ])
+            full_content = "\n\n".join([f"### {s['title']}\n\n{s['content']}" for s in sections])
 
             word_count = len(full_content.split())
 
@@ -118,9 +114,7 @@ class DiscussionStageExecutor(BaseStageExecutor):
                 "markdown": f"## Discussion\n\n{full_content}",
             }
 
-            logger.info(
-                f"[discussion] Completed: {word_count} words, {len(sections)} subsections"
-            )
+            logger.info(f"[discussion] Completed: {word_count} words, {len(sections)} subsections")
 
             return StageResult(
                 success=True,
@@ -149,7 +143,9 @@ class DiscussionStageExecutor(BaseStageExecutor):
             is_significant = analysis_results.get("is_significant", False)
             effect_measure = analysis_results.get("effect_measure", "MD")
 
-            sig_text = "statistically significant" if is_significant else "not statistically significant"
+            sig_text = (
+                "statistically significant" if is_significant else "not statistically significant"
+            )
 
             parts.append(
                 f"This systematic review and meta-analysis included {n_studies} studies "
@@ -191,14 +187,13 @@ class DiscussionStageExecutor(BaseStageExecutor):
         }
 
     async def _write_literature_comparison(
-        self, research_question: str, analysis_results: dict,
-        use_rag: bool, literature: list
+        self, research_question: str, analysis_results: dict, use_rag: bool, literature: list
     ) -> dict:
         """Write comparison with existing literature."""
         parts = []
 
         if analysis_results.get("meta_analysis_feasible"):
-            pooled = analysis_results.get("pooled_effect", 0)
+            analysis_results.get("pooled_effect", 0)
             is_significant = analysis_results.get("is_significant", False)
 
             if is_significant:
@@ -212,9 +207,7 @@ class DiscussionStageExecutor(BaseStageExecutor):
                     "inconsistent or null effects. "
                 )
 
-            parts.append(
-                "Several previous systematic reviews have examined similar questions. "
-            )
+            parts.append("Several previous systematic reviews have examined similar questions. ")
 
         else:
             parts.append(
@@ -258,9 +251,7 @@ class DiscussionStageExecutor(BaseStageExecutor):
 
             sensitivity = analysis_results.get("sensitivity_analysis", [])
             if sensitivity:
-                strengths.append(
-                    "Sensitivity analyses demonstrated robustness of findings."
-                )
+                strengths.append("Sensitivity analyses demonstrated robustness of findings.")
 
         # Limitations
         if rob_summary:
@@ -281,8 +272,7 @@ class DiscussionStageExecutor(BaseStageExecutor):
             )
 
         limitations.append(
-            "Publication bias cannot be fully excluded despite our comprehensive "
-            "search strategy."
+            "Publication bias cannot be fully excluded despite our comprehensive search strategy."
         )
 
         limitations.append(
@@ -338,9 +328,7 @@ class DiscussionStageExecutor(BaseStageExecutor):
             "content": " ".join(parts),
         }
 
-    def _write_future_research(
-        self, analysis_results: dict, rob_summary: dict
-    ) -> dict:
+    def _write_future_research(self, analysis_results: dict, rob_summary: dict) -> dict:
         """Write future research directions."""
         recommendations = []
 
@@ -361,13 +349,10 @@ class DiscussionStageExecutor(BaseStageExecutor):
 
         # General recommendations
         recommendations.append(
-            "standardize outcome measurement and reporting to facilitate "
-            "future meta-analyses"
+            "standardize outcome measurement and reporting to facilitate future meta-analyses"
         )
 
-        recommendations.append(
-            "include longer follow-up periods to assess durability of effects"
-        )
+        recommendations.append("include longer follow-up periods to assess durability of effects")
 
         recommendations.append(
             "examine potential effect modifiers and identify patient subgroups "

@@ -237,7 +237,7 @@ def screen(
         status_color = status_colors.get(decision.status.value, "white")
 
         # Print progress line
-        console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+        console.print(f'[dim][SCREEN][/dim] Processing paper {current}/{total}: "{title_display}"')
         console.print(
             f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
             f"(confidence: {decision.confidence:.2f})"
@@ -266,7 +266,12 @@ def screen(
     else:
         decisions = _run_async(
             screener.screen_batch(
-                papers, criteria, dual_review, human_review, display_screening_progress, batch_size=batch_size
+                papers,
+                criteria,
+                dual_review,
+                human_review,
+                display_screening_progress,
+                batch_size=batch_size,
             )
         )
 
@@ -888,7 +893,9 @@ def analyze(
             # Requires: ≥4 studies total, and at least 2 subgroups with ≥2 studies each
             subgroup_results: dict[str, dict[str, Any]] = {}
             if len(studies) >= 4:
-                console.print("\n[bold cyan]Step 4:[/bold cyan] Checking for applicable subgroup analyses...")
+                console.print(
+                    "\n[bold cyan]Step 4:[/bold cyan] Checking for applicable subgroup analyses..."
+                )
 
                 # Build mapping of study_id to StudyData for quick lookup
                 study_by_id = {s.study_id: s for s in studies}
@@ -908,7 +915,9 @@ def analyze(
                     # Need at least 2 subgroups, each with at least 2 studies
                     valid_subgroups = {k: v for k, v in var_values.items() if len(v) >= 2}
                     if len(valid_subgroups) >= 2:
-                        console.print(f"\n  [bold]Subgroup analysis by {var_name.replace('_', ' ').title()}:[/bold]")
+                        console.print(
+                            f"\n  [bold]Subgroup analysis by {var_name.replace('_', ' ').title()}:[/bold]"
+                        )
 
                         try:
                             # Create subgroup function for this variable
@@ -924,7 +933,9 @@ def analyze(
                             )
 
                             # Filter to only valid subgroups (exclude "Unknown")
-                            subgroup_result = {k: v for k, v in subgroup_result.items() if k != "Unknown"}
+                            subgroup_result = {
+                                k: v for k, v in subgroup_result.items() if k != "Unknown"
+                            }
 
                             if len(subgroup_result) >= 2:
                                 # Display subgroup results
@@ -973,13 +984,19 @@ def analyze(
                                 # Store in meta_result for future use
                                 meta_result.subgroup_analyses.append(subgroup_results[var_name])
                             else:
-                                console.print(f"    [dim]Insufficient valid subgroups for {var_name}[/dim]")
+                                console.print(
+                                    f"    [dim]Insufficient valid subgroups for {var_name}[/dim]"
+                                )
 
                         except Exception as e:
-                            console.print(f"    [dim]Subgroup analysis for {var_name} failed: {e}[/dim]")
+                            console.print(
+                                f"    [dim]Subgroup analysis for {var_name} failed: {e}[/dim]"
+                            )
 
                 if not subgroup_results:
-                    console.print("  [dim]No applicable subgroup analyses (need ≥2 subgroups with ≥2 studies each)[/dim]")
+                    console.print(
+                        "  [dim]No applicable subgroup analyses (need ≥2 subgroups with ≥2 studies each)[/dim]"
+                    )
 
             # Save results
             if output:
@@ -1041,7 +1058,9 @@ def analyze(
                             }
                             for s in meta_result.studies
                         ],
-                        "subgroup_analyses": list(subgroup_results.values()) if subgroup_results else [],
+                        "subgroup_analyses": list(subgroup_results.values())
+                        if subgroup_results
+                        else [],
                     },
                 }
 
@@ -1091,13 +1110,15 @@ def analyze(
 
         summary_table.add_row("Studies Included", str(synthesis_result.studies_included))
         summary_table.add_row("Total Sample Size", str(synthesis_result.total_sample_size))
-        summary_table.add_row("Confidence in Evidence", synthesis_result.confidence_in_evidence.title())
+        summary_table.add_row(
+            "Confidence in Evidence", synthesis_result.confidence_in_evidence.title()
+        )
 
         if synthesis_result.vote_count:
             vc = synthesis_result.vote_count
             summary_table.add_row(
                 "Effect Direction",
-                f"{vc.positive} positive, {vc.negative} negative, {vc.null} null, {vc.mixed} mixed"
+                f"{vc.positive} positive, {vc.negative} negative, {vc.null} null, {vc.mixed} mixed",
             )
             summary_table.add_row("Predominant Direction", vc.predominant_direction.title())
             summary_table.add_row("Consistency", vc.consistency.title())
@@ -1170,7 +1191,9 @@ def analyze(
 
         # Effect direction chart
         if synthesis_result.effect_direction_chart_path:
-            console.print(f"\n[dim]Effect direction chart saved to {synthesis_result.effect_direction_chart_path}[/dim]")
+            console.print(
+                f"\n[dim]Effect direction chart saved to {synthesis_result.effect_direction_chart_path}[/dim]"
+            )
 
         # Save results
         if output:
@@ -1433,7 +1456,9 @@ def write_intro(
         False, "--use-rag", help="Use RAG system to retrieve literature context"
     ),
     use_perplexity: bool = typer.Option(
-        True, "--use-web-search/--no-web-search", help="Use OpenAI web search for literature research (default: enabled)"
+        True,
+        "--use-web-search/--no-web-search",
+        help="Use OpenAI web search for literature research (default: enabled)",
     ),
     save_references: bool = typer.Option(
         True, "--save-references/--no-references", help="Save references to separate file"
@@ -1531,11 +1556,15 @@ def write_intro(
     # Validate and display citation status
     validation = writer.validate_citations(intro_section)
     if validation["valid"]:
-        console.print(f"\n[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+        console.print(
+            f"\n[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]"
+        )
     else:
-        console.print(f"\n[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
-        if validation['missing_papers']:
-            for missing in validation['missing_papers'][:5]:
+        console.print(
+            f"\n[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]"
+        )
+        if validation["missing_papers"]:
+            for missing in validation["missing_papers"][:5]:
                 console.print(f"  [yellow]- {missing}[/yellow]")
 
     # Display cited papers
@@ -1543,7 +1572,9 @@ def write_intro(
         console.print(f"\n[bold]References ({len(cited_papers)} papers cited):[/bold]")
         for i, paper in enumerate(cited_papers, 1):
             year_str = f" ({paper.year})" if paper.year else ""
-            console.print(f"  {i}. {paper.title[:70]}{'...' if len(paper.title) > 70 else ''}{year_str}")
+            console.print(
+                f"  {i}. {paper.title[:70]}{'...' if len(paper.title) > 70 else ''}{year_str}"
+            )
 
     # Display preview
     console.print("\n[bold]Preview:[/bold]")
@@ -1560,7 +1591,11 @@ def write_intro(
 
         # Save references to separate file
         if save_references and cited_papers:
-            ref_output = output.replace(".md", "_references.md") if output.endswith(".md") else f"{output}_references.md"
+            ref_output = (
+                output.replace(".md", "_references.md")
+                if output.endswith(".md")
+                else f"{output}_references.md"
+            )
             ref_text = writer.generate_reference_list(intro_section)
             with open(ref_output, "w") as f:
                 f.write("# References\n\n")
@@ -1997,7 +2032,7 @@ def workflow(
         skip_writing = state.skip_writing
         schema = state.schema
 
-        resume_stage = state.get_resume_stage()
+        state.get_resume_stage()
     else:
         # Validate required arguments for new workflow
         if research_question is None:
@@ -2040,8 +2075,6 @@ def workflow(
             schema=schema,
         )
 
-        resume_stage = None
-
         console.print(
             Panel.fit(
                 f"[bold blue]Arakis Systematic Review Workflow[/bold blue]\n\n"
@@ -2080,8 +2113,13 @@ def workflow(
                     self.papers = []
                     for p in papers_data:
                         authors = [
-                            Author(name=a["name"], affiliation=a.get("affiliation"), orcid=a.get("orcid"))
-                            if isinstance(a, dict) else Author(name=str(a))
+                            Author(
+                                name=a["name"],
+                                affiliation=a.get("affiliation"),
+                                orcid=a.get("orcid"),
+                            )
+                            if isinstance(a, dict)
+                            else Author(name=str(a))
                             for a in p.get("authors", [])
                         ]
                         paper = Paper(
@@ -2103,7 +2141,9 @@ def workflow(
 
             stage_data = state_manager.state.get_stage_data(WorkflowStage.SEARCH)
             search_result = CachedSearchResult(cached_papers, stage_data)
-            console.print(f"[green]✓ Loaded {len(search_result.papers)} papers from cache[/green]\n")
+            console.print(
+                f"[green]✓ Loaded {len(search_result.papers)} papers from cache[/green]\n"
+            )
 
             workflow_results["stages"]["search"] = {
                 "papers_found": len(search_result.papers),
@@ -2112,7 +2152,11 @@ def workflow(
             }
         else:
             console.print("[yellow]Cache file missing, re-running search...[/yellow]")
-            state_manager.state.stages[WorkflowStage.SEARCH.value].status = state_manager.state.stages[WorkflowStage.SEARCH.value].status.__class__.PENDING
+            state_manager.state.stages[
+                WorkflowStage.SEARCH.value
+            ].status = state_manager.state.stages[
+                WorkflowStage.SEARCH.value
+            ].status.__class__.PENDING
 
     if search_result is None:
         console.print("\n[bold cyan]Stage 1/8:[/bold cyan] Literature Search")
@@ -2261,7 +2305,9 @@ def workflow(
             status_color = status_colors.get(decision.status.value, "white")
 
             # Print progress line
-            console.print(f"[dim][SCREEN][/dim] Processing paper {current}/{total}: \"{title_display}\"")
+            console.print(
+                f'[dim][SCREEN][/dim] Processing paper {current}/{total}: "{title_display}"'
+            )
             console.print(
                 f"[dim][SCREEN][/dim] Decision: [{status_color}]{decision.status.value}[/{status_color}] "
                 f"(confidence: {decision.confidence:.2f})"
@@ -2272,11 +2318,15 @@ def workflow(
             if decision.matched_inclusion:
                 matched_criteria.extend(decision.matched_inclusion)
             if matched_criteria:
-                console.print(f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}")
+                console.print(
+                    f"[dim][SCREEN][/dim] Matched criteria: {', '.join(matched_criteria)}"
+                )
 
             # Show conflict indicator if dual review had a conflict
             if decision.is_conflict:
-                console.print("[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]")
+                console.print(
+                    "[dim][SCREEN][/dim] [yellow]⚠ Dual-review conflict detected[/yellow]"
+                )
 
             console.print()  # Empty line between papers
 
@@ -2333,9 +2383,13 @@ def workflow(
     fetch_results = None
     if extract_text:
         if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.PDF_FETCH):
-            console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction [dim](cached)[/dim]")
+            console.print(
+                "[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction [dim](cached)[/dim]"
+            )
             stage_data = state_manager.state.get_stage_data(WorkflowStage.PDF_FETCH)
-            console.print(f"[green]✓ Text extracted for {stage_data.get('with_full_text', 0)} papers (from cache)[/green]\n")
+            console.print(
+                f"[green]✓ Text extracted for {stage_data.get('with_full_text', 0)} papers (from cache)[/green]\n"
+            )
             workflow_results["stages"]["fetch"] = stage_data
         else:
             console.print("[bold cyan]Stage 3/8:[/bold cyan] PDF Fetch and Text Extraction")
@@ -2419,7 +2473,9 @@ def workflow(
         if cached_extraction:
             extraction_result = ExtractionResult.from_dict(cached_extraction)
             stage_data = state_manager.state.get_stage_data(WorkflowStage.EXTRACTION)
-            console.print(f"[green]✓ Loaded {extraction_result.successful_extractions} extractions from cache[/green]\n")
+            console.print(
+                f"[green]✓ Loaded {extraction_result.successful_extractions} extractions from cache[/green]\n"
+            )
 
             workflow_results["stages"]["extraction"] = {
                 "total_papers": extraction_result.total_papers,
@@ -2490,7 +2546,9 @@ def workflow(
         with open(extraction_file, "w") as f:
             json.dump(extraction_result.to_dict(), f, indent=2, default=str)
 
-        console.print(f"[green]✓ Extracted {extraction_result.successful_extractions} papers[/green]")
+        console.print(
+            f"[green]✓ Extracted {extraction_result.successful_extractions} papers[/green]"
+        )
         console.print(
             f"[dim]Quality: {extraction_result.average_quality:.2f}, Cost: ${extraction_result.estimated_cost:.2f}[/dim]"
         )
@@ -2517,7 +2575,9 @@ def workflow(
     analysis_file = output_path / "4_analysis_results.json"
     if not skip_analysis:
         if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.ANALYSIS):
-            console.print("[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis [dim](cached)[/dim]")
+            console.print(
+                "[bold cyan]Stage 5/8:[/bold cyan] Statistical Analysis [dim](cached)[/dim]"
+            )
             stage_data = state_manager.state.get_stage_data(WorkflowStage.ANALYSIS)
             console.print("[green]✓ Analysis loaded from cache[/green]\n")
             workflow_results["stages"]["analysis"] = stage_data
@@ -2572,7 +2632,9 @@ def workflow(
 
                 if has_continuous or has_binary:
                     effect_measure = (
-                        EffectMeasure.MEAN_DIFFERENCE if has_continuous else EffectMeasure.ODDS_RATIO
+                        EffectMeasure.MEAN_DIFFERENCE
+                        if has_continuous
+                        else EffectMeasure.ODDS_RATIO
                     )
                     meta_engine = MetaAnalysisEngine()
 
@@ -2689,10 +2751,16 @@ def workflow(
     # Stage 7: Writing Introduction
     intro_file = output_path / "6_introduction.md"
     if not skip_writing:
-        if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.INTRODUCTION):
-            console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Introduction [dim](cached)[/dim]")
+        if state_manager.state and state_manager.state.is_stage_completed(
+            WorkflowStage.INTRODUCTION
+        ):
+            console.print(
+                "[bold cyan]Stage 7/8:[/bold cyan] Writing Introduction [dim](cached)[/dim]"
+            )
             stage_data = state_manager.state.get_stage_data(WorkflowStage.INTRODUCTION)
-            console.print(f"[green]✓ Introduction loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+            console.print(
+                f"[green]✓ Introduction loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n"
+            )
             workflow_results["stages"]["introduction"] = stage_data
         else:
             console.print("[bold cyan]Stage 7/8:[/bold cyan] Writing Introduction")
@@ -2742,16 +2810,26 @@ def workflow(
 
                 # Report citation validation status
                 if validation["valid"]:
-                    console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]")
-                    console.print(f"[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]")
+                    console.print(
+                        f"[green]✓ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/green]"
+                    )
+                    console.print(
+                        f"[green]✓ Citation validation: All {validation['unique_citation_count']} citations verified[/green]"
+                    )
                 else:
-                    console.print(f"[yellow]⚠ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/yellow]")
-                    console.print(f"[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]")
+                    console.print(
+                        f"[yellow]⚠ Introduction: {intro_section.total_word_count} words, {len(cited_papers)} references[/yellow]"
+                    )
+                    console.print(
+                        f"[yellow]⚠ Citation validation: {len(validation['missing_papers'])} missing references[/yellow]"
+                    )
 
                 console.print(f"[dim]Saved to {intro_file}[/dim]")
                 console.print(f"[dim]References saved to {ref_file}[/dim]\n")
             else:
-                console.print(f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]")
+                console.print(
+                    f"[green]✓ Introduction: {intro_section.total_word_count} words[/green]"
+                )
                 console.print(f"[dim]Saved to {intro_file}[/dim]\n")
 
             workflow_results["stages"]["introduction"] = {
@@ -2774,7 +2852,9 @@ def workflow(
         if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.RESULTS):
             console.print("[bold cyan]Stage 8/8:[/bold cyan] Writing Results [dim](cached)[/dim]")
             stage_data = state_manager.state.get_stage_data(WorkflowStage.RESULTS)
-            console.print(f"[green]✓ Results loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+            console.print(
+                f"[green]✓ Results loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n"
+            )
             workflow_results["stages"]["results"] = stage_data
         else:
             console.print("[bold cyan]Stage 8/8:[/bold cyan] Writing Results")
@@ -2829,7 +2909,9 @@ def workflow(
     if state_manager.state and state_manager.state.is_stage_completed(WorkflowStage.MANUSCRIPT):
         console.print("[bold cyan]Stage 9/9:[/bold cyan] Manuscript Assembly [dim](cached)[/dim]")
         stage_data = state_manager.state.get_stage_data(WorkflowStage.MANUSCRIPT)
-        console.print(f"[green]✓ Manuscript loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n")
+        console.print(
+            f"[green]✓ Manuscript loaded from cache ({stage_data.get('word_count', 0)} words)[/green]\n"
+        )
         workflow_results["stages"]["manuscript"] = stage_data
     else:
         console.print("[bold cyan]Stage 9/9:[/bold cyan] Manuscript Assembly")
@@ -2853,11 +2935,15 @@ def workflow(
             extraction_results=extraction_data,
             included_papers=reference_papers,
             prisma_flow=flow if flow else None,
-            keywords=[c.strip() for c in include.split(",")][:5],  # Use inclusion criteria as keywords
+            keywords=[c.strip() for c in include.split(",")][
+                :5
+            ],  # Use inclusion criteria as keywords
         )
 
         console.print(f"[green]✓ Manuscript assembled: {manuscript.word_count} words[/green]")
-        console.print(f"[green]  Tables: {len(manuscript.tables)}, Figures: {len(manuscript.figures)}[/green]")
+        console.print(
+            f"[green]  Tables: {len(manuscript.tables)}, Figures: {len(manuscript.figures)}[/green]"
+        )
         console.print(f"[green]  References: {len(manuscript.references)}[/green]")
         console.print(f"[dim]Saved to {manuscript_path}[/dim]\n")
 

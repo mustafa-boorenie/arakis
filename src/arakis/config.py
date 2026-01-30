@@ -61,7 +61,9 @@ class Settings(BaseSettings):
     # Batch processing configuration
     # Controls how many items are processed concurrently to balance speed vs rate limits
     batch_size_screening: int = 5  # Papers to screen concurrently (dual-review = 2x API calls each)
-    batch_size_extraction: int = 3  # Papers to extract concurrently (triple-review = 3x API calls each)
+    batch_size_extraction: int = (
+        3  # Papers to extract concurrently (triple-review = 3x API calls each)
+    )
     batch_size_fetch: int = 10  # Papers to fetch concurrently (HTTP requests, not LLM)
     batch_size_embedding: int = 100  # Texts to embed per API call (OpenAI supports up to 2048)
 
@@ -156,22 +158,24 @@ def get_settings() -> Settings:
 # Cost Mode Configuration
 # =============================================================================
 
+
 class CostMode(str, Enum):
     """Cost/quality optimization modes.
-    
+
     All modes use full text for screening and extraction.
     Cost savings come from cheaper models and fewer review passes.
     """
-    QUALITY = "QUALITY"       # Maximum accuracy - gpt-5-mini dual/triple + gpt-5.2-max reasoning
-    BALANCED = "BALANCED"     # Good quality at reasonable cost - gpt-5-nano single + o3-mini (DEFAULT)
-    FAST = "FAST"             # Speed focused - gpt-5-nano single, skips RoB/Analysis
-    ECONOMY = "ECONOMY"       # Minimum cost - gpt-5-nano single, minimal prompts, skips RoB/Analysis
+
+    QUALITY = "QUALITY"  # Maximum accuracy - gpt-5-mini dual/triple + gpt-5.2-max reasoning
+    BALANCED = "BALANCED"  # Good quality at reasonable cost - gpt-5-nano single + o3-mini (DEFAULT)
+    FAST = "FAST"  # Speed focused - gpt-5-nano single, skips RoB/Analysis
+    ECONOMY = "ECONOMY"  # Minimum cost - gpt-5-nano single, minimal prompts, skips RoB/Analysis
 
 
 @dataclass(frozen=True)
 class ModeConfig:
     """Configuration for a specific cost mode.
-    
+
     Attributes:
         name: Mode name for display
         description: Human-readable description
@@ -186,6 +190,7 @@ class ModeConfig:
         skip_analysis: Skip meta-analysis stage
         minimal_writing: Use minimal prompts for writing
     """
+
     name: str
     description: str
     screening_model: str
@@ -217,7 +222,6 @@ MODE_CONFIGS: dict[CostMode, ModeConfig] = {
         skip_analysis=False,
         minimal_writing=False,
     ),
-    
     CostMode.BALANCED: ModeConfig(
         name="Balanced",
         description="Good quality at reasonable cost. Recommended for most systematic reviews.",
@@ -232,7 +236,6 @@ MODE_CONFIGS: dict[CostMode, ModeConfig] = {
         skip_analysis=False,
         minimal_writing=False,
     ),
-    
     CostMode.FAST: ModeConfig(
         name="Fast",
         description="Speed focused. Skips RoB and Analysis stages for faster results.",
@@ -247,7 +250,6 @@ MODE_CONFIGS: dict[CostMode, ModeConfig] = {
         skip_analysis=True,  # Skip meta-analysis
         minimal_writing=False,
     ),
-    
     CostMode.ECONOMY: ModeConfig(
         name="Economy",
         description="Minimum cost for proof of concept or very large reviews. Skips non-essential stages.",
@@ -267,13 +269,13 @@ MODE_CONFIGS: dict[CostMode, ModeConfig] = {
 
 def get_mode_config(mode: CostMode | str) -> ModeConfig:
     """Get configuration for a cost mode.
-    
+
     Args:
         mode: Cost mode enum or string name
-        
+
     Returns:
         ModeConfig for the specified mode
-        
+
     Raises:
         ValueError: If mode is not recognized
     """
@@ -283,13 +285,13 @@ def get_mode_config(mode: CostMode | str) -> ModeConfig:
         except ValueError:
             valid_modes = [m.value for m in CostMode]
             raise ValueError(f"Invalid cost mode: {mode}. Valid modes: {valid_modes}")
-    
+
     return MODE_CONFIGS[mode]
 
 
 def get_default_mode() -> CostMode:
     """Get the default cost mode.
-    
+
     Returns:
         Default cost mode (BALANCED)
     """
@@ -298,7 +300,7 @@ def get_default_mode() -> CostMode:
 
 def get_default_mode_config() -> ModeConfig:
     """Get configuration for the default cost mode.
-    
+
     Returns:
         ModeConfig for BALANCED mode
     """
@@ -307,7 +309,7 @@ def get_default_mode_config() -> ModeConfig:
 
 def list_modes() -> list[dict[str, str]]:
     """List all available modes with descriptions.
-    
+
     Returns:
         List of mode info dictionaries
     """
@@ -323,13 +325,13 @@ def list_modes() -> list[dict[str, str]]:
 
 def validate_mode(mode: str) -> CostMode:
     """Validate and normalize a cost mode string.
-    
+
     Args:
         mode: Mode string to validate
-        
+
     Returns:
         Normalized CostMode enum
-        
+
     Raises:
         ValueError: If mode is invalid
     """

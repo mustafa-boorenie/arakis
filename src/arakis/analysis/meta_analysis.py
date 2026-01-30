@@ -96,7 +96,9 @@ class MetaAnalysisEngine:
             description="Calculate individual study effect estimates and standard errors",
             formula="Effect and SE calculated from raw data using effect measure formulas",
             inputs={"n_studies": len(studies), "effect_measure": effect_measure.value},
-            output=[{"study": s.study_id, "effect": s.effect, "se": s.standard_error} for s in studies],
+            output=[
+                {"study": s.study_id, "effect": s.effect, "se": s.standard_error} for s in studies
+            ],
             output_name="study_effects",
         )
 
@@ -129,7 +131,10 @@ class MetaAnalysisEngine:
                     step_name="pooling_method",
                     description=f"Random effects selected (I² = {heterogeneity.i_squared:.1f}% > {self.precision.I_SQUARED_MODERATE}%)",
                     formula="w_i = 1/(SE_i² + τ²); θ̂ = Σw_i·θ_i / Σw_i",
-                    inputs={"i_squared": heterogeneity.i_squared, "threshold": self.precision.I_SQUARED_MODERATE},
+                    inputs={
+                        "i_squared": heterogeneity.i_squared,
+                        "threshold": self.precision.I_SQUARED_MODERATE,
+                    },
                     output={"method": "random_effects"},
                     output_name="method_selection",
                 )
@@ -141,7 +146,10 @@ class MetaAnalysisEngine:
                     step_name="pooling_method",
                     description=f"Fixed effects used (I² = {heterogeneity.i_squared:.1f}% ≤ {self.precision.I_SQUARED_MODERATE}%)",
                     formula="w_i = 1/SE_i²; θ̂ = Σw_i·θ_i / Σw_i",
-                    inputs={"i_squared": heterogeneity.i_squared, "threshold": self.precision.I_SQUARED_MODERATE},
+                    inputs={
+                        "i_squared": heterogeneity.i_squared,
+                        "threshold": self.precision.I_SQUARED_MODERATE,
+                    },
                     output={"method": "fixed_effects"},
                     output_name="method_selection",
                 )

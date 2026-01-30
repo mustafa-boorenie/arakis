@@ -92,9 +92,7 @@ class Workflow(Base):
     figures = relationship(
         "WorkflowFigure", back_populates="workflow", cascade="all, delete-orphan"
     )
-    tables = relationship(
-        "WorkflowTable", back_populates="workflow", cascade="all, delete-orphan"
-    )
+    tables = relationship("WorkflowTable", back_populates="workflow", cascade="all, delete-orphan")
 
 
 class Paper(Base):
@@ -311,9 +309,7 @@ class WorkflowStageCheckpoint(Base):
     __tablename__ = "workflow_stage_checkpoints"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(
-        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
-    )
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     stage = Column(String(50), nullable=False)  # search, screen, pdf_fetch, etc.
     status = Column(
         String(20), default="pending", nullable=False
@@ -343,9 +339,7 @@ class WorkflowStageCheckpoint(Base):
     workflow = relationship("Workflow", back_populates="stage_checkpoints")
 
     # Unique constraint on workflow_id + stage
-    __table_args__ = (
-        {"sqlite_autoincrement": True},
-    )
+    __table_args__ = ({"sqlite_autoincrement": True},)
 
 
 class WorkflowFigure(Base):
@@ -354,9 +348,7 @@ class WorkflowFigure(Base):
     __tablename__ = "workflow_figures"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(
-        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
-    )
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     figure_type = Column(
         String(50), nullable=False
     )  # forest_plot, funnel_plot, prisma, rob_summary, rob_traffic_light
@@ -383,9 +375,7 @@ class WorkflowTable(Base):
     __tablename__ = "workflow_tables"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(
-        String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False
-    )
+    workflow_id = Column(String(36), ForeignKey("workflows.id", ondelete="CASCADE"), nullable=False)
     table_type = Column(
         String(50), nullable=False
     )  # study_characteristics, risk_of_bias, grade_sof

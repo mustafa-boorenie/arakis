@@ -63,9 +63,7 @@ class TablesStageExecutor(BaseStageExecutor):
             tables_generated = []
 
             # Table 1: Study Characteristics
-            characteristics_table = self._generate_characteristics_table(
-                extractions, schema_used
-            )
+            characteristics_table = self._generate_characteristics_table(extractions, schema_used)
             await self.save_table(
                 table_type="study_characteristics",
                 headers=characteristics_table["headers"],
@@ -91,9 +89,7 @@ class TablesStageExecutor(BaseStageExecutor):
 
             # Table 3: GRADE Summary of Findings
             if analysis_results and analysis_results.get("meta_analysis_feasible"):
-                grade_table = self._generate_grade_table(
-                    analysis_results, rob_summary, extractions
-                )
+                grade_table = self._generate_grade_table(analysis_results, rob_summary, extractions)
                 await self.save_table(
                     table_type="grade_sof",
                     headers=grade_table["headers"],
@@ -130,9 +126,7 @@ class TablesStageExecutor(BaseStageExecutor):
                 error=str(e),
             )
 
-    def _generate_characteristics_table(
-        self, extractions: list[dict], schema_used: str
-    ) -> dict:
+    def _generate_characteristics_table(self, extractions: list[dict], schema_used: str) -> dict:
         """Generate study characteristics table."""
         # Define headers based on schema
         if schema_used == "rct":
@@ -203,7 +197,9 @@ class TablesStageExecutor(BaseStageExecutor):
 
     def _extract_row_data(self, data: dict, schema_used: str, paper_id: str) -> list:
         """Extract row data based on schema."""
-        study_name = data.get("first_author", paper_id.split("_")[0] if "_" in paper_id else paper_id)
+        study_name = data.get(
+            "first_author", paper_id.split("_")[0] if "_" in paper_id else paper_id
+        )
         year = str(data.get("publication_year", "NR"))
         country = data.get("country", "NR")
         design = data.get("study_design", "NR")
@@ -230,7 +226,9 @@ class TablesStageExecutor(BaseStageExecutor):
             return [study_name, year, country, n, index_test, reference, target]
 
         else:
-            intervention = data.get("intervention_description", data.get("exposure_description", "NR"))
+            intervention = data.get(
+                "intervention_description", data.get("exposure_description", "NR")
+            )
             comparator = data.get("control_description", data.get("comparator_description", "NR"))
             outcomes = data.get("primary_outcome", "NR")
             return [study_name, year, country, design, n, intervention, comparator, outcomes]
@@ -352,14 +350,16 @@ class TablesStageExecutor(BaseStageExecutor):
             else:
                 comments.append("Not statistically significant")
 
-            rows.append([
-                "Primary outcome",
-                str(n_studies),
-                str(n_participants),
-                effect_str,
-                certainty,
-                "; ".join(comments) if comments else "-",
-            ])
+            rows.append(
+                [
+                    "Primary outcome",
+                    str(n_studies),
+                    str(n_participants),
+                    effect_str,
+                    certainty,
+                    "; ".join(comments) if comments else "-",
+                ]
+            )
 
         return {
             "headers": headers,

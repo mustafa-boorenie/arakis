@@ -34,21 +34,15 @@ class AuthService:
 
         # Try to find by provider ID
         if user_info.provider == "google":
-            result = await self.db.execute(
-                select(User).where(User.google_id == user_info.id)
-            )
+            result = await self.db.execute(select(User).where(User.google_id == user_info.id))
             user = result.scalar_one_or_none()
         elif user_info.provider == "apple":
-            result = await self.db.execute(
-                select(User).where(User.apple_id == user_info.id)
-            )
+            result = await self.db.execute(select(User).where(User.apple_id == user_info.id))
             user = result.scalar_one_or_none()
 
         # If not found by provider ID, try email
         if user is None:
-            result = await self.db.execute(
-                select(User).where(User.email == user_info.email)
-            )
+            result = await self.db.execute(select(User).where(User.email == user_info.email))
             user = result.scalar_one_or_none()
 
             if user:
@@ -115,7 +109,8 @@ class AuthService:
             user_id=user.id,
             token_hash=token_hash,
             device_info=device_info,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days),
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=self.settings.refresh_token_expire_days),
         )
         self.db.add(db_refresh_token)
         await self.db.commit()

@@ -34,8 +34,10 @@ class ExtractStageExecutor(BaseStageExecutor):
     def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
         super().__init__(workflow_id, db, mode_config)
         self.extractor = DataExtractionAgent(mode_config=self.mode_config)
-        logger.info(f"[extract] Using model: {self.mode_config.extraction_model}, "
-                   f"triple_review: {self.mode_config.extraction_triple_review}")
+        logger.info(
+            f"[extract] Using model: {self.mode_config.extraction_model}, "
+            f"triple_review: {self.mode_config.extraction_triple_review}"
+        )
 
     def get_required_stages(self) -> list[str]:
         """Extract requires search, screen, and pdf_fetch."""
@@ -65,8 +67,10 @@ class ExtractStageExecutor(BaseStageExecutor):
 
         # Filter to papers with data (either full text or abstract)
         papers_with_text = [p for p in papers_data if p.get("has_full_text") or p.get("abstract")]
-        papers_without_text = [p for p in papers_data if not (p.get("has_full_text") or p.get("abstract"))]
-        
+        papers_without_text = [
+            p for p in papers_data if not (p.get("has_full_text") or p.get("abstract"))
+        ]
+
         if papers_without_text:
             logger.warning(
                 f"[extract] {len(papers_without_text)} papers have no text and will be skipped: "
@@ -85,8 +89,7 @@ class ExtractStageExecutor(BaseStageExecutor):
             detected_schema, confidence = detect_schema(detection_text)
             schema_name = detected_schema
             logger.info(
-                f"[extract] Auto-detected schema: {schema_name} "
-                f"(confidence: {confidence:.0%})"
+                f"[extract] Auto-detected schema: {schema_name} (confidence: {confidence:.0%})"
             )
 
         try:

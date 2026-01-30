@@ -97,15 +97,11 @@ class ResultsStageExecutor(BaseStageExecutor):
                 sections.append(synthesis_results)
             elif analysis_results:
                 # Narrative synthesis if meta-analysis not feasible
-                narrative = self._write_narrative_synthesis(
-                    analysis_results, extractions
-                )
+                narrative = self._write_narrative_synthesis(analysis_results, extractions)
                 sections.append(narrative)
 
             # Combine sections
-            full_content = "\n\n".join([
-                f"### {s['title']}\n\n{s['content']}" for s in sections
-            ])
+            full_content = "\n\n".join([f"### {s['title']}\n\n{s['content']}" for s in sections])
 
             word_count = len(full_content.split())
 
@@ -127,9 +123,7 @@ class ResultsStageExecutor(BaseStageExecutor):
             if prisma_flow.get("prisma_url"):
                 output_data["figures_referenced"].append("prisma_flow")
 
-            logger.info(
-                f"[results] Completed: {word_count} words, {len(sections)} subsections"
-            )
+            logger.info(f"[results] Completed: {word_count} words, {len(sections)} subsections")
 
             return StageResult(
                 success=True,
@@ -149,13 +143,17 @@ class ResultsStageExecutor(BaseStageExecutor):
     ) -> dict:
         """Write study selection section."""
         # Get PRISMA numbers
-        identified = prisma_flow.get("flow_data", {}).get(
-            "identification", {}
-        ).get("records_identified", search_results.get("total_found", 0))
+        identified = (
+            prisma_flow.get("flow_data", {})
+            .get("identification", {})
+            .get("records_identified", search_results.get("total_found", 0))
+        )
 
-        duplicates = prisma_flow.get("flow_data", {}).get(
-            "identification", {}
-        ).get("duplicates_removed", search_results.get("duplicates_removed", 0))
+        duplicates = (
+            prisma_flow.get("flow_data", {})
+            .get("identification", {})
+            .get("duplicates_removed", search_results.get("duplicates_removed", 0))
+        )
 
         screened = screening_summary.get("total_screened", 0)
         excluded_screening = screening_summary.get("excluded", 0)
@@ -230,9 +228,7 @@ class ResultsStageExecutor(BaseStageExecutor):
             design_list = ", ".join(sorted(designs))
             parts.append(f"Study designs included: {design_list}.")
 
-        parts.append(
-            "Detailed characteristics of included studies are presented in Table 1."
-        )
+        parts.append("Detailed characteristics of included studies are presented in Table 1.")
 
         return {
             "title": "Study Characteristics",
@@ -267,9 +263,7 @@ class ResultsStageExecutor(BaseStageExecutor):
 
             if domain_issues:
                 worst_domain = max(domain_issues, key=domain_issues.get)
-                content += (
-                    f"The most common source of bias was in the {worst_domain} domain. "
-                )
+                content += f"The most common source of bias was in the {worst_domain} domain. "
 
         content += "The full risk of bias assessment is presented in Table 2."
 
@@ -280,7 +274,7 @@ class ResultsStageExecutor(BaseStageExecutor):
 
     def _write_individual_results(self, extractions: list[dict]) -> dict:
         """Write results of individual studies section."""
-        n_studies = len(extractions)
+        len(extractions)
 
         # Summarize individual study findings
         content = (
@@ -319,7 +313,9 @@ class ResultsStageExecutor(BaseStageExecutor):
             effect_str = f"{effect_measure} = {pooled:.2f} (95% CI: {ci_lower:.2f}–{ci_upper:.2f})"
 
         # Statistical significance
-        sig_text = "statistically significant" if is_significant else "not statistically significant"
+        sig_text = (
+            "statistically significant" if is_significant else "not statistically significant"
+        )
 
         content = (
             f"Meta-analysis of {n_studies} studies (n = {n_participants:,} participants) "
@@ -366,9 +362,7 @@ class ResultsStageExecutor(BaseStageExecutor):
             "content": content,
         }
 
-    def _write_narrative_synthesis(
-        self, analysis_results: dict, extractions: list[dict]
-    ) -> dict:
+    def _write_narrative_synthesis(self, analysis_results: dict, extractions: list[dict]) -> dict:
         """Write narrative synthesis when meta-analysis not feasible."""
         reason = analysis_results.get("reason", "insufficient data")
 

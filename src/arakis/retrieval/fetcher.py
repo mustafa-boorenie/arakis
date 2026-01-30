@@ -282,9 +282,7 @@ class PaperFetcher:
             return await self.fetch(paper, download, extract_text)
 
         # Wrap the progress callback to match expected signature
-        def wrapped_callback(
-            current: int, total: int, paper: Paper, result: FetchResult
-        ) -> None:
+        def wrapped_callback(current: int, total: int, paper: Paper, result: FetchResult) -> None:
             if progress_callback:
                 progress_callback(current, total, paper)
 

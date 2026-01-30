@@ -225,6 +225,7 @@ class MetaAnalysisResult:
 
         if is_log_scale:
             import math
+
             effect_display = math.exp(self.pooled_effect)
             ci_lower_display = math.exp(self.confidence_interval.lower)
             ci_upper_display = math.exp(self.confidence_interval.upper)

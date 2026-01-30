@@ -69,8 +69,12 @@ class StageCheckpoint:
         return cls(
             stage=WorkflowStage(data["stage"]),
             status=StageStatus(data["status"]),
-            started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
-            completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+            started_at=datetime.fromisoformat(data["started_at"])
+            if data.get("started_at")
+            else None,
+            completed_at=datetime.fromisoformat(data["completed_at"])
+            if data.get("completed_at")
+            else None,
             output_file=data.get("output_file"),
             data=data.get("data", {}),
             error=data.get("error"),
@@ -232,7 +236,8 @@ class WorkflowState:
         """Calculate completion percentage."""
         total_stages = len(self.stages)
         completed = sum(
-            1 for s in self.stages.values()
+            1
+            for s in self.stages.values()
             if s.status in (StageStatus.COMPLETED, StageStatus.SKIPPED)
         )
         return (completed / total_stages) * 100 if total_stages > 0 else 0
@@ -287,9 +292,15 @@ class WorkflowState:
             skip_writing=config.get("skip_writing", False),
             schema=config.get("schema", "auto"),
             current_stage=WorkflowStage(data["current_stage"]),
-            started_at=datetime.fromisoformat(timing["started_at"]) if timing.get("started_at") else _utc_now(),
-            updated_at=datetime.fromisoformat(timing["updated_at"]) if timing.get("updated_at") else _utc_now(),
-            completed_at=datetime.fromisoformat(timing["completed_at"]) if timing.get("completed_at") else None,
+            started_at=datetime.fromisoformat(timing["started_at"])
+            if timing.get("started_at")
+            else _utc_now(),
+            updated_at=datetime.fromisoformat(timing["updated_at"])
+            if timing.get("updated_at")
+            else _utc_now(),
+            completed_at=datetime.fromisoformat(timing["completed_at"])
+            if timing.get("completed_at")
+            else None,
             total_cost=data.get("total_cost", 0.0),
             version=data.get("version", "1.0"),
         )

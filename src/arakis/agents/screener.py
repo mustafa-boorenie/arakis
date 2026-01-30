@@ -64,7 +64,7 @@ class ScreeningAgent:
     LLM-powered agent for screening papers against criteria.
 
     Supports cost mode configuration for quality/cost trade-offs.
-    
+
     QUALITY mode: Dual reviewer (2 passes, gpt-5-mini)
     BALANCED/FAST/ECONOMY modes: Single reviewer (1 pass, gpt-5-nano)
 
@@ -77,24 +77,26 @@ class ScreeningAgent:
 
     def __init__(self, mode_config: ModeConfig | None = None):
         """Initialize screening agent.
-        
+
         Args:
             mode_config: Cost mode configuration. If None, uses default (BALANCED).
         """
         self.settings = get_settings()
         self.client = AsyncOpenAI(api_key=self.settings.openai_api_key)
-        
+
         # Use mode config if provided, otherwise default
         self.mode_config = mode_config or get_default_mode_config()
         self.model = self.mode_config.screening_model
         self.dual_review = self.mode_config.screening_dual_review
-        
-        _logger.info(f"[screener] Initialized with mode: {self.mode_config.name}, "
-                    f"model: {self.model}, dual_review: {self.dual_review}")
+
+        _logger.info(
+            f"[screener] Initialized with mode: {self.mode_config.name}, "
+            f"model: {self.model}, dual_review: {self.dual_review}"
+        )
 
     def _supports_temperature(self) -> bool:
         """Check if current model supports temperature parameter.
-        
+
         o-series and gpt-5 models don't support temperature.
         """
         non_temp_models = ["o1", "o3", "o3-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
@@ -124,11 +126,11 @@ class ScreeningAgent:
             "model": self.model,
             "messages": messages,
         }
-        
+
         # Only add temperature for models that support it
         if self._supports_temperature():
             kwargs["temperature"] = temperature
-        
+
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice

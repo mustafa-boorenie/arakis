@@ -119,10 +119,8 @@ class WorkflowOrchestrator:
         # Load workflow to get cost_mode
         workflow = await self._get_workflow(workflow_id)
         mode_config = get_mode_config(workflow.cost_mode)
-        
-        logger.info(
-            f"[orchestrator] Workflow {workflow_id} using cost mode: {mode_config.name}"
-        )
+
+        logger.info(f"[orchestrator] Workflow {workflow_id} using cost mode: {mode_config.name}")
 
         # Determine starting index
         start_index = 0
@@ -183,7 +181,9 @@ class WorkflowOrchestrator:
                         "failed_stage": stage,
                         "error": result.error,
                         "action_required": result.action_required,
-                        "completed_stages": self.STAGE_ORDER[start_index:self.STAGE_ORDER.index(stage)],
+                        "completed_stages": self.STAGE_ORDER[
+                            start_index : self.STAGE_ORDER.index(stage)
+                        ],
                     }
                 else:
                     # Hard failure
@@ -245,8 +245,7 @@ class WorkflowOrchestrator:
                 checkpoint = await self._get_checkpoint(workflow_id, req_stage)
                 if not checkpoint or checkpoint.status not in ("completed", "skipped"):
                     raise ValueError(
-                        f"Cannot re-run {stage}: required stage {req_stage} "
-                        f"is not completed"
+                        f"Cannot re-run {stage}: required stage {req_stage} is not completed"
                     )
 
         # Load input data from previous stages
@@ -293,9 +292,7 @@ class WorkflowOrchestrator:
             "databases": workflow.databases or ["pubmed"],
         }
 
-        return await self.execute_workflow(
-            workflow_id, initial_data, start_from=last_stage
-        )
+        return await self.execute_workflow(workflow_id, initial_data, start_from=last_stage)
 
     async def get_stage_status(self, workflow_id: str) -> list[dict]:
         """Get status of all stages for a workflow.
@@ -312,25 +309,33 @@ class WorkflowOrchestrator:
             checkpoint = await self._get_checkpoint(workflow_id, stage)
 
             if checkpoint:
-                stages.append({
-                    "stage": stage,
-                    "status": checkpoint.status,
-                    "started_at": checkpoint.started_at.isoformat() if checkpoint.started_at else None,
-                    "completed_at": checkpoint.completed_at.isoformat() if checkpoint.completed_at else None,
-                    "retry_count": checkpoint.retry_count,
-                    "error_message": checkpoint.error_message,
-                    "cost": checkpoint.cost,
-                })
+                stages.append(
+                    {
+                        "stage": stage,
+                        "status": checkpoint.status,
+                        "started_at": checkpoint.started_at.isoformat()
+                        if checkpoint.started_at
+                        else None,
+                        "completed_at": checkpoint.completed_at.isoformat()
+                        if checkpoint.completed_at
+                        else None,
+                        "retry_count": checkpoint.retry_count,
+                        "error_message": checkpoint.error_message,
+                        "cost": checkpoint.cost,
+                    }
+                )
             else:
-                stages.append({
-                    "stage": stage,
-                    "status": "pending",
-                    "started_at": None,
-                    "completed_at": None,
-                    "retry_count": 0,
-                    "error_message": None,
-                    "cost": 0.0,
-                })
+                stages.append(
+                    {
+                        "stage": stage,
+                        "status": "pending",
+                        "started_at": None,
+                        "completed_at": None,
+                        "retry_count": 0,
+                        "error_message": None,
+                        "cost": 0.0,
+                    }
+                )
 
         return stages
 
@@ -338,12 +343,12 @@ class WorkflowOrchestrator:
         self, workflow_id: str, stage: str, mode_config: ModeConfig
     ) -> BaseStageExecutor:
         """Get the executor for a stage.
-        
+
         Args:
             workflow_id: The workflow ID
             stage: Stage name
             mode_config: Cost mode configuration
-            
+
         Returns:
             Stage executor instance
         """
@@ -354,9 +359,7 @@ class WorkflowOrchestrator:
 
     async def _get_workflow(self, workflow_id: str) -> Workflow:
         """Get workflow from database."""
-        result = await self.db.execute(
-            select(Workflow).where(Workflow.id == workflow_id)
-        )
+        result = await self.db.execute(select(Workflow).where(Workflow.id == workflow_id))
         workflow = result.scalar_one_or_none()
         if not workflow:
             raise ValueError(f"Workflow not found: {workflow_id}")
@@ -374,9 +377,7 @@ class WorkflowOrchestrator:
         )
         return result.scalar_one_or_none()
 
-    async def _save_checkpoint(
-        self, workflow_id: str, stage: str, result: StageResult
-    ) -> None:
+    async def _save_checkpoint(self, workflow_id: str, stage: str, result: StageResult) -> None:
         """Save or update a stage checkpoint."""
         checkpoint = await self._get_checkpoint(workflow_id, stage)
 
@@ -403,9 +404,7 @@ class WorkflowOrchestrator:
 
         await self.db.commit()
 
-    async def _mark_stage_status(
-        self, workflow_id: str, stage: str, status: str
-    ) -> None:
+    async def _mark_stage_status(self, workflow_id: str, stage: str, status: str) -> None:
         """Mark a stage with a specific status."""
         checkpoint = await self._get_checkpoint(workflow_id, stage)
 
@@ -424,9 +423,7 @@ class WorkflowOrchestrator:
 
         await self.db.commit()
 
-    async def _load_checkpoint_data(
-        self, workflow_id: str, up_to_index: int
-    ) -> dict[str, Any]:
+    async def _load_checkpoint_data(self, workflow_id: str, up_to_index: int) -> dict[str, Any]:
         """Load accumulated data from completed checkpoints."""
         accumulated = {}
 
@@ -464,9 +461,7 @@ class WorkflowOrchestrator:
         workflow.total_cost = current_cost + cost
         await self.db.commit()
 
-    async def _set_needs_user_action(
-        self, workflow_id: str, action_required: str
-    ) -> None:
+    async def _set_needs_user_action(self, workflow_id: str, action_required: str) -> None:
         """Set workflow as needing user action."""
         workflow = await self._get_workflow(workflow_id)
         workflow.status = "needs_review"

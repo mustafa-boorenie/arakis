@@ -38,12 +38,14 @@ class AppleOAuthProvider(BaseOAuthProvider):
         Returns:
             Signed JWT string
         """
-        if not all([
-            self.settings.apple_client_id,
-            self.settings.apple_team_id,
-            self.settings.apple_key_id,
-            self.settings.apple_private_key,
-        ]):
+        if not all(
+            [
+                self.settings.apple_client_id,
+                self.settings.apple_team_id,
+                self.settings.apple_key_id,
+                self.settings.apple_private_key,
+            ]
+        ):
             raise OAuthError("apple", "Apple OAuth not fully configured")
 
         now = int(time.time())

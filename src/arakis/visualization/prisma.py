@@ -16,7 +16,7 @@ from arakis.models.visualization import PRISMADiagram, PRISMAFlow
 
 class PRISMADiagramGenerator:
     """Generator for PRISMA 2020 flow diagrams.
-    
+
     Creates PRISMA 2020 compliant flow diagrams programmatically.
     Uses matplotlib to generate both SVG and PNG outputs.
     NO LLM is used - pure code generation for 100% accuracy.
@@ -40,10 +40,10 @@ class PRISMADiagramGenerator:
         self.title_font_size = 11
 
     def generate(
-        self, 
-        flow: PRISMAFlow, 
+        self,
+        flow: PRISMAFlow,
         output_filename: str = "prisma_diagram",
-        format: Literal["svg", "png", "both"] = "svg"
+        format: Literal["svg", "png", "both"] = "svg",
     ) -> PRISMADiagram:
         """Generate PRISMA 2020 flow diagram.
 
@@ -60,35 +60,35 @@ class PRISMADiagramGenerator:
         png_bytes = None
         svg_path = None
         png_path = None
-        
+
         if format in ("svg", "both"):
             svg_content = self._generate_svg_content(flow)
             svg_path = str(self.output_dir / f"{output_filename}.svg")
             with open(svg_path, "w") as f:
                 f.write(svg_content)
-        
+
         if format in ("png", "both"):
             png_path = str(self.output_dir / f"{output_filename}.png")
             png_bytes = self._generate_png_bytes(flow, png_path)
 
         return PRISMADiagram(
-            flow=flow, 
+            flow=flow,
             svg_content=svg_content,
-            png_bytes=png_bytes, 
+            png_bytes=png_bytes,
             png_path=png_path,
-            width=800, 
-            height=1000
+            width=800,
+            height=1000,
         )
 
     def _generate_svg_content(self, flow: PRISMAFlow) -> str:
         """Generate SVG content programmatically.
-        
+
         Creates a clean SVG PRISMA 2020 flow diagram.
         """
         # SVG dimensions
         width = 800
         height = 1000
-        
+
         # Colors
         box_fill = "#f5f5f5"
         box_stroke = "#757575"
@@ -97,161 +97,276 @@ class PRISMADiagramGenerator:
         exclusion_fill = "#ffebee"
         exclusion_stroke = "#c62828"
         arrow_color = "#424242"
-        
+
         # Box dimensions
         box_w = 200
         box_h = 60
         box_rx = 8
-        
+
         # Start building SVG
         svg_parts = [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-            '<defs>',
+            "<defs>",
             '  <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
             f'    <polygon points="0 0, 10 3.5, 0 7" fill="{arrow_color}"/>',
-            '  </marker>',
-            '</defs>',
-            '<style>',
-            '  .title { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; }',
-            '  .section-title { font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; }',
-            '  .box-text { font-family: Arial, sans-serif; font-size: 11px; }',
-            '  .exclusion-text { font-family: Arial, sans-serif; font-size: 10px; }',
-            '</style>',
+            "  </marker>",
+            "</defs>",
+            "<style>",
+            "  .title { font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; }",
+            "  .section-title { font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; }",
+            "  .box-text { font-family: Arial, sans-serif; font-size: 11px; }",
+            "  .exclusion-text { font-family: Arial, sans-serif; font-size: 10px; }",
+            "</style>",
         ]
-        
+
         y = 40
-        
+
         # Title
-        svg_parts.append(f'<text x="{width/2}" y="{y}" text-anchor="middle" class="title">PRISMA 2020 Flow Diagram</text>')
+        svg_parts.append(
+            f'<text x="{width / 2}" y="{y}" text-anchor="middle" class="title">PRISMA 2020 Flow Diagram</text>'
+        )
         y += 50
-        
+
         # === IDENTIFICATION ===
         svg_parts.append(f'<text x="50" y="{y}" class="section-title">Identification</text>')
         y += 40
-        
+
         # Database searches box
         db_text = f"Records identified from databases: n = {flow.records_identified_total}"
         if flow.records_identified_databases:
             for db, count in flow.records_identified_databases.items():
                 db_text += f"\\n{db}: n = {count}"
-        
-        svg_parts.extend(self._draw_box(50, y, box_w, box_h * 2, box_rx, box_fill, box_stroke, db_text, "box-text"))
-        
+
+        svg_parts.extend(
+            self._draw_box(
+                50, y, box_w, box_h * 2, box_rx, box_fill, box_stroke, db_text, "box-text"
+            )
+        )
+
         # Registers box (if applicable)
         if flow.records_identified_registers > 0:
             reg_text = f"Records identified from registers: n = {flow.records_identified_registers}"
-            svg_parts.extend(self._draw_box(300, y, box_w, box_h, box_rx, box_fill, box_stroke, reg_text, "box-text"))
-        
+            svg_parts.extend(
+                self._draw_box(
+                    300, y, box_w, box_h, box_rx, box_fill, box_stroke, reg_text, "box-text"
+                )
+            )
+
         y += box_h * 2 + 20
-        
+
         # Duplicates removed (exclusion box on right)
-        removed_total = flow.records_removed_duplicates + flow.records_removed_automated + flow.records_removed_other
+        removed_total = (
+            flow.records_removed_duplicates
+            + flow.records_removed_automated
+            + flow.records_removed_other
+        )
         if removed_total > 0:
             removed_text = f"Records removed: n = {removed_total}"
             if flow.records_removed_duplicates > 0:
                 removed_text += f"\\nDuplicates: {flow.records_removed_duplicates}"
             if flow.records_removed_automated > 0:
                 removed_text += f"\\nAutomated: {flow.records_removed_automated}"
-            svg_parts.extend(self._draw_box(450, y - 40, box_w, box_h, box_rx, exclusion_fill, exclusion_stroke, removed_text, "exclusion-text"))
+            svg_parts.extend(
+                self._draw_box(
+                    450,
+                    y - 40,
+                    box_w,
+                    box_h,
+                    box_rx,
+                    exclusion_fill,
+                    exclusion_stroke,
+                    removed_text,
+                    "exclusion-text",
+                )
+            )
             # Arrow from duplicates box
-            svg_parts.append(f'<line x1="450" y1="{y-20}" x2="280" y2="{y-20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
-        
+            svg_parts.append(
+                f'<line x1="450" y1="{y - 20}" x2="280" y2="{y - 20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+            )
+
         # Arrow down
-        svg_parts.append(f'<line x1="150" y1="{y-20}" x2="150" y2="{y}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
+        svg_parts.append(
+            f'<line x1="150" y1="{y - 20}" x2="150" y2="{y}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+        )
         y += 30
-        
+
         # === SCREENING ===
         svg_parts.append(f'<text x="50" y="{y}" class="section-title">Screening</text>')
         y += 40
-        
+
         # Records screened
         screened_text = f"Records screened: n = {flow.records_screened}"
-        svg_parts.extend(self._draw_box(50, y, box_w, box_h, box_rx, box_fill, box_stroke, screened_text, "box-text"))
-        
+        svg_parts.extend(
+            self._draw_box(
+                50, y, box_w, box_h, box_rx, box_fill, box_stroke, screened_text, "box-text"
+            )
+        )
+
         # Records excluded
         if flow.records_excluded > 0:
             excluded_text = f"Records excluded: n = {flow.records_excluded}"
             if flow.exclusion_reasons:
                 for reason, count in list(flow.exclusion_reasons.items())[:3]:  # Top 3 reasons
                     excluded_text += f"\\n{reason}: {count}"
-            svg_parts.extend(self._draw_box(450, y, box_w, box_h, box_rx, exclusion_fill, exclusion_stroke, excluded_text, "exclusion-text"))
+            svg_parts.extend(
+                self._draw_box(
+                    450,
+                    y,
+                    box_w,
+                    box_h,
+                    box_rx,
+                    exclusion_fill,
+                    exclusion_stroke,
+                    excluded_text,
+                    "exclusion-text",
+                )
+            )
             # Arrow to exclusion
-            svg_parts.append(f'<line x1="250" y1="{y+box_h/2}" x2="450" y2="{y+box_h/2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
-        
+            svg_parts.append(
+                f'<line x1="250" y1="{y + box_h / 2}" x2="450" y2="{y + box_h / 2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+            )
+
         # Arrow down
-        svg_parts.append(f'<line x1="150" y1="{y+box_h}" x2="150" y2="{y+box_h+20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
+        svg_parts.append(
+            f'<line x1="150" y1="{y + box_h}" x2="150" y2="{y + box_h + 20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+        )
         y += box_h + 30
-        
+
         # Reports sought
         sought_text = f"Reports sought for retrieval: n = {flow.reports_sought}"
-        svg_parts.extend(self._draw_box(50, y, box_w, box_h, box_rx, box_fill, box_stroke, sought_text, "box-text"))
-        
+        svg_parts.extend(
+            self._draw_box(
+                50, y, box_w, box_h, box_rx, box_fill, box_stroke, sought_text, "box-text"
+            )
+        )
+
         # Reports not retrieved
         if flow.reports_not_retrieved > 0:
             not_retrieved_text = f"Reports not retrieved: n = {flow.reports_not_retrieved}"
-            svg_parts.extend(self._draw_box(450, y, box_w, box_h, box_rx, exclusion_fill, exclusion_stroke, not_retrieved_text, "exclusion-text"))
-            svg_parts.append(f'<line x1="250" y1="{y+box_h/2}" x2="450" y2="{y+box_h/2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
-        
+            svg_parts.extend(
+                self._draw_box(
+                    450,
+                    y,
+                    box_w,
+                    box_h,
+                    box_rx,
+                    exclusion_fill,
+                    exclusion_stroke,
+                    not_retrieved_text,
+                    "exclusion-text",
+                )
+            )
+            svg_parts.append(
+                f'<line x1="250" y1="{y + box_h / 2}" x2="450" y2="{y + box_h / 2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+            )
+
         # Arrow down
-        svg_parts.append(f'<line x1="150" y1="{y+box_h}" x2="150" y2="{y+box_h+20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
+        svg_parts.append(
+            f'<line x1="150" y1="{y + box_h}" x2="150" y2="{y + box_h + 20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+        )
         y += box_h + 30
-        
+
         # === ELIGIBILITY ===
         svg_parts.append(f'<text x="50" y="{y}" class="section-title">Eligibility</text>')
         y += 40
-        
+
         # Reports assessed
         assessed_text = f"Reports assessed for eligibility: n = {flow.reports_assessed}"
-        svg_parts.extend(self._draw_box(50, y, box_w, box_h, box_rx, box_fill, box_stroke, assessed_text, "box-text"))
-        
+        svg_parts.extend(
+            self._draw_box(
+                50, y, box_w, box_h, box_rx, box_fill, box_stroke, assessed_text, "box-text"
+            )
+        )
+
         # Reports excluded
         if flow.reports_excluded > 0:
             reports_excluded_text = f"Reports excluded: n = {flow.reports_excluded}"
             if flow.reports_exclusion_reasons:
                 for reason, count in list(flow.reports_exclusion_reasons.items())[:3]:
                     reports_excluded_text += f"\\n{reason}: {count}"
-            svg_parts.extend(self._draw_box(450, y, box_w, box_h, box_rx, exclusion_fill, exclusion_stroke, reports_excluded_text, "exclusion-text"))
-            svg_parts.append(f'<line x1="250" y1="{y+box_h/2}" x2="450" y2="{y+box_h/2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
-        
+            svg_parts.extend(
+                self._draw_box(
+                    450,
+                    y,
+                    box_w,
+                    box_h,
+                    box_rx,
+                    exclusion_fill,
+                    exclusion_stroke,
+                    reports_excluded_text,
+                    "exclusion-text",
+                )
+            )
+            svg_parts.append(
+                f'<line x1="250" y1="{y + box_h / 2}" x2="450" y2="{y + box_h / 2}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+            )
+
         # Arrow down
-        svg_parts.append(f'<line x1="150" y1="{y+box_h}" x2="150" y2="{y+box_h+20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>')
+        svg_parts.append(
+            f'<line x1="150" y1="{y + box_h}" x2="150" y2="{y + box_h + 20}" stroke="{arrow_color}" marker-end="url(#arrowhead)"/>'
+        )
         y += box_h + 30
-        
+
         # === INCLUDED ===
         svg_parts.append(f'<text x="50" y="{y}" class="section-title">Included</text>')
         y += 40
-        
+
         # Studies included (highlighted)
         included_text = f"Studies included: n = {flow.studies_included}"
         if flow.reports_included != flow.studies_included:
             included_text += f"\\nReports included: n = {flow.reports_included}"
-        svg_parts.extend(self._draw_box(50, y, box_w, box_h, box_rx, highlight_fill, highlight_stroke, included_text, "box-text"))
-        
-        # Close SVG
-        svg_parts.append('</svg>')
-        
-        return '\n'.join(svg_parts)
+        svg_parts.extend(
+            self._draw_box(
+                50,
+                y,
+                box_w,
+                box_h,
+                box_rx,
+                highlight_fill,
+                highlight_stroke,
+                included_text,
+                "box-text",
+            )
+        )
 
-    def _draw_box(self, x: int, y: int, w: int, h: int, rx: int, fill: str, stroke: str, text: str, text_class: str) -> list[str]:
+        # Close SVG
+        svg_parts.append("</svg>")
+
+        return "\n".join(svg_parts)
+
+    def _draw_box(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        rx: int,
+        fill: str,
+        stroke: str,
+        text: str,
+        text_class: str,
+    ) -> list[str]:
         """Draw an SVG box with text."""
-        lines = text.split('\\n')
-        text_y = y + h/2 - (len(lines) - 1) * 7
-        
+        lines = text.split("\\n")
+        text_y = y + h / 2 - (len(lines) - 1) * 7
+
         svg_parts = [
             f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" stroke="{stroke}" stroke-width="2"/>',
         ]
-        
+
         for i, line in enumerate(lines):
-            svg_parts.append(f'<text x="{x + w/2}" y="{text_y + i * 14}" text-anchor="middle" class="{text_class}">{line}</text>')
-        
+            svg_parts.append(
+                f'<text x="{x + w / 2}" y="{text_y + i * 14}" text-anchor="middle" class="{text_class}">{line}</text>'
+            )
+
         return svg_parts
 
     def _generate_png_bytes(self, flow: PRISMAFlow, output_path: str) -> bytes:
         """Generate PNG using matplotlib."""
         # Temporarily switch to non-interactive backend
         original_backend = matplotlib.get_backend()
-        matplotlib.use('Agg')
-        
+        matplotlib.use("Agg")
+
         try:
             fig, ax = plt.subplots(figsize=(10, 14))
             ax.set_xlim(0, 10)
@@ -260,9 +375,11 @@ class PRISMADiagramGenerator:
 
             # Title
             ax.text(
-                5, 13.5,
+                5,
+                13.5,
                 "PRISMA 2020 Flow Diagram",
-                ha="center", va="center",
+                ha="center",
+                va="center",
                 fontsize=self.title_font_size + 2,
                 fontweight="bold",
             )
@@ -273,7 +390,9 @@ class PRISMADiagramGenerator:
             ax.text(1, y, "Identification", fontsize=self.title_font_size, fontweight="bold")
             y -= 0.5
 
-            databases_text = f"Records identified from databases:\nn = {flow.records_identified_total}"
+            databases_text = (
+                f"Records identified from databases:\nn = {flow.records_identified_total}"
+            )
             if flow.records_identified_databases:
                 databases_text += "\n" + "\n".join(
                     f"{db}: n = {count}" for db, count in flow.records_identified_databases.items()
@@ -282,7 +401,9 @@ class PRISMADiagramGenerator:
 
             if flow.records_identified_registers > 0:
                 self._draw_box_matplotlib(
-                    ax, 5.5, y,
+                    ax,
+                    5.5,
+                    y,
                     f"Records identified from\nregisters:\nn = {flow.records_identified_registers}",
                 )
 
@@ -307,13 +428,16 @@ class PRISMADiagramGenerator:
             ax.text(1, y, "Screening", fontsize=self.title_font_size, fontweight="bold")
             y -= 0.5
 
-            self._draw_box_matplotlib(ax, 1.25, y, f"Records screened:\nn = {flow.records_screened}")
+            self._draw_box_matplotlib(
+                ax, 1.25, y, f"Records screened:\nn = {flow.records_screened}"
+            )
 
             if flow.records_excluded > 0:
                 excluded_text = f"Records excluded:\nn = {flow.records_excluded}"
                 if flow.exclusion_reasons:
                     excluded_text += "\n" + "\n".join(
-                        f"{reason}: {count}" for reason, count in list(flow.exclusion_reasons.items())[:3]
+                        f"{reason}: {count}"
+                        for reason, count in list(flow.exclusion_reasons.items())[:3]
                     )
                 self._draw_exclusion_box_matplotlib(ax, 6.5, y, excluded_text)
 
@@ -359,14 +483,14 @@ class PRISMADiagramGenerator:
 
             plt.tight_layout()
             plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
-            
+
             with open(output_path, "rb") as f:
                 png_bytes = f.read()
-            
+
             plt.close()
-            
+
             return png_bytes
-            
+
         finally:
             # Restore original backend
             matplotlib.use(original_backend)

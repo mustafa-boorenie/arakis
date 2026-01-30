@@ -51,9 +51,7 @@ class SearchStageExecutor(BaseStageExecutor):
                 error="Missing research_question in input_data",
             )
 
-        logger.info(
-            f"[search] Searching {databases} for: {research_question[:100]}..."
-        )
+        logger.info(f"[search] Searching {databases} for: {research_question[:100]}...")
 
         # Update workflow stage
         await self.update_workflow_stage("search")

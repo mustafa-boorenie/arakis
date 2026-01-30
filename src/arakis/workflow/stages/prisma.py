@@ -74,11 +74,9 @@ class PRISMAStageExecutor(BaseStageExecutor):
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Generate SVG (primary format)
                 diagram = self.diagram_generator.generate(
-                    prisma_flow, 
-                    output_filename="prisma_flow",
-                    format="svg"
+                    prisma_flow, output_filename="prisma_flow", format="svg"
                 )
-                
+
                 svg_path = f"{temp_dir}/prisma_flow.svg"
                 with open(svg_path, "w") as f:
                     f.write(diagram.svg_content)
@@ -150,9 +148,11 @@ class PRISMAStageExecutor(BaseStageExecutor):
         databases_searched = list(per_database.keys()) if per_database else []
 
         # Calculate totals
-        total_identified = sum(
-            db.get("total", 0) for db in per_database.values()
-        ) if per_database else search_results.get("total_found", 0)
+        total_identified = (
+            sum(db.get("total", 0) for db in per_database.values())
+            if per_database
+            else search_results.get("total_found", 0)
+        )
 
         duplicates_removed = search_results.get("duplicates_removed", 0)
         records_after_dedup = total_identified - duplicates_removed

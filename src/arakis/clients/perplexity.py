@@ -142,7 +142,12 @@ def _clean_paper_title(title: str) -> str:
     title = _strip_markdown(title)
 
     # Remove source suffixes like "- PubMed", "- JAMA Network", "- ScienceDirect", "- NIH"
-    title = re.sub(r"\s*-\s*(?:PubMed|JAMA\s*Network|ScienceDirect|Frontiers|Wiley|Springer|Nature|BMJ|Lancet|NEJM|Cochrane|Google\s*Scholar|NIH|NCBI|PMC|ResearchGate|Academia|Oxford\s*Academic|Cambridge).*$", "", title, flags=re.IGNORECASE)
+    title = re.sub(
+        r"\s*-\s*(?:PubMed|JAMA\s*Network|ScienceDirect|Frontiers|Wiley|Springer|Nature|BMJ|Lancet|NEJM|Cochrane|Google\s*Scholar|NIH|NCBI|PMC|ResearchGate|Academia|Oxford\s*Academic|Cambridge).*$",
+        "",
+        title,
+        flags=re.IGNORECASE,
+    )
 
     # Remove "Title:" prefix if present
     title = re.sub(r"^Title:\s*", "", title, flags=re.IGNORECASE)
@@ -152,7 +157,7 @@ def _clean_paper_title(title: str) -> str:
     title = re.sub(r"\s*…$", "", title)
 
     # Clean up quotes
-    title = title.strip('"\'')
+    title = title.strip("\"'")
 
     return title.strip()
 

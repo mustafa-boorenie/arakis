@@ -78,7 +78,7 @@ class DataExtractionAgent:
     LLM-powered agent for extracting structured data from papers.
 
     Supports cost mode configuration for quality/cost trade-offs.
-    
+
     QUALITY mode: Triple review (3 passes, gpt-5-mini)
     BALANCED/FAST/ECONOMY modes: Single pass (1 pass, gpt-5-nano)
 
@@ -93,27 +93,29 @@ class DataExtractionAgent:
 
     def __init__(self, mode_config: ModeConfig | None = None):
         """Initialize extraction agent.
-        
+
         Args:
             mode_config: Cost mode configuration. If None, uses default (BALANCED).
         """
         self.settings = get_settings()
         self.client = AsyncOpenAI(api_key=self.settings.openai_api_key)
-        
+
         # Use mode config if provided, otherwise default
         self.mode_config = mode_config or get_default_mode_config()
         self.model = self.mode_config.extraction_model
         self.triple_review = self.mode_config.extraction_triple_review
         self.use_full_text = self.mode_config.use_full_text  # Always True
-        
+
         self._extraction_cache: dict[str, ExtractedData] = {}  # Cache: paper_id+schema → extraction
-        
-        _logger.info(f"[extractor] Initialized with mode: {self.mode_config.name}, "
-                    f"model: {self.model}, triple_review: {self.triple_review}")
+
+        _logger.info(
+            f"[extractor] Initialized with mode: {self.mode_config.name}, "
+            f"model: {self.model}, triple_review: {self.triple_review}"
+        )
 
     def _supports_temperature(self) -> bool:
         """Check if current model supports temperature parameter.
-        
+
         o-series and gpt-5 models don't support temperature.
         """
         non_temp_models = ["o1", "o3", "o3-mini", "gpt-5", "gpt-5-mini", "gpt-5-nano"]
@@ -143,11 +145,11 @@ class DataExtractionAgent:
             "model": self.model,
             "messages": messages,
         }
-        
+
         # Only add temperature for models that support it
         if self._supports_temperature():
             kwargs["temperature"] = temperature
-        
+
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = tool_choice
@@ -756,7 +758,7 @@ Use the extract_data function."""
             triple_review = self.triple_review
         if use_full_text is None:
             use_full_text = self.use_full_text
-        
+
         start_time = time.time()
 
         # Use concurrent batch processing

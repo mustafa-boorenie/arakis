@@ -155,9 +155,7 @@ def downgrade() -> None:
     op.drop_index("ix_workflow_figures_workflow_id", table_name="workflow_figures")
     op.drop_table("workflow_figures")
 
-    op.drop_index(
-        "ix_workflow_stage_checkpoints_status", table_name="workflow_stage_checkpoints"
-    )
+    op.drop_index("ix_workflow_stage_checkpoints_status", table_name="workflow_stage_checkpoints")
     op.drop_index(
         "ix_workflow_stage_checkpoints_workflow_id",
         table_name="workflow_stage_checkpoints",

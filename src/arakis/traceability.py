@@ -401,8 +401,7 @@ def validate_prisma_flow(
     # Check 2: Records excluded should not exceed records screened
     if records_excluded > records_screened:
         errors.append(
-            f"Records excluded ({records_excluded}) exceeds records "
-            f"screened ({records_screened})"
+            f"Records excluded ({records_excluded}) exceeds records screened ({records_screened})"
         )
 
     # Check 3: Reports sought should equal screened minus excluded
@@ -417,15 +416,13 @@ def validate_prisma_flow(
     expected_assessed = reports_sought - reports_not_retrieved
     if reports_assessed > 0 and reports_assessed > expected_assessed:
         errors.append(
-            f"Reports assessed ({reports_assessed}) exceeds retrieved "
-            f"reports ({expected_assessed})"
+            f"Reports assessed ({reports_assessed}) exceeds retrieved reports ({expected_assessed})"
         )
 
     # Check 5: Reports excluded should not exceed reports assessed
     if reports_excluded > reports_assessed and reports_assessed > 0:
         errors.append(
-            f"Reports excluded ({reports_excluded}) exceeds reports "
-            f"assessed ({reports_assessed})"
+            f"Reports excluded ({reports_excluded}) exceeds reports assessed ({reports_assessed})"
         )
 
     # Check 6: Studies included should equal assessed minus excluded
@@ -506,8 +503,7 @@ def validate_weights_sum(weights: list[float], tolerance: float = 0.01) -> list[
         total = sum(weights)
         if abs(total - 1.0) > tolerance:
             errors.append(
-                f"Study weights sum to {total:.4f} instead of 1.0 "
-                f"(tolerance: {tolerance})"
+                f"Study weights sum to {total:.4f} instead of 1.0 (tolerance: {tolerance})"
             )
 
     return errors

@@ -66,7 +66,7 @@ class MethodsStageExecutor(BaseStageExecutor):
         Returns:
             StageResult with methods section
         """
-        research_question = input_data.get("research_question", "")
+        input_data.get("research_question", "")
         inclusion_criteria = input_data.get("inclusion_criteria", [])
         exclusion_criteria = input_data.get("exclusion_criteria", [])
         databases_searched = input_data.get("databases_searched", [])
@@ -87,65 +87,81 @@ class MethodsStageExecutor(BaseStageExecutor):
             sections = []
 
             # 1. Protocol and Registration
-            sections.append({
-                "title": "Protocol and Registration",
-                "content": self._write_protocol_section(),
-            })
+            sections.append(
+                {
+                    "title": "Protocol and Registration",
+                    "content": self._write_protocol_section(),
+                }
+            )
 
             # 2. Eligibility Criteria
-            sections.append({
-                "title": "Eligibility Criteria",
-                "content": self._write_eligibility_section(
-                    inclusion_criteria, exclusion_criteria
-                ),
-            })
+            sections.append(
+                {
+                    "title": "Eligibility Criteria",
+                    "content": self._write_eligibility_section(
+                        inclusion_criteria, exclusion_criteria
+                    ),
+                }
+            )
 
             # 3. Information Sources
-            sections.append({
-                "title": "Information Sources",
-                "content": self._write_information_sources(databases_searched),
-            })
+            sections.append(
+                {
+                    "title": "Information Sources",
+                    "content": self._write_information_sources(databases_searched),
+                }
+            )
 
             # 4. Search Strategy
-            sections.append({
-                "title": "Search Strategy",
-                "content": self._write_search_strategy(search_strategy),
-            })
+            sections.append(
+                {
+                    "title": "Search Strategy",
+                    "content": self._write_search_strategy(search_strategy),
+                }
+            )
 
             # 5. Selection Process
-            sections.append({
-                "title": "Selection Process",
-                "content": self._write_selection_process(screening_method),
-            })
+            sections.append(
+                {
+                    "title": "Selection Process",
+                    "content": self._write_selection_process(screening_method),
+                }
+            )
 
             # 6. Data Collection Process
-            sections.append({
-                "title": "Data Collection Process",
-                "content": self._write_data_collection(extraction_schema),
-            })
+            sections.append(
+                {
+                    "title": "Data Collection Process",
+                    "content": self._write_data_collection(extraction_schema),
+                }
+            )
 
             # 7. Risk of Bias Assessment
-            sections.append({
-                "title": "Risk of Bias Assessment",
-                "content": self._write_rob_methods(rob_tool, extraction_schema),
-            })
+            sections.append(
+                {
+                    "title": "Risk of Bias Assessment",
+                    "content": self._write_rob_methods(rob_tool, extraction_schema),
+                }
+            )
 
             # 8. Effect Measures
-            sections.append({
-                "title": "Effect Measures",
-                "content": self._write_effect_measures(extraction_schema),
-            })
+            sections.append(
+                {
+                    "title": "Effect Measures",
+                    "content": self._write_effect_measures(extraction_schema),
+                }
+            )
 
             # 9. Synthesis Methods
-            sections.append({
-                "title": "Synthesis Methods",
-                "content": self._write_synthesis_methods(analysis_method),
-            })
+            sections.append(
+                {
+                    "title": "Synthesis Methods",
+                    "content": self._write_synthesis_methods(analysis_method),
+                }
+            )
 
             # Combine into full methods section
-            full_content = "\n\n".join([
-                f"### {s['title']}\n\n{s['content']}" for s in sections
-            ])
+            full_content = "\n\n".join([f"### {s['title']}\n\n{s['content']}" for s in sections])
 
             # Calculate word count
             word_count = len(full_content.split())
@@ -181,9 +197,7 @@ class MethodsStageExecutor(BaseStageExecutor):
             "guidelines. The protocol was not registered prior to conducting the review."
         )
 
-    def _write_eligibility_section(
-        self, inclusion: list[str], exclusion: list[str]
-    ) -> str:
+    def _write_eligibility_section(self, inclusion: list[str], exclusion: list[str]) -> str:
         """Write eligibility criteria section."""
         parts = []
 
@@ -205,7 +219,11 @@ class MethodsStageExecutor(BaseStageExecutor):
         if not databases:
             databases = ["PubMed", "OpenAlex", "Semantic Scholar"]
 
-        db_text = ", ".join(databases[:-1]) + f", and {databases[-1]}" if len(databases) > 1 else databases[0]
+        db_text = (
+            ", ".join(databases[:-1]) + f", and {databases[-1]}"
+            if len(databases) > 1
+            else databases[0]
+        )
 
         return (
             f"We searched the following electronic databases: {db_text}. "

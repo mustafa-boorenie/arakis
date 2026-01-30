@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from arakis.models.analysis import ConfidenceInterval, EffectMeasure
 
@@ -200,12 +200,12 @@ class GRADEAssessment:
     publication_bias: DomainRating
 
     # Upgrade domains (only applicable for observational studies)
-    large_effect: Optional[DomainRating] = None
-    dose_response: Optional[DomainRating] = None
-    confounding: Optional[DomainRating] = None
+    large_effect: DomainRating | None = None
+    dose_response: DomainRating | None = None
+    confounding: DomainRating | None = None
 
     # Overall
-    overall_certainty: Optional[CertaintyLevel] = None
+    overall_certainty: CertaintyLevel | None = None
     overall_explanation: str = ""
 
     # Metadata
@@ -247,22 +247,12 @@ class GRADEAssessment:
     @property
     def total_downgrades(self) -> int:
         """Total number of levels downgraded."""
-        return abs(
-            sum(
-                r.level_change
-                for r in self.domain_ratings
-                if r.level_change < 0
-            )
-        )
+        return abs(sum(r.level_change for r in self.domain_ratings if r.level_change < 0))
 
     @property
     def total_upgrades(self) -> int:
         """Total number of levels upgraded."""
-        return sum(
-            r.level_change
-            for r in self.domain_ratings
-            if r.level_change > 0
-        )
+        return sum(r.level_change for r in self.domain_ratings if r.level_change > 0)
 
     def _calculate_certainty(self) -> CertaintyLevel:
         """Calculate overall certainty from domain ratings.
@@ -353,9 +343,13 @@ class GRADEAssessment:
             imprecision=parse_rating(data["imprecision"]),
             publication_bias=parse_rating(data["publication_bias"]),
             large_effect=parse_rating(data["large_effect"]) if data.get("large_effect") else None,
-            dose_response=parse_rating(data["dose_response"]) if data.get("dose_response") else None,
+            dose_response=parse_rating(data["dose_response"])
+            if data.get("dose_response")
+            else None,
             confounding=parse_rating(data["confounding"]) if data.get("confounding") else None,
-            overall_certainty=CertaintyLevel(data["overall_certainty"]) if data.get("overall_certainty") else None,
+            overall_certainty=CertaintyLevel(data["overall_certainty"])
+            if data.get("overall_certainty")
+            else None,
             overall_explanation=data.get("overall_explanation", ""),
             assessed_by=data.get("assessed_by", "GRADEAssessor"),
         )
@@ -377,18 +371,18 @@ class OutcomeData:
     n_participants: int = 0
 
     # Relative effect (from meta-analysis)
-    relative_effect: Optional[float] = None  # e.g., OR, RR, MD, SMD
-    relative_effect_ci: Optional[ConfidenceInterval] = None
-    effect_measure: Optional[EffectMeasure] = None
+    relative_effect: float | None = None  # e.g., OR, RR, MD, SMD
+    relative_effect_ci: ConfidenceInterval | None = None
+    effect_measure: EffectMeasure | None = None
 
     # Absolute effect (events per 1000 or mean difference)
-    control_risk: Optional[float] = None  # Baseline risk in control group (per 1000)
-    intervention_risk: Optional[float] = None  # Expected risk with intervention (per 1000)
-    absolute_effect: Optional[float] = None  # Difference (per 1000 or actual units)
-    absolute_effect_ci: Optional[ConfidenceInterval] = None
+    control_risk: float | None = None  # Baseline risk in control group (per 1000)
+    intervention_risk: float | None = None  # Expected risk with intervention (per 1000)
+    absolute_effect: float | None = None  # Difference (per 1000 or actual units)
+    absolute_effect_ci: ConfidenceInterval | None = None
 
     # GRADE assessment
-    grade_assessment: Optional[GRADEAssessment] = None
+    grade_assessment: GRADEAssessment | None = None
 
     # Importance
     importance: str = ""  # "critical", "important", "not important"
@@ -397,7 +391,7 @@ class OutcomeData:
     comments: str = ""
 
     @property
-    def certainty(self) -> Optional[CertaintyLevel]:
+    def certainty(self) -> CertaintyLevel | None:
         """Get certainty level from GRADE assessment."""
         return self.grade_assessment.overall_certainty if self.grade_assessment else None
 
@@ -468,7 +462,9 @@ class OutcomeData:
             "relative_effect_ci": {
                 "lower": self.relative_effect_ci.lower,
                 "upper": self.relative_effect_ci.upper,
-            } if self.relative_effect_ci else None,
+            }
+            if self.relative_effect_ci
+            else None,
             "effect_measure": self.effect_measure.value if self.effect_measure else None,
             "control_risk": self.control_risk,
             "intervention_risk": self.intervention_risk,
@@ -476,7 +472,9 @@ class OutcomeData:
             "absolute_effect_ci": {
                 "lower": self.absolute_effect_ci.lower,
                 "upper": self.absolute_effect_ci.upper,
-            } if self.absolute_effect_ci else None,
+            }
+            if self.absolute_effect_ci
+            else None,
             "grade_assessment": self.grade_assessment.to_dict() if self.grade_assessment else None,
             "certainty": self.certainty.value if self.certainty else None,
             "importance": self.importance,
@@ -528,7 +526,7 @@ class SummaryOfFindings:
         """Add a footnote to the table."""
         self.footnotes.append(footnote)
 
-    def get_outcome(self, name: str) -> Optional[OutcomeData]:
+    def get_outcome(self, name: str) -> OutcomeData | None:
         """Get outcome by name."""
         return next((o for o in self.outcomes if o.outcome_name == name), None)
 
@@ -541,9 +539,7 @@ class SummaryOfFindings:
             "comparison": self.comparison,
             "setting": self.setting,
             "outcomes": [o.to_dict() for o in self.outcomes],
-            "certainty_distribution": {
-                k.value: v for k, v in self.certainty_distribution.items()
-            },
+            "certainty_distribution": {k.value: v for k, v in self.certainty_distribution.items()},
             "n_outcomes": self.n_outcomes,
             "created_at": self.created_at.isoformat(),
             "footnotes": self.footnotes,
@@ -566,15 +562,21 @@ class SummaryOfFindings:
                 relative_effect_ci=ConfidenceInterval(
                     lower=o_data["relative_effect_ci"]["lower"],
                     upper=o_data["relative_effect_ci"]["upper"],
-                ) if o_data.get("relative_effect_ci") else None,
-                effect_measure=EffectMeasure(o_data["effect_measure"]) if o_data.get("effect_measure") else None,
+                )
+                if o_data.get("relative_effect_ci")
+                else None,
+                effect_measure=EffectMeasure(o_data["effect_measure"])
+                if o_data.get("effect_measure")
+                else None,
                 control_risk=o_data.get("control_risk"),
                 intervention_risk=o_data.get("intervention_risk"),
                 absolute_effect=o_data.get("absolute_effect"),
                 absolute_effect_ci=ConfidenceInterval(
                     lower=o_data["absolute_effect_ci"]["lower"],
                     upper=o_data["absolute_effect_ci"]["upper"],
-                ) if o_data.get("absolute_effect_ci") else None,
+                )
+                if o_data.get("absolute_effect_ci")
+                else None,
                 grade_assessment=grade_assessment,
                 importance=o_data.get("importance", ""),
                 comments=o_data.get("comments", ""),

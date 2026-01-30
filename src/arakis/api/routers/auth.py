@@ -357,7 +357,9 @@ async def update_current_user_profile(
 # ============================================================
 
 
-def _redirect_with_tokens(tokens: TokenResponse, return_to: str | None, settings) -> RedirectResponse:
+def _redirect_with_tokens(
+    tokens: TokenResponse, return_to: str | None, settings
+) -> RedirectResponse:
     """Create redirect response with tokens in URL fragment.
 
     Always redirects to /auth/success page which handles token extraction.

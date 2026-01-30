@@ -48,9 +48,7 @@ class InMemoryRateLimiter:
         self._requests: dict[str, list[float]] = defaultdict(list)
         self._lock = asyncio.Lock()
 
-    async def is_allowed(
-        self, key: str, limit: int, window_seconds: int
-    ) -> tuple[bool, int, int]:
+    async def is_allowed(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
         """
         Check if request is allowed under rate limit.
 
@@ -144,9 +142,7 @@ class RedisRateLimiter:
             await self._redis.close()
             self._redis = None
 
-    async def is_allowed(
-        self, key: str, limit: int, window_seconds: int
-    ) -> tuple[bool, int, int]:
+    async def is_allowed(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
         """
         Check if request is allowed under rate limit.
 
@@ -241,9 +237,7 @@ class RateLimiter:
         if self._redis_limiter:
             await self._redis_limiter.disconnect()
 
-    async def is_allowed(
-        self, key: str, limit: int, window_seconds: int
-    ) -> tuple[bool, int, int]:
+    async def is_allowed(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
         """Check if request is allowed."""
         if self._use_redis and self._redis_limiter:
             return await self._redis_limiter.is_allowed(key, limit, window_seconds)

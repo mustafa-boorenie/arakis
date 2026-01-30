@@ -103,7 +103,7 @@ def _clean_paper_title(title: str) -> str:
     title = re.sub(r"^Title:\s*", "", title, flags=re.IGNORECASE)
     title = re.sub(r"\s*\.{3,}$", "", title)
     title = re.sub(r"\s*…$", "", title)
-    title = title.strip('"\'')
+    title = title.strip("\"'")
 
     return title.strip()
 
@@ -336,7 +336,9 @@ Format your response with clear sections:
                 WebSearchResult(
                     title=sr.title if isinstance(sr, WebSearchResult) else sr.get("title", ""),
                     url=sr.url if isinstance(sr, WebSearchResult) else sr.get("url", ""),
-                    snippet=sr.snippet if isinstance(sr, WebSearchResult) else sr.get("snippet", ""),
+                    snippet=sr.snippet
+                    if isinstance(sr, WebSearchResult)
+                    else sr.get("snippet", ""),
                     date=sr.date if isinstance(sr, WebSearchResult) else sr.get("date"),
                 )
                 for sr in data["search_results"]

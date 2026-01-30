@@ -34,8 +34,10 @@ class ScreenStageExecutor(BaseStageExecutor):
     def __init__(self, workflow_id: str, db: AsyncSession, mode_config: ModeConfig | None = None):
         super().__init__(workflow_id, db, mode_config)
         self.screener = ScreeningAgent(mode_config=self.mode_config)
-        logger.info(f"[screen] Using model: {self.mode_config.screening_model}, "
-                   f"dual_review: {self.mode_config.screening_dual_review}")
+        logger.info(
+            f"[screen] Using model: {self.mode_config.screening_model}, "
+            f"dual_review: {self.mode_config.screening_dual_review}"
+        )
 
     def get_required_stages(self) -> list[str]:
         """Screen requires search to be completed."""
@@ -99,10 +101,7 @@ class ScreenStageExecutor(BaseStageExecutor):
         # This has been REMOVED per PRD requirements
         total_papers = len(papers)
 
-        logger.info(
-            f"[screen] Screening ALL {total_papers} papers "
-            f"(dual_review={not fast_mode})"
-        )
+        logger.info(f"[screen] Screening ALL {total_papers} papers (dual_review={not fast_mode})")
 
         # Update workflow stage
         await self.update_workflow_stage("screen")
@@ -184,6 +183,5 @@ class ScreenStageExecutor(BaseStageExecutor):
         """Log screening progress."""
         if current % 10 == 0 or current == total:
             logger.info(
-                f"[screen] Progress: {current}/{total} papers screened "
-                f"({current * 100 // total}%)"
+                f"[screen] Progress: {current}/{total} papers screened ({current * 100 // total}%)"
             )

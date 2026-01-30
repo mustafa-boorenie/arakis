@@ -42,10 +42,10 @@ MODEL_PRICING = {
 
 def get_model_pricing(model: str) -> dict[str, float]:
     """Get pricing for a model.
-    
+
     Args:
         model: Model name
-        
+
     Returns:
         Dict with input and output pricing per 1M tokens
     """
@@ -54,12 +54,12 @@ def get_model_pricing(model: str) -> dict[str, float]:
 
 def estimate_cost(input_tokens: int, output_tokens: int, model: str) -> float:
     """Estimate API cost for a call.
-    
+
     Args:
         input_tokens: Number of input tokens
         output_tokens: Number of output tokens
         model: Model name
-        
+
     Returns:
         Estimated cost in USD
     """

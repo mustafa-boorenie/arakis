@@ -62,7 +62,7 @@ class IntroductionWriterAgent:
 
         # Use mode config if no explicit model provided
         self.mode_config = mode_config or get_default_mode_config()
-        
+
         # Select model: explicit > mode_config > default
         if model:
             self.model = model
@@ -76,9 +76,7 @@ class IntroductionWriterAgent:
         self.rate_limiter = get_openai_rate_limiter()
 
         # Initialize OpenAI literature client for research
-        self.literature_client = literature_client or OpenAILiteratureClient(
-            model=REASONING_MODEL
-        )
+        self.literature_client = literature_client or OpenAILiteratureClient(model=REASONING_MODEL)
 
         # Initialize reference management
         self.reference_manager = ReferenceManager()
@@ -247,9 +245,7 @@ class IntroductionWriterAgent:
         # Format papers with numeric IDs for the prompt
         papers_formatted = self._format_papers_for_prompt(papers)
         max_citation = len(papers)
-        valid_range = (
-            f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
-        )
+        valid_range = f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
 
         prompt = f"""Write the "Background" subsection for a systematic review introduction.
 
@@ -369,9 +365,7 @@ Write only the background text, no headings."""
         # Format papers with numeric IDs for the prompt
         papers_formatted = self._format_papers_for_prompt(papers)
         max_citation = len(papers)
-        valid_range = (
-            f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
-        )
+        valid_range = f"[1] to [{max_citation}]" if max_citation > 0 else "none available"
 
         prompt = f"""Write the "Rationale" subsection for a systematic review introduction.
 
@@ -652,9 +646,7 @@ Write only the objectives text, no headings."""
 
     # ==================== Numeric Citation Helper Methods ====================
 
-    def _create_numeric_paper_mapping(
-        self, papers: list[Paper]
-    ) -> dict[int, Paper]:
+    def _create_numeric_paper_mapping(self, papers: list[Paper]) -> dict[int, Paper]:
         """Create mapping from numeric IDs to papers.
 
         Args:
@@ -697,9 +689,7 @@ Write only the objectives text, no headings."""
             abstract_snippet = ""
             if paper.abstract:
                 abstract_snippet = (
-                    paper.abstract[:150] + "..."
-                    if len(paper.abstract) > 150
-                    else paper.abstract
+                    paper.abstract[:150] + "..." if len(paper.abstract) > 150 else paper.abstract
                 )
 
             lines.append(
@@ -744,8 +734,8 @@ Write only the objectives text, no headings."""
         content = response.choices[0].message.content
 
         # Validate citations
-        valid_citations, invalid_citations = (
-            self._citation_extractor.validate_numeric_citations(content, max_valid)
+        valid_citations, invalid_citations = self._citation_extractor.validate_numeric_citations(
+            content, max_valid
         )
 
         # If invalid citations found and retries available, retry once
@@ -776,16 +766,12 @@ Write only the objectives text, no headings."""
 
         # Final cleanup: remove any remaining invalid numeric citations
         if invalid_citations:
-            content, removed = (
-                self._citation_extractor.remove_invalid_numeric_citations(
-                    content, max_valid
-                )
+            content, removed = self._citation_extractor.remove_invalid_numeric_citations(
+                content, max_valid
             )
 
         # Convert numeric citations to paper IDs
-        content = self._citation_extractor.convert_numeric_to_paper_ids(
-            content, num_to_id
-        )
+        content = self._citation_extractor.convert_numeric_to_paper_ids(content, num_to_id)
 
         # Final cleanup: remove any DOI-style citations that shouldn't be there
         doi_patterns = [
