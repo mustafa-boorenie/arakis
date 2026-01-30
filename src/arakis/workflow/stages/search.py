@@ -58,13 +58,59 @@ class SearchStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
-            # Run comprehensive search
+            # Initialize progress tracker
+            progress_tracker = await self.init_progress_tracker()
+            progress_tracker.set_stage_data({
+                "phase": "generating_queries",
+                "databases_completed": [],
+                "queries": {},
+                "results_per_database": {},
+            })
+
+            # Create progress callback for orchestrator
+            async def search_progress_callback(stage: str, detail: str):
+                """Handle progress updates from orchestrator."""
+                if stage == "query_generation":
+                    await progress_tracker.emit_phase_change(
+                        "generating_queries",
+                        {"thought_process": detail}
+                    )
+                elif stage == "searching":
+                    # Extract database name from detail if available
+                    db_name = detail.split()[0] if detail else None
+                    progress_tracker.set_stage_data({
+                        "phase": "searching",
+                        "current_database": db_name,
+                    })
+                    await progress_tracker.emit_thought(f"Searching {db_name}...")
+                elif stage == "database_complete":
+                    # Detail format: "database_name: N results"
+                    parts = detail.split(":")
+                    if len(parts) >= 2:
+                        db_name = parts[0].strip()
+                        try:
+                            count = int(parts[1].strip().split()[0])
+                            progress_tracker._stage_data.setdefault("databases_completed", []).append(db_name)
+                            progress_tracker._stage_data.setdefault("results_per_database", {})[db_name] = count
+                        except (ValueError, IndexError):
+                            pass
+                elif stage == "deduplication":
+                    await progress_tracker.emit_phase_change(
+                        "deduplicating",
+                        {"thought_process": "Removing duplicate papers..."}
+                    )
+
+            # Run comprehensive search with progress tracking
             search_result = await self.orchestrator.comprehensive_search(
                 research_question=research_question,
                 databases=databases,
                 max_results_per_query=max_results,
                 validate_queries=False,  # Skip validation for speed
+                progress_callback=search_progress_callback,
             )
+
+            # Finalize progress
+            await self.finalize_progress()
 
             # Update workflow with paper count
             workflow = await self.get_workflow()

@@ -47,6 +47,51 @@ class StageStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class RecentDecision(BaseModel):
+    """A recent screening/processing decision for progress feed."""
+
+    paper_id: str
+    title: str
+    decision: str
+    confidence: float
+    reason: str
+    matched_inclusion: list[str] = []
+    matched_exclusion: list[str] = []
+    is_conflict: bool = False
+    timestamp: datetime
+
+
+class StageProgress(BaseModel):
+    """Real-time progress data for a workflow stage."""
+
+    # Common fields
+    phase: Optional[str] = None
+    thought_process: Optional[str] = None
+    estimated_remaining_seconds: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+    # Current item being processed
+    current_item: Optional[dict] = None
+
+    # Summary statistics
+    summary: Optional[dict] = None
+
+    # Rolling buffer of recent decisions/events
+    recent_decisions: list[dict] = []
+
+    # For search stage
+    current_database: Optional[str] = None
+    databases_completed: list[str] = []
+    queries: dict = {}
+    results_per_database: dict = {}
+
+    # For writing stages
+    current_subsection: Optional[str] = None
+    subsections_completed: list[str] = []
+    subsections_pending: list[str] = []
+    word_count: int = 0
+
+
 class StageCheckpoint(BaseModel):
     """Schema for a stage checkpoint."""
 
@@ -57,6 +102,9 @@ class StageCheckpoint(BaseModel):
     retry_count: int = 0
     error_message: Optional[str] = None
     cost: float = 0.0
+
+    # Real-time progress data
+    progress: Optional[StageProgress] = None
 
     class Config:
         from_attributes = True

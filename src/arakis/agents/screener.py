@@ -6,7 +6,7 @@ Supports cost mode configuration for quality/cost trade-offs.
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Callable
 
 from openai import AsyncOpenAI
 
@@ -579,7 +579,7 @@ Use the screen_paper function to make your decision."""
         criteria: ScreeningCriteria,
         dual_review: bool | None = None,
         human_review: bool = False,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
         batch_size: int | None = None,
     ) -> list[ScreeningDecision]:
         """

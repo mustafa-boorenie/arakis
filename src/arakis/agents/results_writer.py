@@ -8,7 +8,7 @@ Supports cost mode configuration.
 
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 
 from openai import AsyncOpenAI
 
@@ -517,6 +517,7 @@ Write only the paragraph text, no headings."""
         outcome_name: str = "primary outcome",
         extraction_summary: dict[str, Any] | None = None,
         screening_decisions: list[ScreeningDecision] | None = None,
+        progress_callback: Callable | None = None,
     ) -> Section:
         """Write complete results section with all subsections.
 
@@ -528,39 +529,68 @@ Write only the paragraph text, no headings."""
             outcome_name: Name of primary outcome
             extraction_summary: Summary of extracted data
             screening_decisions: List of screening decisions with exclusion reasons
+            progress_callback: Optional callback(subsection, word_count, thought_process)
+                for tracking writing progress
 
         Returns:
             Complete results section with PRISMA-compliant narrative description
         """
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+
+        async def emit_progress(subsection: str, word_count: int, thought: str | None) -> None:
+            if progress_callback:
+                try:
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        await progress_callback(subsection, word_count, thought)
+                    else:
+                        progress_callback(subsection, word_count, thought)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
+
         # Create main results section
         results_section = Section(title="Results", content="")
+        total_word_count = 0
 
         # 1. Study Selection (with detailed exclusion reasons)
+        await emit_progress("study_selection", 0, "Writing study selection narrative...")
         selection_result = await self.write_study_selection(
             prisma_flow,
             prisma_flow.records_identified_total,
             screening_decisions=screening_decisions,
         )
         results_section.add_subsection(selection_result.section)
+        total_word_count += selection_result.section.total_word_count
+        await emit_progress("study_selection", total_word_count, None)
 
         # 2. Study Characteristics
+        await emit_progress("study_characteristics", total_word_count, "Summarizing study characteristics...")
         characteristics_result = await self.write_study_characteristics(
             included_papers, extraction_summary
         )
         results_section.add_subsection(characteristics_result.section)
+        total_word_count += characteristics_result.section.total_word_count
+        await emit_progress("study_characteristics", total_word_count, None)
 
         # 3. Synthesis of Results
         # Prefer meta-analysis if available, otherwise use narrative synthesis
         if meta_analysis_result:
+            await emit_progress("synthesis_of_results", total_word_count, "Writing synthesis of meta-analysis results...")
             synthesis_result = await self.write_synthesis_of_results(
                 meta_analysis_result, outcome_name
             )
             results_section.add_subsection(synthesis_result.section)
+            total_word_count += synthesis_result.section.total_word_count
+            await emit_progress("synthesis_of_results", total_word_count, None)
         elif narrative_synthesis_result:
+            await emit_progress("synthesis_of_results", total_word_count, "Writing narrative synthesis...")
             synthesis_result = await self.write_narrative_synthesis_results(
                 narrative_synthesis_result
             )
             results_section.add_subsection(synthesis_result.section)
+            total_word_count += synthesis_result.section.total_word_count
+            await emit_progress("synthesis_of_results", total_word_count, None)
 
         return results_section
 

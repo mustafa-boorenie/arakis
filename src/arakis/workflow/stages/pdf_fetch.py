@@ -4,13 +4,14 @@ IMPORTANT: Text extraction is ENABLED by default per PRD requirements.
 """
 
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.config import ModeConfig
 from arakis.models.paper import Paper, PaperSource
 from arakis.retrieval.fetcher import PaperFetcher
+from arakis.workflow.progress import create_fetch_callback
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -87,13 +88,44 @@ class PDFFetchStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
+            # Initialize progress tracker
+            progress_tracker = await self.init_progress_tracker()
+            progress_tracker.set_stage_data({
+                "total": len(papers),
+                "fetched": 0,
+                "failed": 0,
+            })
+
+            # Create detailed fetch callback
+            detailed_callback = create_fetch_callback(progress_tracker)
+
+            async def progress_callback(
+                current: int,
+                total: int,
+                paper_id: str,
+                paper_title: str,
+                success: bool,
+                source: Optional[str],
+                sources_tried: list[str],
+            ):
+                """Handle detailed fetch progress."""
+                await detailed_callback(
+                    current, total, paper_id, paper_title, success, source, sources_tried
+                )
+                # Also log progress
+                if current % 5 == 0 or current == total:
+                    logger.info(f"[pdf_fetch] Progress: {current}/{total} papers fetched")
+
             # Fetch PDFs with text extraction ENABLED by default
             fetch_results = await self.fetcher.fetch_batch(
                 papers=papers,
                 download=True,
                 extract_text=extract_text,  # DEFAULT: True
-                progress_callback=self._progress_callback,
+                progress_callback=progress_callback,
             )
+
+            # Finalize progress
+            await self.finalize_progress()
 
             # Count successes
             pdfs_fetched = sum(1 for r in fetch_results if r.success)
@@ -139,7 +171,3 @@ class PDFFetchStageExecutor(BaseStageExecutor):
                 error=str(e),
             )
 
-    def _progress_callback(self, current: int, total: int, paper: Paper):
-        """Log fetch progress."""
-        if current % 5 == 0 or current == total:
-            logger.info(f"[pdf_fetch] Progress: {current}/{total} papers fetched")

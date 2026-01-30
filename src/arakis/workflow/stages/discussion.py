@@ -73,6 +73,19 @@ class DiscussionStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
+            # Initialize progress tracker
+            progress_tracker = await self.init_progress_tracker()
+            subsection_names = [
+                "main_findings", "literature_comparison", "limitations",
+                "implications", "future_research"
+            ]
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": [],
+                "subsections_pending": subsection_names,
+                "word_count": 0,
+            })
+
             sections = []
 
             # 1. Summary of Main Findings
@@ -105,6 +118,15 @@ class DiscussionStageExecutor(BaseStageExecutor):
             full_content = "\n\n".join([f"### {s['title']}\n\n{s['content']}" for s in sections])
 
             word_count = len(full_content.split())
+
+            # Finalize progress tracking
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": subsection_names[:len(sections)],
+                "subsections_pending": [],
+                "word_count": word_count,
+            })
+            await self.finalize_progress()
 
             output_data = {
                 "title": "Discussion",

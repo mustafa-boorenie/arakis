@@ -15,6 +15,7 @@ from arakis.agents.screener import ScreeningAgent
 from arakis.config import ModeConfig
 from arakis.models.paper import Author, Paper, PaperSource
 from arakis.models.screening import ScreeningCriteria
+from arakis.workflow.progress import create_screening_callback
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -113,13 +114,29 @@ class ScreenStageExecutor(BaseStageExecutor):
                 exclusion=exclusion_criteria,
             )
 
+            # Initialize progress tracker for detailed feedback
+            progress_tracker = await self.init_progress_tracker()
+            progress_tracker.set_stage_data({
+                "total": total_papers,
+                "included": 0,
+                "excluded": 0,
+                "maybe": 0,
+                "conflicts": 0,
+            })
+
             # Screen ALL papers with progress tracking
             # Use a closure to track progress with access to decisions
             decisions_cache = []
 
+            # Create the detailed progress callback
+            detailed_callback = create_screening_callback(progress_tracker)
+
             async def progress_callback(current: int, total: int, paper: Paper, decision):
                 """Update screening progress in database."""
                 decisions_cache.append(decision)
+
+                # Emit detailed progress event
+                await detailed_callback(current, total, paper, decision)
 
                 # Log progress every 10 papers
                 if current % 10 == 0 or current == total:
@@ -149,6 +166,9 @@ class ScreenStageExecutor(BaseStageExecutor):
                 human_review=False,
                 progress_callback=progress_callback,
             )
+
+            # Finalize progress tracking
+            await self.finalize_progress()
 
             # Summarize results
             summary = self.screener.summarize_screening(decisions)

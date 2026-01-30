@@ -9,7 +9,7 @@ import json
 import logging
 import re
 import time
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from openai import AsyncOpenAI
 
@@ -504,6 +504,7 @@ Write only the objectives text, no headings."""
         retriever: Optional[Retriever] = None,
         use_web_search: bool = True,
         use_perplexity: bool = False,  # Deprecated, kept for compatibility
+        progress_callback: Optional[callable] = None,
     ) -> tuple[Section, list[Paper]]:
         """Write complete introduction section with all subsections.
 
@@ -519,6 +520,8 @@ Write only the objectives text, no headings."""
             retriever: RAG retriever for fetching literature (optional)
             use_web_search: Use OpenAI web search for literature (default: True)
             use_perplexity: Deprecated, use use_web_search instead
+            progress_callback: Optional callback(subsection, word_count, thought_process)
+                for tracking writing progress
 
         Returns:
             Tuple of (introduction_section, list_of_cited_papers)
@@ -537,24 +540,52 @@ Write only the objectives text, no headings."""
 
         # Create main introduction section
         intro_section = Section(title="Introduction", content="")
+        total_word_count = 0
 
         # 1. Background
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "background", 0, "Researching background literature..."
+            )
         background_result = await self.write_background(
             research_question, literature_context, retriever, use_web_search
         )
         intro_section.add_subsection(background_result.section)
+        total_word_count += background_result.section.total_word_count
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "background", total_word_count, None
+            )
 
         # 2. Rationale
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "rationale", total_word_count, "Identifying gaps in literature..."
+            )
         rationale_result = await self.write_rationale(
             research_question, literature_context, retriever, use_web_search
         )
         intro_section.add_subsection(rationale_result.section)
+        total_word_count += rationale_result.section.total_word_count
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "rationale", total_word_count, None
+            )
 
         # 3. Objectives
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "objectives", total_word_count, "Formulating review objectives..."
+            )
         objectives_result = await self.write_objectives(
             research_question, inclusion_criteria, primary_outcome
         )
         intro_section.add_subsection(objectives_result.section)
+        total_word_count += objectives_result.section.total_word_count
+        if progress_callback:
+            await self._call_progress_callback(
+                progress_callback, "objectives", total_word_count, None
+            )
 
         # Update the main section's citations from all subsections
         self.reference_manager.update_section_citations(intro_section)
@@ -563,6 +594,31 @@ Write only the objectives text, no headings."""
         cited_papers = self.reference_manager.get_papers_for_section(intro_section)
 
         return intro_section, cited_papers
+
+    async def _call_progress_callback(
+        self,
+        callback: Callable,
+        subsection: str,
+        word_count: int,
+        thought_process: Optional[str],
+    ) -> None:
+        """Helper to call progress callback, handling both sync and async callbacks.
+
+        Args:
+            callback: The progress callback function
+            subsection: Current subsection being written
+            word_count: Current total word count
+            thought_process: AI thought/reasoning (optional)
+        """
+        import asyncio
+
+        try:
+            if asyncio.iscoroutinefunction(callback):
+                await callback(subsection, word_count, thought_process)
+            else:
+                callback(subsection, word_count, thought_process)
+        except Exception as e:
+            logger.warning(f"Progress callback failed: {e}")
 
     def get_collected_papers(self) -> list[Paper]:
         """Get all papers collected during writing.

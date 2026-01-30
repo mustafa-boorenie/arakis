@@ -69,6 +69,19 @@ class ResultsStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
+            # Initialize progress tracker
+            progress_tracker = await self.init_progress_tracker()
+            subsection_names = [
+                "study_selection", "study_characteristics", "risk_of_bias",
+                "individual_results", "synthesis"
+            ]
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": [],
+                "subsections_pending": subsection_names,
+                "word_count": 0,
+            })
+
             sections = []
 
             # 1. Study Selection
@@ -104,6 +117,15 @@ class ResultsStageExecutor(BaseStageExecutor):
             full_content = "\n\n".join([f"### {s['title']}\n\n{s['content']}" for s in sections])
 
             word_count = len(full_content.split())
+
+            # Finalize progress tracking
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": subsection_names[:len(sections)],
+                "subsections_pending": [],
+                "word_count": word_count,
+            })
+            await self.finalize_progress()
 
             output_data = {
                 "title": "Results",

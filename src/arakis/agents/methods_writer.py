@@ -10,7 +10,7 @@ Supports cost mode configuration.
 import json
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from openai import AsyncOpenAI
 
@@ -541,18 +541,36 @@ Write only the paragraph text, no headings."""
         self,
         context: MethodsContext,
         has_meta_analysis: bool = True,
+        progress_callback: Optional[callable] = None,
     ) -> Section:
         """Write complete methods section with all subsections.
 
         Args:
             context: MethodsContext with all required information
             has_meta_analysis: Whether meta-analysis was performed
+            progress_callback: Optional callback(subsection, word_count, thought_process)
+                for tracking writing progress
 
         Returns:
             Complete methods section
         """
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+
+        async def emit_progress(subsection: str, word_count: int, thought: Optional[str]) -> None:
+            if progress_callback:
+                try:
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        await progress_callback(subsection, word_count, thought)
+                    else:
+                        progress_callback(subsection, word_count, thought)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
+
         # Create main methods section
         methods_section = Section(title="Methods", content="")
+        total_word_count = 0
 
         # 1. Protocol registration (if available)
         if context.protocol_registration:
@@ -566,48 +584,67 @@ Write only the paragraph text, no headings."""
                 "This systematic review was conducted following the PRISMA 2020 guidelines "
                 "for reporting systematic reviews and meta-analyses.\n\n"
             )
+        total_word_count = len(methods_section.content.split())
 
         # 2. Eligibility Criteria
+        await emit_progress("eligibility_criteria", total_word_count, "Writing eligibility criteria...")
         eligibility_result = await self.write_eligibility_criteria(
             context.inclusion_criteria,
             context.exclusion_criteria,
             context.extraction_schema,
         )
         methods_section.add_subsection(eligibility_result.section)
+        total_word_count += eligibility_result.section.total_word_count
+        await emit_progress("eligibility_criteria", total_word_count, None)
 
         # 3. Information Sources
+        await emit_progress("information_sources", total_word_count, "Documenting information sources...")
         sources_result = await self.write_information_sources(
             context.databases,
             context.search_date,
         )
         methods_section.add_subsection(sources_result.section)
+        total_word_count += sources_result.section.total_word_count
+        await emit_progress("information_sources", total_word_count, None)
 
         # 4. Search Strategy
+        await emit_progress("search_strategy", total_word_count, "Writing search strategy...")
         strategy_result = await self.write_search_strategy(
             context.research_question,
             context.search_queries,
         )
         methods_section.add_subsection(strategy_result.section)
+        total_word_count += strategy_result.section.total_word_count
+        await emit_progress("search_strategy", total_word_count, None)
 
         # 5. Selection Process
+        await emit_progress("selection_process", total_word_count, "Describing selection process...")
         selection_result = await self.write_selection_process(
             context.screening_method,
         )
         methods_section.add_subsection(selection_result.section)
+        total_word_count += selection_result.section.total_word_count
+        await emit_progress("selection_process", total_word_count, None)
 
         # 6. Data Collection
+        await emit_progress("data_collection", total_word_count, "Documenting data collection process...")
         collection_result = await self.write_data_collection(
             context.extraction_schema,
             context.extraction_fields,
         )
         methods_section.add_subsection(collection_result.section)
+        total_word_count += collection_result.section.total_word_count
+        await emit_progress("data_collection", total_word_count, None)
 
         # 7. Synthesis Methods
+        await emit_progress("synthesis_methods", total_word_count, "Writing synthesis methods...")
         synthesis_result = await self.write_synthesis_methods(
             context.analysis_methods,
             has_meta_analysis,
         )
         methods_section.add_subsection(synthesis_result.section)
+        total_word_count += synthesis_result.section.total_word_count
+        await emit_progress("synthesis_methods", total_word_count, None)
 
         return methods_section
 

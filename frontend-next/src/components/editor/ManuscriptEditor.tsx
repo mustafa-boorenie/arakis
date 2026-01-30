@@ -39,7 +39,6 @@ import {
   BookOpen,
   FileText,
   Loader2,
-  Send,
   PanelRightClose,
   PanelRightOpen,
 } from 'lucide-react';
@@ -215,7 +214,7 @@ function EditorToolbarNew() {
 }
 
 export function ManuscriptEditor() {
-  const { editor: editorStore, setEditorDirty, setLayoutMode, setViewMode, setCurrentView, toggleEditorChatPanel } = useStore();
+  const { editor: editorStore, setEditorDirty, setLayoutMode, setCurrentView, toggleEditorChatPanel } = useStore();
   const { manuscript, isLoading } = editorStore;
   const isEditorChatPanelOpen = useStore((state) => state.layout.isEditorChatPanelOpen);
   const scrollRef = useRef<HTMLDivElement>(null);

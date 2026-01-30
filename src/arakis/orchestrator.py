@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from arakis.agents.query_generator import QueryGeneratorAgent
 from arakis.clients.base import BaseSearchClient, RateLimitError, SearchClientError
@@ -92,7 +92,7 @@ class SearchOrchestrator:
         queries_per_database: int = 3,
         max_results_per_query: int = 500,
         validate_queries: bool = True,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
     ) -> ComprehensiveSearchResult:
         """
         Execute a comprehensive multi-database search.

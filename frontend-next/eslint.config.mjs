@@ -13,6 +13,14 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Disable overly strict rules for specific patterns
+  {
+    files: ["**/hooks/*.ts", "**/components/workflow/*.tsx"],
+    rules: {
+      // Allow setState in effects for initialization and tracking patterns
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

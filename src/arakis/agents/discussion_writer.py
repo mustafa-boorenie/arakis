@@ -484,6 +484,7 @@ Write only the implications text, no headings."""
         user_comparison_notes: Optional[str] = None,
         user_limitation_notes: Optional[str] = None,
         user_implications: Optional[str] = None,
+        progress_callback: Optional[callable] = None,
     ) -> Section:
         """Write complete discussion section with all subsections.
 
@@ -497,36 +498,65 @@ Write only the implications text, no headings."""
             user_comparison_notes: User notes for comparison (optional)
             user_limitation_notes: User notes for limitations (optional)
             user_implications: User notes for implications (optional)
+            progress_callback: Optional callback(subsection, word_count, thought_process)
+                for tracking writing progress
 
         Returns:
             Complete discussion section
         """
+        import asyncio
+        import logging
+        logger = logging.getLogger(__name__)
+
         # Create main discussion section
         discussion_section = Section(title="Discussion", content="")
+        total_word_count = 0
+
+        async def emit_progress(subsection: str, word_count: int, thought: Optional[str]) -> None:
+            if progress_callback:
+                try:
+                    if asyncio.iscoroutinefunction(progress_callback):
+                        await progress_callback(subsection, word_count, thought)
+                    else:
+                        progress_callback(subsection, word_count, thought)
+                except Exception as e:
+                    logger.warning(f"Progress callback failed: {e}")
 
         # 1. Summary of Main Findings
+        await emit_progress("key_findings", 0, "Summarizing main findings from meta-analysis...")
         findings_result = await self.write_key_findings(
             meta_analysis_result, outcome_name, user_interpretation
         )
         discussion_section.add_subsection(findings_result.section)
+        total_word_count += findings_result.section.total_word_count
+        await emit_progress("key_findings", total_word_count, None)
 
         # 2. Comparison with Existing Literature
+        await emit_progress("comparison_to_literature", total_word_count, "Comparing with existing literature...")
         comparison_result = await self.write_comparison_to_literature(
             meta_analysis_result, outcome_name, retriever, literature_context, user_comparison_notes
         )
         discussion_section.add_subsection(comparison_result.section)
+        total_word_count += comparison_result.section.total_word_count
+        await emit_progress("comparison_to_literature", total_word_count, None)
 
         # 3. Limitations
+        await emit_progress("limitations", total_word_count, "Analyzing study limitations...")
         limitations_result = await self.write_limitations(
             meta_analysis_result, study_limitations, user_limitation_notes
         )
         discussion_section.add_subsection(limitations_result.section)
+        total_word_count += limitations_result.section.total_word_count
+        await emit_progress("limitations", total_word_count, None)
 
         # 4. Implications
+        await emit_progress("implications", total_word_count, "Discussing clinical and research implications...")
         implications_result = await self.write_implications(
             meta_analysis_result, outcome_name, user_implications
         )
         discussion_section.add_subsection(implications_result.section)
+        total_word_count += implications_result.section.total_word_count
+        await emit_progress("implications", total_word_count, None)
 
         return discussion_section
 

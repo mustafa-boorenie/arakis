@@ -83,6 +83,20 @@ class MethodsStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
+            # Initialize progress tracker (methods is template-based so runs fast)
+            progress_tracker = await self.init_progress_tracker()
+            subsection_names = [
+                "protocol", "eligibility", "information_sources", "search_strategy",
+                "selection_process", "data_collection", "rob_assessment",
+                "effect_measures", "synthesis_methods"
+            ]
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": [],
+                "subsections_pending": subsection_names,
+                "word_count": 0,
+            })
+
             # Build methods sections
             sections = []
 
@@ -165,6 +179,15 @@ class MethodsStageExecutor(BaseStageExecutor):
 
             # Calculate word count
             word_count = len(full_content.split())
+
+            # Finalize progress tracking
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": subsection_names,
+                "subsections_pending": [],
+                "word_count": word_count,
+            })
+            await self.finalize_progress()
 
             output_data = {
                 "title": "Methods",

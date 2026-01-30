@@ -21,6 +21,61 @@ export type WorkflowStage =
 
 export type StageStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 
+// A recent decision from the screening/processing activity feed
+export interface RecentDecision {
+  paper_id: string;
+  title: string;
+  decision: string;
+  confidence: number;
+  reason: string;
+  matched_inclusion: string[];
+  matched_exclusion: string[];
+  is_conflict: boolean;
+  timestamp: string;
+}
+
+// Real-time progress data for a workflow stage
+export interface StageProgress {
+  // Common fields
+  phase?: string;
+  thought_process?: string;
+  estimated_remaining_seconds?: number;
+  updated_at?: string;
+
+  // Current item being processed
+  current_item?: {
+    id: string;
+    title: string;
+    index: number;
+  };
+
+  // Summary statistics
+  summary?: {
+    total?: number;
+    included?: number;
+    excluded?: number;
+    maybe?: number;
+    conflicts?: number;
+    fetched?: number;
+    failed?: number;
+  };
+
+  // Rolling buffer of recent decisions/events
+  recent_decisions: RecentDecision[] | Record<string, unknown>[];
+
+  // For search stage
+  current_database?: string;
+  databases_completed: string[];
+  queries: Record<string, string>;
+  results_per_database: Record<string, number>;
+
+  // For writing stages
+  current_subsection?: string;
+  subsections_completed: string[];
+  subsections_pending: string[];
+  word_count: number;
+}
+
 export interface StageCheckpoint {
   stage: string;
   status: StageStatus;
@@ -29,6 +84,9 @@ export interface StageCheckpoint {
   retry_count: number;
   error_message: string | null;
   cost: number;
+
+  // Real-time progress data
+  progress?: StageProgress | null;
 }
 
 export interface WorkflowCreateRequest {

@@ -26,6 +26,7 @@ from arakis.database.models import (
     WorkflowTable,
 )
 from arakis.storage.client import get_storage_client
+from arakis.workflow.progress import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class BaseStageExecutor(ABC):
         self.db = db
         self.mode_config = mode_config or get_default_mode_config()
         self._storage_client = None
+        self._progress_tracker: Optional[ProgressTracker] = None
 
     @property
     def storage_client(self):
@@ -94,6 +96,24 @@ class BaseStageExecutor(ABC):
         if self._storage_client is None:
             self._storage_client = get_storage_client()
         return self._storage_client
+
+    async def init_progress_tracker(self) -> ProgressTracker:
+        """Initialize and return a progress tracker for this stage.
+
+        Returns:
+            ProgressTracker instance for emitting progress events
+        """
+        self._progress_tracker = ProgressTracker(
+            workflow_id=self.workflow_id,
+            stage=self.STAGE_NAME,
+            db=self.db,
+        )
+        return self._progress_tracker
+
+    async def finalize_progress(self) -> None:
+        """Finalize progress tracking, ensuring all data is written."""
+        if self._progress_tracker:
+            await self._progress_tracker.finalize()
 
     @abstractmethod
     async def execute(self, input_data: dict[str, Any]) -> StageResult:

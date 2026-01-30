@@ -325,6 +325,9 @@ class WorkflowStageCheckpoint(Base):
     # Stage output data (JSON blob with stage-specific results)
     output_data = Column(JSON, nullable=True)
 
+    # Real-time progress data (rolling buffer of recent events + summary stats)
+    progress_data = Column(JSON, nullable=True)
+
     # Error tracking
     error_message = Column(Text, nullable=True)
 

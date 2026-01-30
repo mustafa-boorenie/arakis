@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 
 from openai import AsyncOpenAI
 
@@ -730,7 +730,7 @@ Use the extract_data function."""
         schema: ExtractionSchema,
         triple_review: bool | None = None,
         use_full_text: bool | None = None,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
         batch_size: int | None = None,
     ) -> ExtractionResult:
         """
@@ -745,8 +745,10 @@ Use the extract_data function."""
             schema: Extraction schema
             triple_review: Use triple-review mode. If None (default), uses mode_config.
             use_full_text: Use full text if available. If None (default), uses mode_config.
-            progress_callback: Optional callback(current, total) for progress tracking.
-                Note: For compatibility, this callback only receives (current, total).
+            progress_callback: Optional callback for progress tracking.
+                Supports two signatures:
+                - (current, total) - legacy simple callback
+                - (current, total, paper_id, paper_title, quality, needs_review) - detailed callback
             batch_size: Override the default batch size from settings.
                        If None, uses settings.batch_size_extraction (default: 3).
 
@@ -770,12 +772,32 @@ Use the extract_data function."""
         async def process_paper(paper: Paper) -> ExtractedData:
             return await self.extract_paper(paper, schema, triple_review, use_full_text)
 
-        # Wrap the progress callback to match expected signature
+        # Wrap the progress callback to support both old and new signatures
         def wrapped_callback(
             current: int, total: int, paper: Paper, extraction: ExtractedData
         ) -> None:
             if progress_callback:
-                progress_callback(current, total)
+                # Try new detailed signature first
+                import inspect
+                try:
+                    sig = inspect.signature(progress_callback)
+                    param_count = len(sig.parameters)
+                    if param_count >= 6:
+                        # New detailed signature
+                        progress_callback(
+                            current,
+                            total,
+                            paper.id,
+                            paper.title or "",
+                            extraction.extraction_quality,
+                            extraction.needs_human_review,
+                        )
+                    else:
+                        # Legacy simple signature
+                        progress_callback(current, total)
+                except (ValueError, TypeError):
+                    # Fallback to legacy
+                    progress_callback(current, total)
 
         extractions = await processor.process(papers, process_paper, wrapped_callback)
 

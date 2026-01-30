@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -250,7 +250,7 @@ class PaperFetcher:
         papers: list[Paper],
         download: bool = False,
         extract_text: bool = False,
-        progress_callback: callable = None,
+        progress_callback: Callable | None = None,
         batch_size: int | None = None,
     ) -> list[FetchResult]:
         """
@@ -263,9 +263,10 @@ class PaperFetcher:
             papers: List of papers to fetch
             download: If True, download actual content
             extract_text: If True AND download=True, extract text from PDFs
-            progress_callback: Optional callback(current, total, paper).
-                Note: For compatibility, this callback receives (current, total, paper).
-                The FetchResult is not included.
+            progress_callback: Optional callback for progress tracking.
+                Supports two signatures:
+                - (current, total, paper) - legacy simple callback
+                - (current, total, paper_id, paper_title, success, source, sources_tried) - detailed callback
             batch_size: Override the default batch size from settings.
                        If None, uses settings.batch_size_fetch (default: 10).
 
@@ -281,10 +282,33 @@ class PaperFetcher:
         async def process_paper(paper: Paper) -> FetchResult:
             return await self.fetch(paper, download, extract_text)
 
-        # Wrap the progress callback to match expected signature
+        # Wrap the progress callback to support both old and new signatures
         def wrapped_callback(current: int, total: int, paper: Paper, result: FetchResult) -> None:
             if progress_callback:
-                progress_callback(current, total, paper)
+                import inspect
+                try:
+                    sig = inspect.signature(progress_callback)
+                    param_count = len(sig.parameters)
+                    if param_count >= 7:
+                        # New detailed signature
+                        source = None
+                        if result.retrieval_result:
+                            source = result.retrieval_result.source_name
+                        progress_callback(
+                            current,
+                            total,
+                            paper.id,
+                            paper.title or "",
+                            result.success,
+                            source,
+                            result.sources_tried,
+                        )
+                    else:
+                        # Legacy simple signature
+                        progress_callback(current, total, paper)
+                except (ValueError, TypeError):
+                    # Fallback to legacy
+                    progress_callback(current, total, paper)
 
         return await processor.process(papers, process_paper, wrapped_callback)
 

@@ -39,7 +39,14 @@ export function useWorkflow() {
     },
     {
       enabled: shouldPoll,
-      interval: 5000, // 5 seconds
+      interval: 5000, // 5 seconds when idle
+      activeInterval: 2000, // 2 seconds when actively processing
+      jitter: true, // Prevent thundering herd
+      isActive: (data) => {
+        // Consider active if any stage is in_progress
+        const hasActiveStage = data.stages?.some(s => s.status === 'in_progress');
+        return hasActiveStage && data.status === 'running';
+      },
       shouldStop: (data) =>
         data.status === 'completed' || data.status === 'failed' || data.status === 'needs_review',
       onSuccess: async (data) => {

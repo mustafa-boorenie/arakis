@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useStore } from '@/store';
 import { useWorkflow } from '@/hooks';
 import { Card } from '@/components/ui/card';
@@ -7,6 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { WORKFLOW_STAGES, StageCheckpoint } from '@/types/workflow';
+import { LiveActivityFeed } from './LiveActivityFeed';
+import { ProgressStats } from './ProgressStats';
+import { EducationalTips } from './EducationalTips';
+import { useWorkflowNotifications } from '@/hooks/useNotifications';
 import {
   Search,
   FileText,
@@ -27,7 +32,7 @@ import {
   Database,
   RefreshCw,
   AlertTriangle,
-  Image,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 // Stage configuration with icons
@@ -73,6 +78,14 @@ function getCurrentStage(stages: StageCheckpoint[] | undefined): string | null {
 export function WorkflowDetailView() {
   const workflow = useStore((state) => state.workflow.current);
   const { loadWorkflow, resumeWorkflow, rerunStage } = useWorkflow();
+  const [showTips, setShowTips] = useState(true);
+
+  // Enable browser notifications for workflow completion
+  useWorkflowNotifications(
+    workflow?.id || null,
+    workflow?.status || null,
+    workflow?.research_question || null
+  );
 
   if (!workflow) {
     return (
@@ -88,6 +101,10 @@ export function WorkflowDetailView() {
   const isCompleted = workflow.status === 'completed';
   const isFailed = workflow.status === 'failed';
   const needsReview = workflow.status === 'needs_review';
+
+  // Get the current stage's progress data
+  const currentStageCheckpoint = workflow.stages?.find((s) => s.status === 'in_progress');
+  const currentProgress = currentStageCheckpoint?.progress;
 
   // Handle viewing the completed manuscript
   const handleViewManuscript = async () => {
@@ -310,6 +327,33 @@ export function WorkflowDetailView() {
           </Card>
         )}
 
+        {/* Live Progress Stats - Show when running and has progress data */}
+        {isRunning && currentStage && currentProgress && (
+          <ProgressStats
+            progress={currentProgress}
+            stage={currentStage}
+            papersFound={workflow.papers_found}
+            papersScreened={workflow.papers_screened}
+            papersIncluded={workflow.papers_included}
+          />
+        )}
+
+        {/* Live Activity Feed - Show when running and has recent decisions */}
+        {isRunning && currentStage && currentProgress && (
+          <LiveActivityFeed
+            progress={currentProgress}
+            stage={currentStage}
+          />
+        )}
+
+        {/* Educational Tips - Show when running */}
+        {isRunning && currentStage && showTips && (
+          <EducationalTips
+            stage={currentStage}
+            onDismiss={() => setShowTips(false)}
+          />
+        )}
+
         {/* Error Message - Only show when failed */}
         {isFailed && (failedStage?.error_message || workflow.error_message) && (
           <Card className="p-4 border-destructive/50 bg-destructive/5">
@@ -350,7 +394,7 @@ export function WorkflowDetailView() {
                   rel="noopener noreferrer"
                   className="block p-3 rounded-lg border hover:border-purple-300 hover:bg-purple-50 transition-colors"
                 >
-                  <Image className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+                  <ImageIcon className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
                   <p className="text-xs text-center text-muted-foreground">PRISMA Flow</p>
                 </a>
               )}

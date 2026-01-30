@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from arakis.api.dependencies import get_current_user, get_db
 from arakis.api.schemas.workflow import (
     StageCheckpoint,
+    StageProgress,
     StageRerunRequest,
     StageRerunResponse,
     WorkflowCreate,
@@ -290,7 +291,7 @@ async def claim_workflow(
 
 # Helper function to build workflow response with stages and figures
 async def _build_workflow_response(workflow: Workflow, db: AsyncSession) -> WorkflowResponse:
-    """Build WorkflowResponse with stages and figure URLs."""
+    """Build WorkflowResponse with stages, progress, and figure URLs."""
     # Get stage checkpoints
     result = await db.execute(
         select(WorkflowStageCheckpoint)
@@ -299,18 +300,41 @@ async def _build_workflow_response(workflow: Workflow, db: AsyncSession) -> Work
     )
     checkpoints = result.scalars().all()
 
-    stages = [
-        StageCheckpoint(
-            stage=cp.stage,
-            status=cp.status,
-            started_at=cp.started_at,
-            completed_at=cp.completed_at,
-            retry_count=cp.retry_count,
-            error_message=cp.error_message,
-            cost=cp.cost or 0.0,
+    stages = []
+    for cp in checkpoints:
+        # Build progress data from checkpoint's progress_data JSON
+        progress = None
+        if cp.progress_data:
+            progress = StageProgress(
+                phase=cp.progress_data.get("phase"),
+                thought_process=cp.progress_data.get("thought_process"),
+                estimated_remaining_seconds=cp.progress_data.get("estimated_remaining_seconds"),
+                updated_at=cp.progress_data.get("updated_at"),
+                current_item=cp.progress_data.get("current_item"),
+                summary=cp.progress_data.get("summary"),
+                recent_decisions=cp.progress_data.get("recent_decisions", []),
+                current_database=cp.progress_data.get("current_database"),
+                databases_completed=cp.progress_data.get("databases_completed", []),
+                queries=cp.progress_data.get("queries", {}),
+                results_per_database=cp.progress_data.get("results_per_database", {}),
+                current_subsection=cp.progress_data.get("current_subsection"),
+                subsections_completed=cp.progress_data.get("subsections_completed", []),
+                subsections_pending=cp.progress_data.get("subsections_pending", []),
+                word_count=cp.progress_data.get("word_count", 0),
+            )
+
+        stages.append(
+            StageCheckpoint(
+                stage=cp.stage,
+                status=cp.status,
+                started_at=cp.started_at,
+                completed_at=cp.completed_at,
+                retry_count=cp.retry_count,
+                error_message=cp.error_message,
+                cost=cp.cost or 0.0,
+                progress=progress,
+            )
         )
-        for cp in checkpoints
-    ]
 
     # Get figure URLs
     result = await db.execute(
@@ -397,18 +421,43 @@ async def get_stage_checkpoints(
     )
     checkpoints = result.scalars().all()
 
-    return [
-        StageCheckpoint(
-            stage=cp.stage,
-            status=cp.status,
-            started_at=cp.started_at,
-            completed_at=cp.completed_at,
-            retry_count=cp.retry_count,
-            error_message=cp.error_message,
-            cost=cp.cost or 0.0,
+    stages = []
+    for cp in checkpoints:
+        # Build progress data from checkpoint's progress_data JSON
+        progress = None
+        if cp.progress_data:
+            progress = StageProgress(
+                phase=cp.progress_data.get("phase"),
+                thought_process=cp.progress_data.get("thought_process"),
+                estimated_remaining_seconds=cp.progress_data.get("estimated_remaining_seconds"),
+                updated_at=cp.progress_data.get("updated_at"),
+                current_item=cp.progress_data.get("current_item"),
+                summary=cp.progress_data.get("summary"),
+                recent_decisions=cp.progress_data.get("recent_decisions", []),
+                current_database=cp.progress_data.get("current_database"),
+                databases_completed=cp.progress_data.get("databases_completed", []),
+                queries=cp.progress_data.get("queries", {}),
+                results_per_database=cp.progress_data.get("results_per_database", {}),
+                current_subsection=cp.progress_data.get("current_subsection"),
+                subsections_completed=cp.progress_data.get("subsections_completed", []),
+                subsections_pending=cp.progress_data.get("subsections_pending", []),
+                word_count=cp.progress_data.get("word_count", 0),
+            )
+
+        stages.append(
+            StageCheckpoint(
+                stage=cp.stage,
+                status=cp.status,
+                started_at=cp.started_at,
+                completed_at=cp.completed_at,
+                retry_count=cp.retry_count,
+                error_message=cp.error_message,
+                cost=cp.cost or 0.0,
+                progress=progress,
+            )
         )
-        for cp in checkpoints
-    ]
+
+    return stages
 
 
 @router.post("/{workflow_id}/stages/{stage}/rerun", response_model=StageRerunResponse)

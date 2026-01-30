@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from arakis.agents.intro_writer import IntroductionWriterAgent
 from arakis.config import ModeConfig
+from arakis.workflow.progress import create_writing_callback
 from arakis.workflow.stages.base import BaseStageExecutor, StageResult
 
 logger = logging.getLogger(__name__)
@@ -76,13 +77,30 @@ class IntroductionStageExecutor(BaseStageExecutor):
         await self.save_checkpoint("in_progress")
 
         try:
-            # Write introduction section
+            # Initialize progress tracker
+            progress_tracker = await self.init_progress_tracker()
+            subsections = ["background", "rationale", "objectives"]
+            progress_tracker.set_stage_data({
+                "current_subsection": None,
+                "subsections_completed": [],
+                "subsections_pending": subsections,
+                "word_count": 0,
+            })
+
+            # Create writing progress callback
+            writing_callback = create_writing_callback(progress_tracker, subsections)
+
+            # Write introduction section with progress tracking
             section, cited_papers = await self.writer.write_complete_introduction(
                 research_question=research_question,
                 inclusion_criteria=inclusion_criteria,
                 use_web_search=use_web_search,
                 literature_context=literature,
+                progress_callback=writing_callback,
             )
+
+            # Finalize progress
+            await self.finalize_progress()
 
             # Build output data
             output_data = {

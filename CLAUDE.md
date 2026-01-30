@@ -707,21 +707,23 @@ When adding tests:
 
 ## Current Development State
 
-### Cost Optimization (In Progress)
+### Cost Optimization (Implemented)
 
 **Completed:**
 - ✅ PRISMA diagram generation is 100% programmatic (no LLM cost)
 - ✅ Database schema updated with `cost_mode` column
 - ✅ Migration created: `2026_01_29_1531_add_cost_mode_to_workflows.py`
-- ✅ Model constants defined in `agents/models.py`
+- ✅ Model constants and pricing defined in `agents/models.py`
+- ✅ Cost mode configuration system in `src/arakis/config.py` (ModeConfig, CostMode enum)
+- ✅ All writing agents use `get_model_pricing()` for cost estimation
+- ✅ Orchestrator reads `cost_mode` from workflow and passes `ModeConfig` to executors
+- ✅ All agents accept `mode_config` parameter for model selection
 
-**In Progress:**
-- ⏳ Cost mode configuration system (`src/arakis/config/cost_modes.py`)
-- ⏳ Agent integration to read from cost mode config
-- ⏳ Orchestrator integration to pass cost mode to agents
-- ⏳ Frontend settings UI for cost mode selection
+**Remaining:**
+- ⏳ Frontend settings UI for cost mode selection (optional enhancement)
 
 **Cost Mode Design:**
 - Workflows store `cost_mode` (QUALITY, BALANCED, FAST, ECONOMY)
 - Each mode maps to specific models, review passes, and features
+- Default mode is BALANCED (o3-mini for writing, gpt-5-nano for screening/extraction)
 - PRISMA is always programmatic regardless of mode
