@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from arakis.config import CostMode
 
@@ -198,6 +198,12 @@ class WorkflowResponse(BaseModel):
     meta_analysis_feasible: Optional[bool] = None
     stages: list[StageCheckpoint] = []
     cost_mode: str = "BALANCED"
+
+    @field_validator("needs_user_action", mode="before")
+    @classmethod
+    def coerce_needs_user_action(cls, v: bool | None) -> bool:
+        """Coerce None to False for needs_user_action."""
+        return v if v is not None else False
 
     # Figure URLs from R2
     forest_plot_url: Optional[str] = None
