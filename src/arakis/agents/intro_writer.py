@@ -13,7 +13,7 @@ from typing import Any, Optional, Union
 
 from openai import AsyncOpenAI
 
-from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO
+from arakis.agents.models import REASONING_MODEL, REASONING_MODEL_PRO, get_model_pricing
 from arakis.clients.openai_literature import (
     OpenAILiteratureClient,
     OpenAILiteratureClientError,
@@ -634,14 +634,9 @@ Write only the objectives text, no headings."""
         Returns:
             Estimated cost in USD
         """
-        # o1 pricing: $15/1M input, $60/1M output (extended thinking model)
-        if self.model.startswith("o1"):
-            input_cost = (prompt_tokens / 1_000_000) * 15.00
-            output_cost = (completion_tokens / 1_000_000) * 60.00
-        else:
-            # GPT-4o pricing: $2.50/1M input, $10/1M output
-            input_cost = (prompt_tokens / 1_000_000) * 2.50
-            output_cost = (completion_tokens / 1_000_000) * 10.00
+        pricing = get_model_pricing(self.model)
+        input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
+        output_cost = (completion_tokens / 1_000_000) * pricing["output"]
         return input_cost + output_cost
 
     # ==================== Numeric Citation Helper Methods ====================

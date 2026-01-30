@@ -16,28 +16,23 @@ Tests the 12 workflow stages and their base class:
 - DiscussionStageExecutor: discussion writing
 """
 
-import asyncio
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from arakis.workflow.stages.base import BaseStageExecutor, StageResult
-from arakis.workflow.stages.search import SearchStageExecutor
-from arakis.workflow.stages.screen import ScreenStageExecutor
-from arakis.workflow.stages.pdf_fetch import PDFFetchStageExecutor
-from arakis.workflow.stages.extract import ExtractStageExecutor
-from arakis.workflow.stages.rob import RiskOfBiasStageExecutor
 from arakis.workflow.stages.analysis import AnalysisStageExecutor
-from arakis.workflow.stages.prisma import PRISMAStageExecutor
-from arakis.workflow.stages.tables import TablesStageExecutor
+from arakis.workflow.stages.base import BaseStageExecutor, StageResult
+from arakis.workflow.stages.discussion import DiscussionStageExecutor
 from arakis.workflow.stages.introduction import IntroductionStageExecutor
 from arakis.workflow.stages.methods import MethodsStageExecutor
+from arakis.workflow.stages.prisma import PRISMAStageExecutor
 from arakis.workflow.stages.results import ResultsStageExecutor
-from arakis.workflow.stages.discussion import DiscussionStageExecutor
-
+from arakis.workflow.stages.rob import RiskOfBiasStageExecutor
+from arakis.workflow.stages.screen import ScreenStageExecutor
+from arakis.workflow.stages.search import SearchStageExecutor
+from arakis.workflow.stages.tables import TablesStageExecutor
 
 # ==============================================================================
 # Fixtures
@@ -115,7 +110,7 @@ def sample_search_result():
                 "pmid": f"1234567{i}",
                 "year": 2023,
                 "source": "pubmed",
-                "abstract": f"This study investigates aspirin effects. Methods: RCT with {100 + i * 10} patients."
+                "abstract": f"This study investigates aspirin effects. Methods: RCT with {100 + i * 10} patients.",
             }
             for i in range(25)
         ],
@@ -243,11 +238,14 @@ class TestBaseStageExecutor:
 
     def test_is_retryable_error_rate_limit(self):
         """Test that rate limit errors are retryable."""
+
         # Create a concrete subclass for testing
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -260,10 +258,13 @@ class TestBaseStageExecutor:
 
     def test_is_retryable_error_timeout(self):
         """Test that timeout errors are retryable."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -274,10 +275,13 @@ class TestBaseStageExecutor:
 
     def test_is_retryable_error_server_errors(self):
         """Test that server errors are retryable."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -289,10 +293,13 @@ class TestBaseStageExecutor:
 
     def test_is_retryable_error_non_retryable(self):
         """Test that client errors are not retryable."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -305,10 +312,13 @@ class TestBaseStageExecutor:
     @pytest.mark.asyncio
     async def test_run_with_retry_success_first_attempt(self, mock_db):
         """Test run_with_retry succeeds on first attempt."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 return StageResult(success=True, output_data={"test": "data"})
+
             def get_required_stages(self):
                 return []
 
@@ -346,6 +356,7 @@ class TestBaseStageExecutor:
     @pytest.mark.asyncio
     async def test_run_with_retry_fails_after_max_retries(self, mock_db):
         """Test run_with_retry fails after max retries."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
             MAX_RETRIES = 3
@@ -397,13 +408,15 @@ class TestBaseStageExecutor:
 
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
         executor = TestExecutor("test-123", mock_db)
-        checkpoint = await executor.save_checkpoint(
+        await executor.save_checkpoint(
             status="in_progress",
             output_data={"key": "value"},
             cost=0.15,
@@ -421,8 +434,10 @@ class TestBaseStageExecutor:
 
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -439,10 +454,13 @@ class TestBaseStageExecutor:
     @pytest.mark.asyncio
     async def test_upload_figure_to_r2(self, mock_db):
         """Test uploading a figure to R2."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
@@ -479,16 +497,19 @@ class TestBaseStageExecutor:
     @pytest.mark.asyncio
     async def test_save_table(self, mock_db):
         """Test saving a table to the database."""
+
         class TestExecutor(BaseStageExecutor):
             STAGE_NAME = "test"
+
             async def execute(self, input_data):
                 pass
+
             def get_required_stages(self):
                 return []
 
         executor = TestExecutor("test-123", mock_db)
 
-        table = await executor.save_table(
+        await executor.save_table(
             table_type="study_characteristics",
             headers=["Study", "N", "Outcome"],
             rows=[["Smith 2023", "100", "Positive"]],
@@ -564,10 +585,12 @@ class TestSearchStageExecutor:
         ) as mock_search:
             mock_search.return_value = mock_search_result
 
-            result = await executor.execute({
-                "research_question": "Effect of aspirin on mortality",
-                "databases": ["pubmed"],
-            })
+            result = await executor.execute(
+                {
+                    "research_question": "Effect of aspirin on mortality",
+                    "databases": ["pubmed"],
+                }
+            )
 
             assert result.success is True
             assert result.output_data["papers_found"] == 1
@@ -599,10 +622,12 @@ class TestScreenStageExecutor:
         """Test execute fails with no papers."""
         executor = ScreenStageExecutor("test-123", mock_db)
 
-        result = await executor.execute({
-            "papers": [],
-            "inclusion_criteria": ["Human RCTs"],
-        })
+        result = await executor.execute(
+            {
+                "papers": [],
+                "inclusion_criteria": ["Human RCTs"],
+            }
+        )
 
         assert result.success is False
         assert "No papers" in result.error
@@ -612,10 +637,12 @@ class TestScreenStageExecutor:
         """Test execute fails without inclusion criteria."""
         executor = ScreenStageExecutor("test-123", mock_db)
 
-        result = await executor.execute({
-            "papers": [{"id": "paper_1", "title": "Test"}],
-            "inclusion_criteria": [],
-        })
+        result = await executor.execute(
+            {
+                "papers": [{"id": "paper_1", "title": "Test"}],
+                "inclusion_criteria": [],
+            }
+        )
 
         assert result.success is False
         assert "inclusion_criteria" in result.error
@@ -671,11 +698,13 @@ class TestScreenStageExecutor:
             ) as mock_summarize:
                 mock_summarize.return_value = mock_summary
 
-                result = await executor.execute({
-                    "papers": papers,
-                    "inclusion_criteria": ["Human RCTs"],
-                    "exclusion_criteria": ["Animal studies"],
-                })
+                result = await executor.execute(
+                    {
+                        "papers": papers,
+                        "inclusion_criteria": ["Human RCTs"],
+                        "exclusion_criteria": ["Animal studies"],
+                    }
+                )
 
                 assert result.success is True
                 # CRITICAL: Verify ALL 100 papers were screened (no 50-paper limit)
@@ -709,10 +738,12 @@ class TestRiskOfBiasStageExecutor:
 
         executor = RiskOfBiasStageExecutor("test-123", mock_db)
 
-        result = await executor.execute({
-            "extractions": [],
-            "schema_used": "rct",
-        })
+        result = await executor.execute(
+            {
+                "extractions": [],
+                "schema_used": "rct",
+            }
+        )
 
         assert result.success is True
         assert result.output_data["n_studies"] == 0
@@ -739,7 +770,9 @@ class TestRiskOfBiasStageExecutor:
                 study_id=f"paper_{i}",
                 overall_judgment=MagicMock(value="Low"),
                 domains=[
-                    MagicMock(domain_name="Randomization", judgment=MagicMock(value="Low"), support="Good")
+                    MagicMock(
+                        domain_name="Randomization", judgment=MagicMock(value="Low"), support="Good"
+                    )
                 ],
             )
             for i in range(5)
@@ -753,12 +786,8 @@ class TestRiskOfBiasStageExecutor:
         mock_table.footnotes = []
 
         # Mock the internal method that converts extractions to avoid complex object creation
-        with patch.object(
-            executor, "update_workflow_stage", new_callable=AsyncMock
-        ):
-            with patch.object(
-                executor, "save_checkpoint", new_callable=AsyncMock
-            ):
+        with patch.object(executor, "update_workflow_stage", new_callable=AsyncMock):
+            with patch.object(executor, "save_checkpoint", new_callable=AsyncMock):
                 with patch.object(
                     executor.assessor,
                     "assess_studies",
@@ -771,9 +800,7 @@ class TestRiskOfBiasStageExecutor:
                     ) as mock_gen_table:
                         mock_gen_table.return_value = mock_table
 
-                        with patch.object(
-                            executor, "save_table", new_callable=AsyncMock
-                        ):
+                        with patch.object(executor, "save_table", new_callable=AsyncMock):
                             # Patch the ExtractionResult creation
                             with patch(
                                 "arakis.workflow.stages.rob.ExtractionResult"
@@ -782,10 +809,12 @@ class TestRiskOfBiasStageExecutor:
                                 mock_er.extractions = []
                                 mock_er_class.return_value = mock_er
 
-                                result = await executor.execute({
-                                    "extractions": sample_extractions,
-                                    "schema_used": "rct",
-                                })
+                                result = await executor.execute(
+                                    {
+                                        "extractions": sample_extractions,
+                                        "schema_used": "rct",
+                                    }
+                                )
 
                                 assert result.success is True
                                 assert result.output_data["n_studies"] == 5
@@ -816,9 +845,11 @@ class TestAnalysisStageExecutor:
         """Test execute with no extractions."""
         executor = AnalysisStageExecutor("test-123", mock_db)
 
-        result = await executor.execute({
-            "extractions": [],
-        })
+        result = await executor.execute(
+            {
+                "extractions": [],
+            }
+        )
 
         assert result.success is True
         assert result.output_data["meta_analysis_feasible"] is False
@@ -880,8 +911,7 @@ class TestAnalysisStageExecutor:
             q_p_value=0.22,
         )
         mock_meta_result.individual_studies = [
-            MagicMock(study_id=f"paper_{i}", effect=-0.5 + i * 0.1, weight=20.0)
-            for i in range(5)
+            MagicMock(study_id=f"paper_{i}", effect=-0.5 + i * 0.1, weight=20.0) for i in range(5)
         ]
 
         # Mock visualization
@@ -917,10 +947,12 @@ class TestAnalysisStageExecutor:
 
                         # Mock file read for upload
                         with patch("builtins.open", MagicMock()):
-                            result = await executor.execute({
-                                "extractions": sample_extractions,
-                                "outcome_name": "Mortality",
-                            })
+                            result = await executor.execute(
+                                {
+                                    "extractions": sample_extractions,
+                                    "outcome_name": "Mortality",
+                                }
+                            )
 
         assert result.success is True
         assert result.output_data["meta_analysis_feasible"] is True

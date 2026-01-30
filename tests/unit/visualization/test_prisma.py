@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from arakis.models.visualization import PRISMAFlow, PRISMADiagram
+from arakis.models.visualization import PRISMAFlow
 from arakis.visualization.prisma import PRISMADiagramGenerator
 
 
@@ -45,9 +45,9 @@ class TestPRISMADiagramGenerator:
     def test_generator_creates_svg(self, sample_flow: PRISMAFlow) -> None:
         """Test that generator creates SVG content programmatically."""
         generator = PRISMADiagramGenerator()
-        
+
         diagram = generator.generate(sample_flow, format="svg")
-        
+
         assert diagram.svg_content is not None
         assert "<svg" in diagram.svg_content
         assert "</svg>" in diagram.svg_content
@@ -58,20 +58,20 @@ class TestPRISMADiagramGenerator:
     def test_generator_creates_png(self, sample_flow: PRISMAFlow) -> None:
         """Test that generator creates PNG bytes programmatically."""
         generator = PRISMADiagramGenerator()
-        
+
         diagram = generator.generate(sample_flow, format="png")
-        
+
         assert diagram.png_bytes is not None
         assert len(diagram.png_bytes) > 0
         # PNG magic number
-        assert diagram.png_bytes[:8] == b'\x89PNG\r\n\x1a\n'
+        assert diagram.png_bytes[:8] == b"\x89PNG\r\n\x1a\n"
 
     def test_generator_creates_both_formats(self, sample_flow: PRISMAFlow) -> None:
         """Test that generator creates both SVG and PNG."""
         generator = PRISMADiagramGenerator()
-        
+
         diagram = generator.generate(sample_flow, format="both")
-        
+
         assert diagram.svg_content is not None
         assert diagram.png_bytes is not None
 
@@ -79,9 +79,9 @@ class TestPRISMADiagramGenerator:
         """Test that SVG contains all PRISMA sections."""
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(sample_flow, format="svg")
-        
+
         svg = diagram.svg_content
-        
+
         # Check all sections are present
         assert "Identification" in svg
         assert "Screening" in svg
@@ -92,9 +92,9 @@ class TestPRISMADiagramGenerator:
         """Test that SVG contains correct flow numbers."""
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(sample_flow, format="svg")
-        
+
         svg = diagram.svg_content
-        
+
         # Check key numbers
         assert "pubmed: n = 80" in svg
         assert "embase: n = 50" in svg
@@ -106,16 +106,16 @@ class TestPRISMADiagramGenerator:
         """Test that SVG has exclusion boxes (red styling)."""
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(sample_flow, format="svg")
-        
+
         svg = diagram.svg_content
-        
+
         # Check for exclusion styling (red/pink colors)
         assert "#ffebee" in svg or "#c62828" in svg
 
     def test_prisma_flow_validation(self, sample_flow: PRISMAFlow) -> None:
         """Test that PRISMA flow validates correctly."""
         errors = sample_flow.validate()
-        
+
         # Should have no validation errors for consistent data
         assert len(errors) == 0
 
@@ -123,10 +123,10 @@ class TestPRISMADiagramGenerator:
         """Test calculated properties of PRISMA flow."""
         # After deduplication
         assert sample_flow.records_after_deduplication == 120  # 150 - 30
-        
+
         # Exclusion rate
         assert sample_flow.exclusion_rate == (95 / 120) * 100
-        
+
         # Retrieval rate
         retrieved = 25 - 3  # 22
         assert sample_flow.retrieval_rate == (retrieved / 25) * 100
@@ -135,12 +135,12 @@ class TestPRISMADiagramGenerator:
         """Test that generator saves files correctly."""
         with tempfile.TemporaryDirectory() as temp_dir:
             generator = PRISMADiagramGenerator(output_dir=temp_dir)
-            diagram = generator.generate(sample_flow, output_filename="test_prisma", format="svg")
-            
+            generator.generate(sample_flow, output_filename="test_prisma", format="svg")
+
             # Check file was created
             svg_file = Path(temp_dir) / "test_prisma.svg"
             assert svg_file.exists()
-            
+
             # Verify content
             content = svg_file.read_text()
             assert "<svg" in content
@@ -149,7 +149,7 @@ class TestPRISMADiagramGenerator:
         """Test text representation generation."""
         generator = PRISMADiagramGenerator()
         text = generator.generate_simple_text(sample_flow)
-        
+
         assert "PRISMA 2020 Flow Summary" in text
         assert "Records identified: 150" in text
         assert "Studies included: 20" in text
@@ -160,13 +160,13 @@ class TestPRISMAStageExecutor:
 
     def test_prisma_stage_has_zero_cost(self) -> None:
         """Verify PRISMA stage executor reports zero cost.
-        
+
         This is critical - PRISMA must be programmatic, not LLM-based.
         """
         from arakis.workflow.stages.prisma import PRISMAStageExecutor
-        
+
         # Check that the executor class exists and has expected attributes
-        assert hasattr(PRISMAStageExecutor, 'STAGE_NAME')
+        assert hasattr(PRISMAStageExecutor, "STAGE_NAME")
         assert PRISMAStageExecutor.STAGE_NAME == "prisma"
 
 
@@ -180,10 +180,10 @@ class TestPRISMAFlowEdgeCases:
             studies_included=0,
             reports_included=0,
         )
-        
+
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(flow, format="svg")
-        
+
         assert diagram.svg_content is not None
         assert "n = 0" in diagram.svg_content
 
@@ -201,10 +201,10 @@ class TestPRISMAFlowEdgeCases:
             studies_included=10,
             reports_included=10,
         )
-        
+
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(flow, format="svg")
-        
+
         assert diagram.svg_content is not None
         assert "Studies included: n = 10" in diagram.svg_content
 
@@ -222,9 +222,9 @@ class TestPRISMAFlowEdgeCases:
             studies_included=0,
             reports_included=0,
         )
-        
+
         generator = PRISMADiagramGenerator()
         diagram = generator.generate(flow, format="svg")
-        
+
         assert diagram.svg_content is not None
         assert "Studies included: n = 0" in diagram.svg_content

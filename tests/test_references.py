@@ -16,7 +16,6 @@ from arakis.references import (
     get_style_config,
 )
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -377,7 +376,7 @@ class TestVancouverFormatting:
     def test_vancouver_no_ampersand(self, sample_paper):
         """Test Vancouver doesn't use ampersand."""
         formatter = CitationFormatter(CitationStyle.VANCOUVER)
-        citation = formatter.format_citation(sample_paper)
+        formatter.format_citation(sample_paper)
 
         # Vancouver typically uses commas, not ampersand
         # (Implementation may vary)
@@ -815,9 +814,7 @@ class TestReferenceListGeneration:
         assert references[1].number == 2
         assert references[2].number == 3
 
-    def test_generate_reference_section_text(
-        self, sample_papers, sample_section_with_citations
-    ):
+    def test_generate_reference_section_text(self, sample_papers, sample_section_with_citations):
         """Test generating reference section as text."""
         manager = ReferenceManager()
         manager.register_papers(sample_papers)
@@ -828,9 +825,7 @@ class TestReferenceListGeneration:
         assert "2." in text
         assert "3." in text
 
-    def test_generate_unnumbered_references(
-        self, sample_papers, sample_section_with_citations
-    ):
+    def test_generate_unnumbered_references(self, sample_papers, sample_section_with_citations):
         """Test generating unnumbered reference list."""
         manager = ReferenceManager()
         manager.register_papers(sample_papers)
@@ -861,9 +856,7 @@ class TestReferenceListGeneration:
 class TestReferenceManagerCitationReplacement:
     """Tests for citation replacement."""
 
-    def test_replace_with_numbered_citations(
-        self, sample_papers, sample_section_with_citations
-    ):
+    def test_replace_with_numbered_citations(self, sample_papers, sample_section_with_citations):
         """Test replacing citations with numbers."""
         manager = ReferenceManager()
         manager.register_papers(sample_papers)
@@ -875,9 +868,7 @@ class TestReferenceManagerCitationReplacement:
         assert "[3]" in result
         assert "[10.1234/jcard.2023.001]" not in result
 
-    def test_update_section_citations(
-        self, sample_papers, sample_section_with_citations
-    ):
+    def test_update_section_citations(self, sample_papers, sample_section_with_citations):
         """Test updating section's citations field."""
         manager = ReferenceManager()
         manager.register_papers(sample_papers)
@@ -1152,9 +1143,7 @@ class TestEnsureNoOrphanedReferences:
             content="Valid [10.1234/jcard.2023.001] and orphan [10.9999/missing].",
         )
 
-        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(
-            section
-        )
+        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(section)
 
         # Orphan citation removed from text
         assert "[10.9999/missing]" not in section.content
@@ -1177,9 +1166,7 @@ class TestEnsureNoOrphanedReferences:
             content="Studies [10.1234/jcard.2023.001] and [10.1038/nm.2022.123].",
         )
 
-        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(
-            section
-        )
+        section, removed_citations, removed_papers = manager.ensure_no_orphaned_references(section)
 
         # No orphans removed
         assert len(removed_citations) == 0

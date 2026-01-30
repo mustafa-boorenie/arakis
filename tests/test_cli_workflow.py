@@ -1,18 +1,19 @@
 """Tests for CLI workflow command, specifically the --schema option."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from arakis.extraction.schemas import (
-    get_schema,
-    list_schemas,
-    detect_schema,
-    get_schema_auto,
     AVAILABLE_SCHEMAS,
-    RCT_SCHEMA,
-    COHORT_SCHEMA,
     CASE_CONTROL_SCHEMA,
+    COHORT_SCHEMA,
     DIAGNOSTIC_SCHEMA,
+    RCT_SCHEMA,
+    detect_schema,
+    get_schema,
+    get_schema_auto,
+    list_schemas,
 )
 
 
@@ -302,7 +303,7 @@ class TestWorkflowSchemaIntegration:
                     '{"field_name": "primary_outcome", "value": "all-cause mortality", "confidence": 0.95},'
                     '{"field_name": "effect_measure", "value": "HR 0.75 (95% CI 0.65-0.87)", "confidence": 0.9},'
                     '{"field_name": "population_description", "value": "Patients with type 2 diabetes", "confidence": 0.85}'
-                    ']}',
+                    "]}",
                 )
             )
         ]
@@ -365,7 +366,7 @@ class TestWorkflowSchemaIntegration:
                     '{"field_name": "primary_outcome", "value": "systolic BP change", "confidence": 0.9},'
                     '{"field_name": "primary_outcome_result", "value": "Significant reduction", "confidence": 0.8},'
                     '{"field_name": "population_description", "value": "Hypertensive adults", "confidence": 0.8}'
-                    ']}',
+                    "]}",
                 )
             )
         ]

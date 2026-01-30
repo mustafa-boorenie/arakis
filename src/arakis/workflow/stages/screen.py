@@ -114,12 +114,40 @@ class ScreenStageExecutor(BaseStageExecutor):
             )
 
             # Screen ALL papers with progress tracking
+            # Use a closure to track progress with access to decisions
+            decisions_cache = []
+
+            async def progress_callback(current: int, total: int, paper: Paper, decision):
+                """Update screening progress in database."""
+                decisions_cache.append(decision)
+
+                # Log progress every 10 papers
+                if current % 10 == 0 or current == total:
+                    logger.info(
+                        f"[screen] Progress: {current}/{total} papers screened ({current * 100 // total}%)"
+                    )
+
+                # Update database every 5 papers for real-time UI updates
+                if current % 5 == 0 or current == total:
+                    try:
+                        workflow = await self.get_workflow()
+                        workflow.papers_screened = current
+                        workflow.papers_included = sum(
+                            1 for d in decisions_cache if d.status.value == "INCLUDE"
+                        )
+                        await self.db.commit()
+                        logger.debug(
+                            f"[screen] Updated progress: {current}/{total} screened, {workflow.papers_included} included"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[screen] Failed to update progress: {e}")
+
             decisions = await self.screener.screen_batch(
                 papers=papers,
                 criteria=criteria,
                 dual_review=not fast_mode,
                 human_review=False,
-                progress_callback=self._progress_callback,
+                progress_callback=progress_callback,
             )
 
             # Summarize results
@@ -177,11 +205,4 @@ class ScreenStageExecutor(BaseStageExecutor):
             return StageResult(
                 success=False,
                 error=str(e),
-            )
-
-    def _progress_callback(self, current: int, total: int, paper: Paper, decision):
-        """Log screening progress."""
-        if current % 10 == 0 or current == total:
-            logger.info(
-                f"[screen] Progress: {current}/{total} papers screened ({current * 100 // total}%)"
             )

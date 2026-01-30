@@ -1,15 +1,13 @@
-"""Unit tests for cost mode configuration.
-"""
+"""Unit tests for cost mode configuration."""
 
 import pytest
 
 from arakis.config import (
-    CostMode,
-    ModeConfig,
     MODE_CONFIGS,
-    get_mode_config,
+    CostMode,
     get_default_mode,
     get_default_mode_config,
+    get_mode_config,
     list_modes,
     validate_mode,
 )
@@ -37,7 +35,7 @@ class TestModeConfig:
     def test_quality_config(self) -> None:
         """Test QUALITY mode configuration."""
         config = MODE_CONFIGS[CostMode.QUALITY]
-        
+
         assert config.name == "Quality"
         assert config.screening_model == "gpt-5-mini"
         assert config.screening_dual_review is True
@@ -53,7 +51,7 @@ class TestModeConfig:
     def test_balanced_config(self) -> None:
         """Test BALANCED mode configuration."""
         config = MODE_CONFIGS[CostMode.BALANCED]
-        
+
         assert config.name == "Balanced"
         assert config.screening_model == "gpt-5-nano"
         assert config.screening_dual_review is False
@@ -69,7 +67,7 @@ class TestModeConfig:
     def test_fast_config(self) -> None:
         """Test FAST mode configuration."""
         config = MODE_CONFIGS[CostMode.FAST]
-        
+
         assert config.name == "Fast"
         assert config.screening_model == "gpt-5-nano"
         assert config.screening_dual_review is False
@@ -84,7 +82,7 @@ class TestModeConfig:
     def test_economy_config(self) -> None:
         """Test ECONOMY mode configuration."""
         config = MODE_CONFIGS[CostMode.ECONOMY]
-        
+
         assert config.name == "Economy"
         assert config.screening_model == "gpt-5-nano"
         assert config.screening_dual_review is False
@@ -127,7 +125,7 @@ class TestGetModeConfig:
         """Test getting config by string."""
         config = get_mode_config("QUALITY")
         assert config.name == "Quality"
-        
+
         config = get_mode_config("quality")  # Case insensitive
         assert config.name == "Quality"
 
@@ -135,7 +133,7 @@ class TestGetModeConfig:
         """Test getting config for invalid mode."""
         with pytest.raises(ValueError) as exc_info:
             get_mode_config("INVALID")
-        
+
         assert "Invalid cost mode" in str(exc_info.value)
 
 
@@ -159,7 +157,7 @@ class TestListModes:
         """Test that list_modes returns all 4 modes."""
         modes = list_modes()
         assert len(modes) == 4
-        
+
         values = [m["value"] for m in modes]
         assert "QUALITY" in values
         assert "BALANCED" in values
@@ -169,7 +167,7 @@ class TestListModes:
     def test_list_modes_has_required_fields(self) -> None:
         """Test that each mode has required fields."""
         modes = list_modes()
-        
+
         for mode in modes:
             assert "value" in mode
             assert "name" in mode
@@ -190,7 +188,7 @@ class TestValidateMode:
         """Test validating invalid mode."""
         with pytest.raises(ValueError) as exc_info:
             validate_mode("INVALID")
-        
+
         assert "Invalid cost mode" in str(exc_info.value)
         assert "QUALITY" in str(exc_info.value)
         assert "BALANCED" in str(exc_info.value)
@@ -202,6 +200,6 @@ class TestModeConfigImmutability:
     def test_mode_config_is_frozen(self) -> None:
         """Test that ModeConfig cannot be modified."""
         config = MODE_CONFIGS[CostMode.BALANCED]
-        
+
         with pytest.raises(AttributeError):
             config.name = "Modified"

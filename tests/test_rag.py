@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 
 from arakis.models.paper import Paper
@@ -62,8 +61,8 @@ class TestEmbeddingCache:
             cache = EmbeddingCacheStore(tmpdir)
 
             # Create dummy embedding
+
             from arakis.models.rag import Embedding
-            from datetime import datetime
 
             chunk_id = "test_paper:title"
             text = "Test title"
@@ -246,7 +245,9 @@ class TestEmbedder:
             mock_response = MagicMock()
             mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
 
-            with patch.object(embedder.client.embeddings, "create", new_callable=AsyncMock) as mock_create:
+            with patch.object(
+                embedder.client.embeddings, "create", new_callable=AsyncMock
+            ) as mock_create:
                 mock_create.return_value = mock_response
 
                 embedding = await embedder.embed_chunk(chunk, use_cache=False)
@@ -272,7 +273,9 @@ class TestEmbedder:
             mock_response = MagicMock()
             mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
 
-            with patch.object(embedder.client.embeddings, "create", new_callable=AsyncMock) as mock_create:
+            with patch.object(
+                embedder.client.embeddings, "create", new_callable=AsyncMock
+            ) as mock_create:
                 mock_create.return_value = mock_response
 
                 # First call (should hit API)

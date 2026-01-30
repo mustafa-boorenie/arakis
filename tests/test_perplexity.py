@@ -1,19 +1,18 @@
 """Tests for Perplexity API client."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import httpx
+
+import pytest
 
 from arakis.clients.perplexity import (
     PerplexityClient,
     PerplexityClientError,
-    PerplexityRateLimitError,
     PerplexityNotConfiguredError,
-    PerplexitySearchResult,
+    PerplexityRateLimitError,
     PerplexityResponse,
+    PerplexitySearchResult,
 )
 from arakis.models.paper import Paper
-
 
 # ============================================================================
 # Test Data Classes
@@ -279,7 +278,9 @@ class TestPerplexityClientResearchTopic:
             with patch.object(client, "_request", new_callable=AsyncMock) as mock_request:
                 mock_request.return_value = mock_api_response
 
-                response = await client.research_topic("Effect of aspirin on cardiovascular disease")
+                response = await client.research_topic(
+                    "Effect of aspirin on cardiovascular disease"
+                )
 
                 assert response.content == "Research findings about aspirin..."
                 assert len(response.citations) == 1
@@ -795,9 +796,7 @@ class TestGetLiteratureContext:
                 title="Test Paper About Medical Research",
             )
 
-            with patch.object(
-                client, "research_topic", new_callable=AsyncMock
-            ) as mock_research:
+            with patch.object(client, "research_topic", new_callable=AsyncMock) as mock_research:
                 mock_research.return_value = mock_response
 
                 with patch.object(
@@ -836,9 +835,7 @@ class TestGetLiteratureContext:
                 model="sonar",
             )
 
-            with patch.object(
-                client, "research_topic", new_callable=AsyncMock
-            ) as mock_research:
+            with patch.object(client, "research_topic", new_callable=AsyncMock) as mock_research:
                 mock_research.return_value = mock_response
 
                 with patch.object(

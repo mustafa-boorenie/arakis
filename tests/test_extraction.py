@@ -48,7 +48,9 @@ def sample_schema():
                 description="Type of study design",
                 field_type=FieldType.CATEGORICAL,
                 required=True,
-                validation_rules={"allowed_values": ["RCT", "cohort", "case-control", "cross-sectional"]},
+                validation_rules={
+                    "allowed_values": ["RCT", "cohort", "case-control", "cross-sectional"]
+                },
             ),
             ExtractionField(
                 name="sample_size",
@@ -190,7 +192,9 @@ class TestExtractionSchema:
     def test_required_fields(self, sample_schema):
         """Test getting required fields."""
         required = sample_schema.required_fields
-        assert len(required) == 4  # study_design, sample_size, primary_outcome, intervention_description
+        assert (
+            len(required) == 4
+        )  # study_design, sample_size, primary_outcome, intervention_description
         assert all(f.required for f in required)
 
     def test_optional_fields(self, sample_schema):
@@ -308,8 +312,22 @@ class TestDataExtractionAgent:
         # Create 3 papers
         papers = [
             sample_paper,
-            Paper(id="test_002", title="Paper 2", abstract="Test abstract 2", authors=[], year=2023, source=PaperSource.PUBMED),
-            Paper(id="test_003", title="Paper 3", abstract="Test abstract 3", authors=[], year=2023, source=PaperSource.PUBMED),
+            Paper(
+                id="test_002",
+                title="Paper 2",
+                abstract="Test abstract 2",
+                authors=[],
+                year=2023,
+                source=PaperSource.PUBMED,
+            ),
+            Paper(
+                id="test_003",
+                title="Paper 3",
+                abstract="Test abstract 3",
+                authors=[],
+                year=2023,
+                source=PaperSource.PUBMED,
+            ),
         ]
 
         # Mock response
@@ -420,10 +438,10 @@ class TestExtractedData:
                 "field_borderline": "value4",
             },
             confidence={
-                "field_high": 0.95,      # Above threshold - NOT flagged
-                "field_medium": 0.75,    # Below 0.8 - FLAGGED
-                "field_low": 0.5,        # Well below - FLAGGED
-                "field_borderline": 0.8, # Exactly at threshold - NOT flagged
+                "field_high": 0.95,  # Above threshold - NOT flagged
+                "field_medium": 0.75,  # Below 0.8 - FLAGGED
+                "field_low": 0.5,  # Well below - FLAGGED
+                "field_borderline": 0.8,  # Exactly at threshold - NOT flagged
             },
             extraction_quality=0.9,
         )

@@ -13,7 +13,6 @@ from arakis.config import get_default_mode_config
 from arakis.workflow.orchestrator import WorkflowOrchestrator
 from arakis.workflow.stages.base import StageResult
 
-
 # ==============================================================================
 # Fixtures
 # ==============================================================================
@@ -24,10 +23,17 @@ def mock_db():
     """Create a mock async database session."""
     db = AsyncMock()
 
+    # Create a workflow mock with cost_mode for queries
+    workflow_mock = MagicMock()
+    workflow_mock.cost_mode = "BALANCED"
+    workflow_mock.id = "test-workflow-123"
+    workflow_mock.status = "running"
+    workflow_mock.current_stage = "search"
+
     # Create a result mock for execute
     result_mock = MagicMock()
-    result_mock.scalar_one = MagicMock()
-    result_mock.scalar_one_or_none = MagicMock()
+    result_mock.scalar_one = MagicMock(return_value=workflow_mock)
+    result_mock.scalar_one_or_none = MagicMock(return_value=workflow_mock)
 
     # db.execute returns an awaitable that resolves to result_mock
     db.execute = AsyncMock(return_value=result_mock)
@@ -63,6 +69,7 @@ def mock_workflow():
 @pytest.fixture
 def mock_checkpoint():
     """Create a mock WorkflowStageCheckpoint model."""
+
     def create_checkpoint(stage, status="completed", output_data=None):
         checkpoint = MagicMock()
         checkpoint.workflow_id = "test-workflow-123"
@@ -75,6 +82,7 @@ def mock_checkpoint():
         checkpoint.error_message = None
         checkpoint.cost = 0.1
         return checkpoint
+
     return create_checkpoint
 
 
@@ -154,9 +162,7 @@ class TestWorkflowExecution:
     """Tests for workflow execution."""
 
     @pytest.mark.asyncio
-    async def test_execute_workflow_invalid_start_stage(
-        self, mock_db, initial_workflow_data
-    ):
+    async def test_execute_workflow_invalid_start_stage(self, mock_db, initial_workflow_data):
         """Test that invalid start stage raises error."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
@@ -177,22 +183,14 @@ class TestWorkflowExecution:
         # Create a mock executor that always succeeds
         mock_result = StageResult(success=True, output_data={"test": "data"}, cost=0.1)
 
-        with patch.object(
-            orchestrator, "_get_executor"
-        ) as mock_get_executor:
+        with patch.object(orchestrator, "_get_executor") as mock_get_executor:
             mock_executor = MagicMock()
             mock_executor.run_with_retry = AsyncMock(return_value=mock_result)
             mock_get_executor.return_value = mock_executor
 
-            with patch.object(
-                orchestrator, "_assemble_manuscript", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    orchestrator, "_save_checkpoint", new_callable=AsyncMock
-                ):
-                    with patch.object(
-                        orchestrator, "_mark_stage_status", new_callable=AsyncMock
-                    ):
+            with patch.object(orchestrator, "_assemble_manuscript", new_callable=AsyncMock):
+                with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
+                    with patch.object(orchestrator, "_mark_stage_status", new_callable=AsyncMock):
                         with patch.object(
                             orchestrator, "_update_workflow_cost", new_callable=AsyncMock
                         ):
@@ -220,6 +218,7 @@ class TestWorkflowExecution:
 
         # First stage succeeds, second fails with user action needed
         call_count = 0
+
         async def mock_run_with_retry(input_data):
             nonlocal call_count
             call_count += 1
@@ -233,19 +232,13 @@ class TestWorkflowExecution:
                     action_required="Please wait and retry",
                 )
 
-        with patch.object(
-            orchestrator, "_get_executor"
-        ) as mock_get_executor:
+        with patch.object(orchestrator, "_get_executor") as mock_get_executor:
             mock_executor = MagicMock()
             mock_executor.run_with_retry = mock_run_with_retry
             mock_get_executor.return_value = mock_executor
 
-            with patch.object(
-                orchestrator, "_save_checkpoint", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    orchestrator, "_set_needs_user_action", new_callable=AsyncMock
-                ):
+            with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
+                with patch.object(orchestrator, "_set_needs_user_action", new_callable=AsyncMock):
                     with patch.object(
                         orchestrator, "_update_workflow_cost", new_callable=AsyncMock
                     ):
@@ -276,19 +269,13 @@ class TestWorkflowExecution:
             needs_user_action=False,
         )
 
-        with patch.object(
-            orchestrator, "_get_executor"
-        ) as mock_get_executor:
+        with patch.object(orchestrator, "_get_executor") as mock_get_executor:
             mock_executor = MagicMock()
             mock_executor.run_with_retry = AsyncMock(return_value=mock_result)
             mock_get_executor.return_value = mock_executor
 
-            with patch.object(
-                orchestrator, "_save_checkpoint", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    orchestrator, "_update_workflow_status", new_callable=AsyncMock
-                ):
+            with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
+                with patch.object(orchestrator, "_update_workflow_status", new_callable=AsyncMock):
                     with patch.object(
                         orchestrator, "_load_checkpoint_data", new_callable=AsyncMock
                     ) as mock_load:
@@ -320,22 +307,14 @@ class TestWorkflowExecution:
                 cost=0.1,
             )
 
-        with patch.object(
-            orchestrator, "_get_executor"
-        ) as mock_get_executor:
+        with patch.object(orchestrator, "_get_executor") as mock_get_executor:
             mock_executor = MagicMock()
             mock_executor.run_with_retry = mock_run_with_retry
             mock_get_executor.return_value = mock_executor
 
-            with patch.object(
-                orchestrator, "_assemble_manuscript", new_callable=AsyncMock
-            ):
-                with patch.object(
-                    orchestrator, "_save_checkpoint", new_callable=AsyncMock
-                ):
-                    with patch.object(
-                        orchestrator, "_mark_stage_status", new_callable=AsyncMock
-                    ):
+            with patch.object(orchestrator, "_assemble_manuscript", new_callable=AsyncMock):
+                with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
+                    with patch.object(orchestrator, "_mark_stage_status", new_callable=AsyncMock):
                         with patch.object(
                             orchestrator, "_update_workflow_cost", new_callable=AsyncMock
                         ):
@@ -347,11 +326,20 @@ class TestWorkflowExecution:
                                 ) as mock_load:
                                     mock_load.return_value = {}
                                     # Only run first 3 stages to verify accumulation
-                                    result = await orchestrator.execute_workflow(
+                                    await orchestrator.execute_workflow(
                                         "test-123",
                                         initial_workflow_data,
-                                        skip_stages=["extract", "rob", "analysis", "prisma", "tables",
-                                                     "introduction", "methods", "results", "discussion"],
+                                        skip_stages=[
+                                            "extract",
+                                            "rob",
+                                            "analysis",
+                                            "prisma",
+                                            "tables",
+                                            "introduction",
+                                            "methods",
+                                            "results",
+                                            "discussion",
+                                        ],
                                     )
 
         # Verify data accumulates
@@ -378,9 +366,7 @@ class TestStageRerun:
             await orchestrator.rerun_stage("test-123", "invalid_stage")
 
     @pytest.mark.asyncio
-    async def test_rerun_stage_missing_dependencies(
-        self, mock_db, mock_checkpoint
-    ):
+    async def test_rerun_stage_missing_dependencies(self, mock_db, mock_checkpoint):
         """Test re-running stage with incomplete dependencies raises error."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
@@ -390,9 +376,7 @@ class TestStageRerun:
                 return mock_checkpoint("search", status="completed")
             return None
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             with pytest.raises(ValueError, match="required stage"):
                 await orchestrator.rerun_stage("test-123", "extract")
 
@@ -402,33 +386,29 @@ class TestStageRerun:
         orchestrator = WorkflowOrchestrator(mock_db)
 
         # Search completed, re-run screen
-        completed_checkpoint = mock_checkpoint("search", status="completed", output_data={"papers": []})
+        completed_checkpoint = mock_checkpoint(
+            "search", status="completed", output_data={"papers": []}
+        )
 
         async def get_checkpoint(wf_id, stage):
             if stage == "search":
                 return completed_checkpoint
             return None
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             with patch.object(
                 orchestrator, "_load_checkpoint_data", new_callable=AsyncMock
             ) as mock_load:
                 mock_load.return_value = {"papers": []}
 
-                with patch.object(
-                    orchestrator, "_get_executor"
-                ) as mock_get_executor:
+                with patch.object(orchestrator, "_get_executor") as mock_get_executor:
                     mock_executor = MagicMock()
                     mock_executor.run_with_retry = AsyncMock(
                         return_value=StageResult(success=True, output_data={"screened": 10})
                     )
                     mock_get_executor.return_value = mock_executor
 
-                    with patch.object(
-                        orchestrator, "_save_checkpoint", new_callable=AsyncMock
-                    ):
+                    with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
                         result = await orchestrator.rerun_stage("test-123", "screen")
 
         assert result.success is True
@@ -453,24 +433,18 @@ class TestStageRerun:
             captured_input = input_data
             return StageResult(success=True, output_data={})
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             with patch.object(
                 orchestrator, "_load_checkpoint_data", new_callable=AsyncMock
             ) as mock_load:
                 mock_load.return_value = {"original_key": "original_value"}
 
-                with patch.object(
-                    orchestrator, "_get_executor"
-                ) as mock_get_executor:
+                with patch.object(orchestrator, "_get_executor") as mock_get_executor:
                     mock_executor = MagicMock()
                     mock_executor.run_with_retry = capture_input
                     mock_get_executor.return_value = mock_executor
 
-                    with patch.object(
-                        orchestrator, "_save_checkpoint", new_callable=AsyncMock
-                    ):
+                    with patch.object(orchestrator, "_save_checkpoint", new_callable=AsyncMock):
                         await orchestrator.rerun_stage(
                             "test-123",
                             "screen",
@@ -490,9 +464,7 @@ class TestResumeWorkflow:
     """Tests for resuming workflow functionality."""
 
     @pytest.mark.asyncio
-    async def test_resume_workflow_already_completed(
-        self, mock_db, mock_checkpoint
-    ):
+    async def test_resume_workflow_already_completed(self, mock_db, mock_checkpoint):
         """Test resuming already completed workflow."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
@@ -500,9 +472,7 @@ class TestResumeWorkflow:
         async def get_checkpoint(wf_id, stage):
             return mock_checkpoint(stage, status="completed")
 
-        with patch.object(
-            orchestrator, "_clear_user_action", new_callable=AsyncMock
-        ):
+        with patch.object(orchestrator, "_clear_user_action", new_callable=AsyncMock):
             with patch.object(
                 orchestrator, "_find_resume_point", new_callable=AsyncMock
             ) as mock_find:
@@ -513,18 +483,14 @@ class TestResumeWorkflow:
         assert result["status"] == "already_completed"
 
     @pytest.mark.asyncio
-    async def test_resume_workflow_from_failed_stage(
-        self, mock_db, mock_workflow, mock_checkpoint
-    ):
+    async def test_resume_workflow_from_failed_stage(self, mock_db, mock_workflow, mock_checkpoint):
         """Test resuming from a failed stage."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
         mock_db.execute.return_value.scalar_one.return_value = mock_workflow
         mock_db.execute.return_value.scalar_one_or_none.return_value = None
 
-        with patch.object(
-            orchestrator, "_clear_user_action", new_callable=AsyncMock
-        ):
+        with patch.object(orchestrator, "_clear_user_action", new_callable=AsyncMock):
             with patch.object(
                 orchestrator, "_find_resume_point", new_callable=AsyncMock
             ) as mock_find:
@@ -540,7 +506,7 @@ class TestResumeWorkflow:
                     ) as mock_execute:
                         mock_execute.return_value = {"status": "completed"}
 
-                        result = await orchestrator.resume_workflow("test-123")
+                        await orchestrator.resume_workflow("test-123")
 
         mock_execute.assert_called_once()
         call_kwargs = mock_execute.call_args
@@ -563,9 +529,7 @@ class TestGetStageStatus:
         async def get_checkpoint(wf_id, stage):
             return None  # No checkpoints
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             stages = await orchestrator.get_stage_status("test-123")
 
         assert len(stages) == 12
@@ -588,9 +552,7 @@ class TestGetStageStatus:
                 return mock_checkpoint("pdf_fetch", status="failed")
             return None
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             stages = await orchestrator.get_stage_status("test-123")
 
         # Find specific stages
@@ -634,9 +596,7 @@ class TestCheckpointManagement:
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_save_checkpoint_update_existing(
-        self, mock_db, mock_checkpoint
-    ):
+    async def test_save_checkpoint_update_existing(self, mock_db, mock_checkpoint):
         """Test updating an existing checkpoint."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
@@ -665,17 +625,21 @@ class TestCheckpointManagement:
 
         # Create checkpoints for first 3 stages
         checkpoints = {
-            "search": mock_checkpoint("search", status="completed", output_data={"papers": [1, 2, 3]}),
-            "screen": mock_checkpoint("screen", status="completed", output_data={"included": [1, 2]}),
-            "pdf_fetch": mock_checkpoint("pdf_fetch", status="completed", output_data={"fetched": 2}),
+            "search": mock_checkpoint(
+                "search", status="completed", output_data={"papers": [1, 2, 3]}
+            ),
+            "screen": mock_checkpoint(
+                "screen", status="completed", output_data={"included": [1, 2]}
+            ),
+            "pdf_fetch": mock_checkpoint(
+                "pdf_fetch", status="completed", output_data={"fetched": 2}
+            ),
         }
 
         async def get_checkpoint(wf_id, stage):
             return checkpoints.get(stage)
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             # Load data up to extract stage (index 3)
             data = await orchestrator._load_checkpoint_data("test-123", 3)
 
@@ -694,9 +658,7 @@ class TestCheckpointManagement:
                 return mock_checkpoint(stage, status="failed")
             return None
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             resume_point = await orchestrator._find_resume_point("test-123")
 
         assert resume_point == "pdf_fetch"
@@ -709,9 +671,7 @@ class TestCheckpointManagement:
         async def get_checkpoint(wf_id, stage):
             return mock_checkpoint(stage, status="completed")
 
-        with patch.object(
-            orchestrator, "_get_checkpoint", side_effect=get_checkpoint
-        ):
+        with patch.object(orchestrator, "_get_checkpoint", side_effect=get_checkpoint):
             resume_point = await orchestrator._find_resume_point("test-123")
 
         assert resume_point is None
@@ -730,9 +690,7 @@ class TestWorkflowStatusUpdates:
         """Test updating workflow status."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
             await orchestrator._update_workflow_status("test-123", "completed")
@@ -747,9 +705,7 @@ class TestWorkflowStatusUpdates:
         orchestrator = WorkflowOrchestrator(mock_db)
         mock_workflow.total_cost = 0.5
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
             await orchestrator._update_workflow_cost("test-123", 0.25)
@@ -762,14 +718,10 @@ class TestWorkflowStatusUpdates:
         """Test setting needs_user_action flag."""
         orchestrator = WorkflowOrchestrator(mock_db)
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
-            await orchestrator._set_needs_user_action(
-                "test-123", "Please review extraction errors"
-            )
+            await orchestrator._set_needs_user_action("test-123", "Please review extraction errors")
 
         assert mock_workflow.needs_user_action is True
         assert mock_workflow.action_required == "Please review extraction errors"
@@ -783,9 +735,7 @@ class TestWorkflowStatusUpdates:
         mock_workflow.needs_user_action = True
         mock_workflow.action_required = "Previous action"
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
             await orchestrator._clear_user_action("test-123")
@@ -826,9 +776,7 @@ class TestManuscriptAssembly:
             "references": [],
         }
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
             await orchestrator._assemble_manuscript("test-123", accumulated_data)
@@ -837,9 +785,7 @@ class TestManuscriptAssembly:
         mock_db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_assemble_manuscript_generates_default_abstract(
-        self, mock_db, mock_workflow
-    ):
+    async def test_assemble_manuscript_generates_default_abstract(self, mock_db, mock_workflow):
         """Test that default abstract is generated if missing."""
         orchestrator = WorkflowOrchestrator(mock_db)
         mock_workflow.papers_screened = 100
@@ -852,9 +798,7 @@ class TestManuscriptAssembly:
             "discussion": {"content": "Discussion"},
         }
 
-        with patch.object(
-            orchestrator, "_get_workflow", new_callable=AsyncMock
-        ) as mock_get:
+        with patch.object(orchestrator, "_get_workflow", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = mock_workflow
 
             await orchestrator._assemble_manuscript("test-123", accumulated_data)

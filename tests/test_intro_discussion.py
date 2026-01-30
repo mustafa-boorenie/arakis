@@ -1,11 +1,18 @@
 """Tests for introduction and discussion writers."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from arakis.agents.intro_writer import IntroductionWriterAgent
+import pytest
+
 from arakis.agents.discussion_writer import DiscussionWriterAgent
-from arakis.models.analysis import MetaAnalysisResult, AnalysisMethod, EffectMeasure, ConfidenceInterval, Heterogeneity
+from arakis.agents.intro_writer import IntroductionWriterAgent
+from arakis.models.analysis import (
+    AnalysisMethod,
+    ConfidenceInterval,
+    EffectMeasure,
+    Heterogeneity,
+    MetaAnalysisResult,
+)
 from arakis.models.paper import Paper
 
 
@@ -72,7 +79,9 @@ class TestIntroductionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Background content"))]
         mock_response.usage = MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_background(
@@ -97,7 +106,9 @@ class TestIntroductionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Rationale content"))]
         mock_response.usage = MagicMock(total_tokens=80, prompt_tokens=40, completion_tokens=40)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_rationale(
@@ -121,7 +132,9 @@ class TestIntroductionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Objectives content"))]
         mock_response.usage = MagicMock(total_tokens=60, prompt_tokens=30, completion_tokens=30)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_objectives(
@@ -145,12 +158,14 @@ class TestIntroductionWriter:
         mock_responses = [
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=f"{section} content"))],
-                usage=MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50)
+                usage=MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50),
             )
             for section in ["Background", "Rationale", "Objectives"]
         ]
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.side_effect = mock_responses
 
             # write_complete_introduction now returns (Section, list[Paper])
@@ -203,7 +218,9 @@ class TestDiscussionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Key findings content"))]
         mock_response.usage = MagicMock(total_tokens=120, prompt_tokens=60, completion_tokens=60)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_key_findings(
@@ -228,7 +245,9 @@ class TestDiscussionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Comparison content"))]
         mock_response.usage = MagicMock(total_tokens=150, prompt_tokens=75, completion_tokens=75)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_comparison_to_literature(
@@ -253,7 +272,9 @@ class TestDiscussionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Limitations content"))]
         mock_response.usage = MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_limitations(
@@ -277,7 +298,9 @@ class TestDiscussionWriter:
         mock_response.choices = [MagicMock(message=MagicMock(content="Implications content"))]
         mock_response.usage = MagicMock(total_tokens=110, prompt_tokens=55, completion_tokens=55)
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = mock_response
 
             result = await writer.write_implications(
@@ -301,12 +324,14 @@ class TestDiscussionWriter:
         mock_responses = [
             MagicMock(
                 choices=[MagicMock(message=MagicMock(content=f"{section} content"))],
-                usage=MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50)
+                usage=MagicMock(total_tokens=100, prompt_tokens=50, completion_tokens=50),
             )
             for section in ["Findings", "Comparison", "Limitations", "Implications"]
         ]
 
-        with patch.object(writer.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            writer.client.chat.completions, "create", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.side_effect = mock_responses
 
             section = await writer.write_complete_discussion(
