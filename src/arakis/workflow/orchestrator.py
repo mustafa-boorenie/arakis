@@ -237,6 +237,10 @@ class WorkflowOrchestrator:
 
         logger.info(f"[orchestrator] Re-running stage {stage} for workflow {workflow_id}")
 
+        # Load workflow to get cost_mode
+        workflow = await self._get_workflow(workflow_id)
+        mode_config = get_mode_config(workflow.cost_mode)
+
         # Validate dependencies are met
         stage_index = self.STAGE_ORDER.index(stage)
         if stage_index > 0:
@@ -256,7 +260,7 @@ class WorkflowOrchestrator:
             input_data.update(input_override)
 
         # Get executor and run
-        executor = self._get_executor(workflow_id, stage)
+        executor = self._get_executor(workflow_id, stage, mode_config)
         result = await executor.run_with_retry(input_data)
 
         # Save new checkpoint

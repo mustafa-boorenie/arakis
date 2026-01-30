@@ -733,8 +733,8 @@ async def execute_workflow(workflow_id: str, workflow_data: WorkflowCreate):
                 workflow.error_message = error_msg
                 workflow.completed_at = datetime.now(timezone.utc)
                 await db.commit()
-            except Exception:
-                pass
+            except Exception as db_error:
+                print(f"CRITICAL: Failed to update workflow {workflow_id} status to 'failed': {db_error}")
 
             print(f"Workflow {workflow_id} failed: {error_msg}")
             print(f"Full traceback:\n{full_error}")
